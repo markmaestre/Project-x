@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { updateProfile, deleteProfilePicture } from '../../Redux/slices/authSlice';
 
 const GOLD = '#D4AF37';
@@ -33,6 +36,9 @@ const SKILL_SUGGESTIONS = [
   'Video Editing', 'Graphic Design', 'Social Media', 'Data Entry',
 ];
 
+// Local CV storage directory
+const CV_DIRECTORY = `${FileSystem.documentDirectory}cvs/`;
+
 export default function FreelancerProfile({ onNavigate }) {
   const dispatch = useDispatch();
   const { user, isLoading } = useSelector((state) => state.auth);
@@ -40,6 +46,8 @@ export default function FreelancerProfile({ onNavigate }) {
   const [skillInput, setSkillInput] = useState('');
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingCV, setUploadingCV] = useState(false);
+  const [savedCV, setSavedCV] = useState(null); // Store local CV info
 
   // Store all form fields in individual useState calls
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
@@ -57,6 +65,173 @@ export default function FreelancerProfile({ onNavigate }) {
   const [portfolioUrl, setPortfolioUrl] = useState(user?.portfolio_link ?? '');
 
   const initials = `${firstName?.[0] ?? ''}${lastName?.[0] ?? ''}`.toUpperCase();
+
+  // Load locally stored CV on component mount
+  useEffect(() => {
+    loadLocalCV();
+  }, []);
+
+  // Create CV directory if it doesn't exist
+  const ensureCVDirectory = async () => {
+    const dirInfo = await FileSystem.getInfoAsync(CV_DIRECTORY);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(CV_DIRECTORY, { intermediates: true });
+    }
+  };
+
+  // Load saved CV from local storage
+  const loadLocalCV = async () => {
+    try {
+      await ensureCVDirectory();
+      
+      // Look for CV files in the directory
+      const files = await FileSystem.readDirectoryAsync(CV_DIRECTORY);
+      const cvFiles = files.filter(file => 
+        file.endsWith('.pdf') || file.endsWith('.doc') || file.endsWith('.docx')
+      );
+      
+      if (cvFiles.length > 0) {
+        const latestCV = cvFiles[0];
+        const cvInfo = await FileSystem.getInfoAsync(`${CV_DIRECTORY}${latestCV}`);
+        setSavedCV({
+          uri: cvInfo.uri,
+          name: latestCV,
+          size: cvInfo.size,
+        });
+      } else {
+        setSavedCV(null);
+      }
+    } catch (error) {
+      console.error('Error loading local CV:', error);
+    }
+  };
+
+  // Upload CV to local storage
+  const uploadCV = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const document = result.assets[0];
+      
+      // Validate file size (max 5MB)
+      if (document.size && document.size > 5 * 1024 * 1024) {
+        Alert.alert('Error', 'File size must be less than 5MB');
+        return;
+      }
+
+      // Validate file extension
+      const fileName = document.name;
+      const fileExtension = fileName.split('.').pop().toLowerCase();
+      const allowedExtensions = ['pdf', 'doc', 'docx'];
+      
+      if (!allowedExtensions.includes(fileExtension)) {
+        Alert.alert('Error', 'Please upload PDF, DOC, or DOCX files only');
+        return;
+      }
+
+      setUploadingCV(true);
+      
+      // Ensure directory exists
+      await ensureCVDirectory();
+      
+      // Create unique filename with timestamp
+      const timestamp = Date.now();
+      const savedFileName = `cv_${timestamp}_${fileName}`;
+      const localUri = `${CV_DIRECTORY}${savedFileName}`;
+      
+      // Copy the selected file to app's local storage
+      await FileSystem.copyAsync({
+        from: document.uri,
+        to: localUri,
+      });
+      
+      // Get file info to confirm save
+      const fileInfo = await FileSystem.getInfoAsync(localUri);
+      
+      // Delete old CV if exists
+      if (savedCV) {
+        await FileSystem.deleteAsync(savedCV.uri, { idempotent: true });
+      }
+      
+      setSavedCV({
+        uri: fileInfo.uri,
+        name: savedFileName,
+        size: fileInfo.size,
+      });
+      
+      Alert.alert('Success', 'CV saved locally on your device!');
+      
+    } catch (error) {
+      console.error('Error uploading CV:', error);
+      Alert.alert('Error', 'Failed to save CV. Please try again.');
+    } finally {
+      setUploadingCV(false);
+    }
+  };
+
+  // Delete CV from local storage
+  const handleDeleteCV = async () => {
+    Alert.alert(
+      'Delete CV',
+      'Are you sure you want to delete your CV from this device?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setUploadingCV(true);
+            try {
+              if (savedCV) {
+                await FileSystem.deleteAsync(savedCV.uri, { idempotent: true });
+                setSavedCV(null);
+                Alert.alert('Success', 'CV deleted successfully');
+              }
+            } catch (error) {
+              console.error('Error deleting CV:', error);
+              Alert.alert('Error', 'Failed to delete CV');
+            } finally {
+              setUploadingCV(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // View CV - opens with default app
+  const viewCV = async () => {
+    if (savedCV && savedCV.uri) {
+      try {
+        // Check if file still exists
+        const fileInfo = await FileSystem.getInfoAsync(savedCV.uri);
+        if (fileInfo.exists) {
+          await Linking.openURL(savedCV.uri);
+        } else {
+          Alert.alert('Error', 'CV file not found. Please upload again.');
+          setSavedCV(null);
+        }
+      } catch (error) {
+        console.error('Error opening CV:', error);
+        Alert.alert('Error', 'Cannot open file. Please try again.');
+      }
+    }
+  };
+
+  // Format file size for display
+  const formatFileSize = (bytes) => {
+    if (!bytes) return 'Unknown size';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
 
   // Request permission for image picker
   const requestPermission = async () => {
@@ -108,7 +283,7 @@ export default function FreelancerProfile({ onNavigate }) {
     }
   };
 
-  // Upload profile picture
+  // Upload profile picture (this still goes to server)
   const uploadProfilePicture = async (imageAsset) => {
     setUploadingImage(true);
     try {
@@ -221,10 +396,8 @@ export default function FreelancerProfile({ onNavigate }) {
     console.log('Updating profile with data:', profileData);
 
     try {
-      const result = await dispatch(updateProfile({ profileData, profilePicture: null }));
+      const result = await dispatch(updateProfile({ profileData, profilePicture: null, cv: null }));
       
-      console.log('Update result:', result);
-
       if (updateProfile.fulfilled.match(result)) {
         Alert.alert('Success', 'Your profile has been updated!', [
           { text: 'OK', onPress: () => onNavigate('Freelancer') },
@@ -285,7 +458,7 @@ export default function FreelancerProfile({ onNavigate }) {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="none"
         >
-          {/* Avatar Section - Made clickable */}
+          {/* Avatar Section */}
           <TouchableOpacity 
             style={styles.avatarSection}
             onPress={() => setImageModalVisible(true)}
@@ -458,6 +631,78 @@ export default function FreelancerProfile({ onNavigate }) {
                 ))}
               </View>
             )}
+          </View>
+
+          {/* CV UPLOAD SECTION - Local Storage Only */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="document-text-outline" size={16} color={GOLD} />
+              <Text style={styles.sectionTitle}>Resume / CV</Text>
+            </View>
+
+            <View style={styles.cvContainer}>
+              {savedCV ? (
+                <View style={styles.cvInfoContainer}>
+                  <View style={styles.cvFileInfo}>
+                    <Ionicons name="document-text" size={32} color={GOLD} />
+                    <View style={styles.cvFileDetails}>
+                      <Text style={styles.cvFileName} numberOfLines={1}>
+                        {savedCV.name}
+                      </Text>
+                      <Text style={styles.cvFileStatus}>
+                        Saved locally • {formatFileSize(savedCV.size)}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.cvActions}>
+                    <TouchableOpacity 
+                      style={[styles.cvActionBtn, styles.cvViewBtn]} 
+                      onPress={viewCV}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="eye-outline" size={18} color={GOLD} />
+                      <Text style={styles.cvViewBtnText}>Open</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      style={[styles.cvActionBtn, styles.cvDeleteBtn]} 
+                      onPress={handleDeleteCV}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#ff4444" />
+                      <Text style={styles.cvDeleteBtnText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.cvUploadArea}>
+                  <Ionicons name="cloud-upload-outline" size={48} color={GOLD} />
+                  <Text style={styles.cvUploadTitle}>Upload your CV/Resume</Text>
+                  <Text style={styles.cvUploadSubtitle}>
+                    PDF, DOC, or DOCX (Max 5MB)
+                  </Text>
+                  <Text style={styles.cvLocalNote}>
+                    * File will be stored locally on your device only
+                  </Text>
+                  <TouchableOpacity 
+                    style={styles.cvUploadBtn}
+                    onPress={uploadCV}
+                    disabled={uploadingCV}
+                    activeOpacity={0.8}
+                  >
+                    {uploadingCV ? (
+                      <ActivityIndicator size="small" color="#0a0a0a" />
+                    ) : (
+                      <>
+                        <Ionicons name="add" size={18} color="#0a0a0a" />
+                        <Text style={styles.cvUploadBtnText}>Choose File</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           </View>
 
           {/* EXPERIENCE */}
@@ -853,6 +1098,116 @@ const styles = StyleSheet.create({
     marginTop: -8,
     marginBottom: 12,
     marginLeft: 4,
+  },
+
+  // CV Styles
+  cvContainer: {
+    marginTop: 4,
+  },
+  cvUploadArea: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderStyle: 'dashed',
+  },
+  cvUploadTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  cvUploadSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    marginBottom: 8,
+  },
+  cvLocalNote: {
+    fontSize: 10,
+    color: GOLD,
+    marginBottom: 16,
+    fontStyle: 'italic',
+  },
+  cvUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: GOLD,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  cvUploadBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0a0a0a',
+  },
+  cvInfoContainer: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  cvFileInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  cvFileDetails: {
+    flex: 1,
+  },
+  cvFileName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  cvFileStatus: {
+    fontSize: 10,
+    color: '#4ade80',
+  },
+  cvActions: {
+    flexDirection: 'row',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    paddingTop: 12,
+  },
+  cvActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  cvViewBtn: {
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.3)',
+  },
+  cvViewBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: GOLD,
+  },
+  cvDeleteBtn: {
+    backgroundColor: 'rgba(255,68,68,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,68,68,0.3)',
+  },
+  cvDeleteBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#ff4444',
   },
 
   // Modal Styles
