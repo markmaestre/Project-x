@@ -7,6 +7,7 @@ import authRoutes from "./src/routes/authRoutes.js";
 import jobRoutes from "./src/routes/jobRoutes.js";
 import offerRoutes from "./src/routes/offerRoutes.js";
 import applicationRoutes from "./src/routes/applicationRoutes.js";
+import messageRoutes from "./src/routes/messageRoutes.js";
 import connectDB from "./src/config/mongodb.js";
 
 const app = express();
@@ -24,9 +25,10 @@ app.use(upload.none());
 app.use("/api/auth", authRoutes);
 app.use("/api", jobRoutes);
 app.use("/api", offerRoutes);
-app.use("/api", applicationRoutes); 
+app.use("/api", applicationRoutes);
+app.use("/api", messageRoutes); // Add message routes
 
-
+// Error handler
 app.use((err, req, res, next) => {
   console.error('=== GLOBAL ERROR HANDLER ===');
   console.error('Error name:', err.name);
