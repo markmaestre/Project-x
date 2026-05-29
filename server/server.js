@@ -1,3 +1,4 @@
+// server.js
 import "./src/config/env.js";
 import express from "express";
 import cors from "cors";
@@ -5,10 +6,11 @@ import multer from "multer";
 import authRoutes from "./src/routes/authRoutes.js";
 import jobRoutes from "./src/routes/jobRoutes.js";
 import offerRoutes from "./src/routes/offerRoutes.js";
+import applicationRoutes from "./src/routes/applicationRoutes.js";
 import connectDB from "./src/config/mongodb.js";
 
 const app = express();
-const upload = multer(); // Initialize multer to parse multipart/form-data
+const upload = multer();
 
 connectDB();
 
@@ -16,15 +18,15 @@ connectDB();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// Parse multipart/form-data (for FormData from frontend)
-app.use(upload.none()); // This will parse FormData without file uploads
+app.use(upload.none());
 
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api", jobRoutes);
-app.use("/api", offerRoutes); // Add offer routes
+app.use("/api", offerRoutes);
+app.use("/api", applicationRoutes); 
 
-// Error handler
+
 app.use((err, req, res, next) => {
   console.error('=== GLOBAL ERROR HANDLER ===');
   console.error('Error name:', err.name);

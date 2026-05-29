@@ -1,103 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, Text, TouchableOpacity, StyleSheet, ScrollView, 
-  Modal, Alert, FlatList 
+  Modal, Alert, FlatList, RefreshControl, ActivityIndicator 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useDispatch, useSelector } from 'react-redux';
+import { getReceivedOffers, updateOfferStatus } from '../../Redux/slices/offerSlice';
 
 const BG = '#0a0a0a';
 const GOLD = '#D4AF37';
 const CARD_BG = '#141414';
 const BORDER = 'rgba(255,255,255,0.07)';
+const INPUT_BG = '#111111';
 const STATUS_PENDING = '#f59e0b';
 const STATUS_ACCEPTED = '#4ade80';
 const STATUS_DECLINED = '#ef4444';
 const STATUS_EXPIRED = '#6b7280';
 
-// Sample received offers data
-const SAMPLE_OFFERS = [
-  {
-    id: '1',
-    clientName: 'Servcorp Manila',
-    clientInitials: 'SM',
-    clientRating: 4.8,
-    projectTitle: 'Office Setup Consultation',
-    description: 'Need an experienced consultant to help set up our new office space in Makati. Looking for someone with experience in office layout and IT infrastructure planning.',
-    budget: '₱28,000',
-    budgetType: 'Fixed',
-    timeline: '2 weeks',
-    status: 'pending',
-    receivedDate: '2026-01-15',
-    skills: ['Project Management', 'IT Consulting', 'Office Planning'],
-    message: 'We saw your portfolio and we think you\'re a perfect fit for this project!',
-  },
-  {
-    id: '2',
-    clientName: 'Apex Ventures',
-    clientInitials: 'AV',
-    clientRating: 5.0,
-    projectTitle: 'Branding Package',
-    description: 'Complete branding package including logo design, brand guidelines, and marketing materials.',
-    budget: '₱45,000',
-    budgetType: 'Fixed',
-    timeline: '3 weeks',
-    status: 'pending',
-    receivedDate: '2026-01-14',
-    skills: ['Branding', 'Logo Design', 'Adobe Illustrator'],
-    message: 'We love your design style! Would you be available for a quick call to discuss details?',
-  },
-  {
-    id: '3',
-    clientName: 'Digital Ocean PH',
-    clientInitials: 'DO',
-    clientRating: 4.5,
-    projectTitle: 'React Native Mobile App',
-    description: 'Develop a cross-platform mobile app for our e-commerce platform.',
-    budget: '₱120,000',
-    budgetType: 'Fixed',
-    timeline: '6 weeks',
-    status: 'accepted',
-    receivedDate: '2026-01-10',
-    skills: ['React Native', 'Node.js', 'MongoDB'],
-    message: 'Your experience with React Native is exactly what we need!',
-  },
-  {
-    id: '4',
-    clientName: 'Creative Studio',
-    clientInitials: 'CS',
-    clientRating: 4.2,
-    projectTitle: 'Video Editing Project',
-    description: 'Need to edit 5 promotional videos for social media.',
-    budget: '₱15,000',
-    budgetType: 'Hourly',
-    timeline: '1 week',
-    status: 'declined',
-    receivedDate: '2026-01-08',
-    skills: ['Premiere Pro', 'After Effects', 'Video Editing'],
-    message: 'We need someone who can start immediately.',
-  },
-  {
-    id: '5',
-    clientName: 'TechStart Inc.',
-    clientInitials: 'TI',
-    clientRating: 4.9,
-    projectTitle: 'UI/UX Design for Dashboard',
-    description: 'Design a modern dashboard for our analytics platform.',
-    budget: '₱35,000',
-    budgetType: 'Fixed',
-    timeline: '4 weeks',
-    status: 'expired',
-    receivedDate: '2026-01-01',
-    skills: ['Figma', 'UI Design', 'UX Research'],
-    message: 'Your portfolio is impressive!',
-  },
-];
-
 export default function ReceivedOffers({ onNavigate }) {
-  const [offers, setOffers] = useState(SAMPLE_OFFERS);
+  const dispatch = useDispatch();
+  const { receivedOffers, isLoading, error } = useSelector((state) => state.offers);
+  const { user } = useSelector((state) => state.auth);
+  
   const [selectedOffer, setSelectedOffer] = useState(null);
-  const [activeTab, setActiveTab] = useState('all'); // all, pending, accepted, declined
+  const [activeTab, setActiveTab] = useState('all');
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchOffers();
+  }, []);
+
+  const fetchOffers = useCallback(async () => {
+    try {
+      await dispatch(getReceivedOffers({})).unwrap();
+    } catch (error) {
+      console.error('Error fetching offers:', error);
+      Alert.alert('Error', 'Failed to load offers');
+    }
+  }, [dispatch]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchOffers();
+    setRefreshing(false);
+  }, [fetchOffers]);
 
   const getStatusColor = (status) => {
     switch(status) {
@@ -120,24 +67,42 @@ export default function ReceivedOffers({ onNavigate }) {
   };
 
   const getStatusText = (status) => {
-    return status.charAt(0).toUpperCase() + status.slice(1);
+    const statusMap = {
+      pending: 'Pending',
+      accepted: 'Accepted',
+      declined: 'Declined',
+      expired: 'Expired'
+    };
+    return statusMap[status] || status;
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const getInitials = (firstName, lastName) => {
+    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
   };
 
   const handleAcceptOffer = (offer) => {
     Alert.alert(
       'Accept Offer',
-      `Are you sure you want to accept the offer from ${offer.clientName}?`,
+      `Are you sure you want to accept the offer from ${offer.client_name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Accept',
-          onPress: () => {
-            const updatedOffers = offers.map(o => 
-              o.id === offer.id ? { ...o, status: 'accepted' } : o
-            );
-            setOffers(updatedOffers);
-            Alert.alert('Success', 'Offer accepted successfully!');
-            setSelectedOffer(null);
+          onPress: async () => {
+            try {
+              await dispatch(updateOfferStatus({ offerId: offer._id, status: 'accepted' })).unwrap();
+              Alert.alert('Success', 'Offer accepted successfully!');
+              setSelectedOffer(null);
+              fetchOffers();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to accept offer');
+            }
           }
         }
       ]
@@ -147,19 +112,21 @@ export default function ReceivedOffers({ onNavigate }) {
   const handleDeclineOffer = (offer) => {
     Alert.alert(
       'Decline Offer',
-      `Are you sure you want to decline the offer from ${offer.clientName}?`,
+      `Are you sure you want to decline the offer from ${offer.client_name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Decline',
           style: 'destructive',
-          onPress: () => {
-            const updatedOffers = offers.map(o => 
-              o.id === offer.id ? { ...o, status: 'declined' } : o
-            );
-            setOffers(updatedOffers);
-            Alert.alert('Info', 'Offer declined');
-            setSelectedOffer(null);
+          onPress: async () => {
+            try {
+              await dispatch(updateOfferStatus({ offerId: offer._id, status: 'declined' })).unwrap();
+              Alert.alert('Info', 'Offer declined');
+              setSelectedOffer(null);
+              fetchOffers();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to decline offer');
+            }
           }
         }
       ]
@@ -175,85 +142,100 @@ export default function ReceivedOffers({ onNavigate }) {
   };
 
   const filteredOffers = () => {
-    if (activeTab === 'all') return offers;
-    return offers.filter(offer => offer.status === activeTab);
+    if (activeTab === 'all') return receivedOffers || [];
+    return (receivedOffers || []).filter(offer => offer.status === activeTab);
   };
 
   const getTabCount = (status) => {
-    if (status === 'all') return offers.length;
-    return offers.filter(offer => offer.status === status).length;
+    if (status === 'all') return (receivedOffers || []).length;
+    return (receivedOffers || []).filter(offer => offer.status === status).length;
   };
 
-  const OfferCard = ({ offer, onPress }) => (
-    <TouchableOpacity 
-      style={styles.offerCard}
-      onPress={() => onPress(offer)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.offerHeader}>
-        <View style={styles.clientInfo}>
-          <View style={styles.clientAvatar}>
-            <Text style={styles.clientInitials}>{offer.clientInitials}</Text>
-          </View>
-          <View>
-            <Text style={styles.clientName}>{offer.clientName}</Text>
-            <View style={styles.ratingContainer}>
-              <Ionicons name="star" size={12} color={GOLD} />
-              <Text style={styles.ratingText}>{offer.clientRating}</Text>
+  const OfferCard = ({ offer, onPress }) => {
+    const statusColor = getStatusColor(offer.status);
+    const initials = getInitials(offer.client_first_name, offer.client_last_name);
+    
+    return (
+      <TouchableOpacity 
+        style={styles.offerCard}
+        onPress={() => onPress(offer)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.offerHeader}>
+          <View style={styles.clientInfo}>
+            <View style={styles.clientAvatar}>
+              <Text style={styles.clientInitials}>{initials}</Text>
+            </View>
+            <View>
+              <Text style={styles.clientName}>{offer.client_name}</Text>
+              <View style={styles.ratingContainer}>
+                <Ionicons name="star" size={12} color={GOLD} />
+                <Text style={styles.ratingText}>{offer.client_rating || '4.5'}</Text>
+              </View>
             </View>
           </View>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+            <Ionicons name={getStatusIcon(offer.status)} size={12} color={statusColor} />
+            <Text style={[styles.statusText, { color: statusColor }]}>
+              {getStatusText(offer.status)}
+            </Text>
+          </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(offer.status) + '20' }]}>
-          <Ionicons name={getStatusIcon(offer.status)} size={12} color={getStatusColor(offer.status)} />
-          <Text style={[styles.statusText, { color: getStatusColor(offer.status) }]}>
-            {getStatusText(offer.status)}
+
+        <Text style={styles.projectTitle}>{offer.job_title}</Text>
+        {offer.message && (
+          <Text style={styles.offerMessage} numberOfLines={2}>
+            "{offer.message}"
           </Text>
-        </View>
-      </View>
+        )}
 
-      <Text style={styles.projectTitle}>{offer.projectTitle}</Text>
-      <Text style={styles.offerMessage} numberOfLines={2}>
-        "{offer.message}"
-      </Text>
+        <View style={styles.offerDetails}>
+          <View style={styles.detailItem}>
+            <Ionicons name="cash-outline" size={14} color={GOLD} />
+            <Text style={styles.detailText}>₱{offer.amount?.toLocaleString()}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Ionicons name="calendar-outline" size={14} color={GOLD} />
+            <Text style={styles.detailText}>{formatDate(offer.created_at)}</Text>
+          </View>
+          {offer.expiry_date && new Date(offer.expiry_date) > new Date() && offer.status === 'pending' && (
+            <View style={styles.detailItem}>
+              <Ionicons name="time-outline" size={14} color={STATUS_PENDING} />
+              <Text style={[styles.detailText, { color: STATUS_PENDING }]}>
+                Expires: {formatDate(offer.expiry_date)}
+              </Text>
+            </View>
+          )}
+        </View>
 
-      <View style={styles.offerDetails}>
-        <View style={styles.detailItem}>
-          <Ionicons name="cash-outline" size={14} color={GOLD} />
-          <Text style={styles.detailText}>{offer.budget}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Ionicons name="time-outline" size={14} color={GOLD} />
-          <Text style={styles.detailText}>{offer.timeline}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Ionicons name="calendar-outline" size={14} color={GOLD} />
-          <Text style={styles.detailText}>{offer.receivedDate}</Text>
-        </View>
-      </View>
-
-      {offer.status === 'pending' && (
-        <View style={styles.offerActions}>
-          <TouchableOpacity 
-            style={[styles.actionBtn, styles.acceptBtn]}
-            onPress={() => handleAcceptOffer(offer)}
-          >
-            <Ionicons name="checkmark" size={16} color="#0a0a0a" />
-            <Text style={styles.acceptBtnText}>Accept</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.actionBtn, styles.declineBtn]}
-            onPress={() => handleDeclineOffer(offer)}
-          >
-            <Ionicons name="close" size={16} color="#ef4444" />
-            <Text style={styles.declineBtnText}>Decline</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+        {offer.status === 'pending' && (
+          <View style={styles.offerActions}>
+            <TouchableOpacity 
+              style={[styles.actionBtn, styles.acceptBtn]}
+              onPress={() => handleAcceptOffer(offer)}
+            >
+              <Ionicons name="checkmark" size={16} color="#0a0a0a" />
+              <Text style={styles.acceptBtnText}>Accept</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.actionBtn, styles.declineBtn]}
+              onPress={() => handleDeclineOffer(offer)}
+            >
+              <Ionicons name="close" size={16} color="#ef4444" />
+              <Text style={styles.declineBtnText}>Decline</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const OfferDetailModal = ({ offer, visible, onClose }) => {
     if (!offer) return null;
+
+    const statusColor = getStatusColor(offer.status);
+    const initials = getInitials(offer.client_first_name, offer.client_last_name);
+    const isExpired = offer.expiry_date && new Date(offer.expiry_date) < new Date();
 
     return (
       <Modal
@@ -278,80 +260,96 @@ export default function ReceivedOffers({ onNavigate }) {
                 {/* Client Info */}
                 <View style={styles.modalClientSection}>
                   <View style={styles.modalClientAvatar}>
-                    <Text style={styles.modalClientInitials}>{offer.clientInitials}</Text>
+                    <Text style={styles.modalClientInitials}>{initials}</Text>
                   </View>
                   <View style={styles.modalClientInfo}>
-                    <Text style={styles.modalClientName}>{offer.clientName}</Text>
+                    <Text style={styles.modalClientName}>{offer.client_name}</Text>
                     <View style={styles.modalRating}>
                       <Ionicons name="star" size={14} color={GOLD} />
-                      <Text style={styles.modalRatingText}>{offer.clientRating}</Text>
-                      <Text style={styles.modalReviewCount}>(24 reviews)</Text>
+                      <Text style={styles.modalRatingText}>{offer.client_rating || '4.5'}</Text>
+                      <Text style={styles.modalReviewCount}>(from offers)</Text>
                     </View>
                   </View>
-                  <View style={[styles.modalStatusBadge, { backgroundColor: getStatusColor(offer.status) + '20' }]}>
-                    <Ionicons name={getStatusIcon(offer.status)} size={14} color={getStatusColor(offer.status)} />
-                    <Text style={[styles.modalStatusText, { color: getStatusColor(offer.status) }]}>
+                  <View style={[styles.modalStatusBadge, { backgroundColor: statusColor + '20' }]}>
+                    <Ionicons name={getStatusIcon(offer.status)} size={14} color={statusColor} />
+                    <Text style={[styles.modalStatusText, { color: statusColor }]}>
                       {getStatusText(offer.status)}
                     </Text>
                   </View>
                 </View>
 
-                {/* Project Details */}
+                {/* Job Details */}
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Project Title</Text>
-                  <Text style={styles.modalProjectTitle}>{offer.projectTitle}</Text>
+                  <Text style={styles.modalSectionTitle}>Job Title</Text>
+                  <Text style={styles.modalProjectTitle}>{offer.job_title}</Text>
                 </View>
 
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Description</Text>
-                  <Text style={styles.modalDescription}>{offer.description}</Text>
-                </View>
+                {offer.message && (
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionTitle}>Client Message</Text>
+                    <View style={styles.messageBubble}>
+                      <Ionicons name="chatbubble-outline" size={16} color={GOLD} />
+                      <Text style={styles.messageText}>"{offer.message}"</Text>
+                    </View>
+                  </View>
+                )}
 
+                {/* Offer Details */}
                 <View style={styles.modalSection}>
                   <Text style={styles.modalSectionTitle}>Offer Details</Text>
                   <View style={styles.modalDetailsGrid}>
                     <View style={styles.modalDetailCard}>
                       <Ionicons name="cash-outline" size={20} color={GOLD} />
-                      <Text style={styles.modalDetailLabel}>Budget</Text>
-                      <Text style={styles.modalDetailValue}>{offer.budget}</Text>
-                      <Text style={styles.modalDetailSub}>{offer.budgetType}</Text>
-                    </View>
-                    <View style={styles.modalDetailCard}>
-                      <Ionicons name="time-outline" size={20} color={GOLD} />
-                      <Text style={styles.modalDetailLabel}>Timeline</Text>
-                      <Text style={styles.modalDetailValue}>{offer.timeline}</Text>
+                      <Text style={styles.modalDetailLabel}>Amount</Text>
+                      <Text style={styles.modalDetailValue}>₱{offer.amount?.toLocaleString()}</Text>
                     </View>
                     <View style={styles.modalDetailCard}>
                       <Ionicons name="calendar-outline" size={20} color={GOLD} />
                       <Text style={styles.modalDetailLabel}>Received</Text>
-                      <Text style={styles.modalDetailValue}>{offer.receivedDate}</Text>
+                      <Text style={styles.modalDetailValue}>{formatDate(offer.created_at)}</Text>
+                    </View>
+                    {offer.expiry_date && (
+                      <View style={styles.modalDetailCard}>
+                        <Ionicons name="time-outline" size={20} color={isExpired ? STATUS_EXPIRED : STATUS_PENDING} />
+                        <Text style={styles.modalDetailLabel}>Expires</Text>
+                        <Text style={[styles.modalDetailValue, { color: isExpired ? STATUS_EXPIRED : STATUS_PENDING, fontSize: 12 }]}>
+                          {formatDate(offer.expiry_date)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Job Skills */}
+                {offer.job_skills && offer.job_skills.length > 0 && (
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionTitle}>Required Skills</Text>
+                    <View style={styles.skillsContainer}>
+                      {offer.job_skills.map((skill, index) => (
+                        <View key={index} style={styles.modalSkillChip}>
+                          <Text style={styles.modalSkillText}>{skill}</Text>
+                        </View>
+                      ))}
                     </View>
                   </View>
-                </View>
+                )}
 
-                {/* Skills Required */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Skills Required</Text>
-                  <View style={styles.skillsContainer}>
-                    {offer.skills.map((skill, index) => (
-                      <View key={index} style={styles.modalSkillChip}>
-                        <Text style={styles.modalSkillText}>{skill}</Text>
-                      </View>
-                    ))}
+                {/* Freelancer Skills (from profile) */}
+                {offer.freelancer_skills && offer.freelancer_skills.length > 0 && (
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionTitle}>Your Matched Skills</Text>
+                    <View style={styles.skillsContainer}>
+                      {offer.freelancer_skills.map((skill, index) => (
+                        <View key={index} style={[styles.modalSkillChip, { backgroundColor: 'rgba(212,175,55,0.2)' }]}>
+                          <Text style={styles.modalSkillText}>{skill}</Text>
+                        </View>
+                      ))}
+                    </View>
                   </View>
-                </View>
-
-                {/* Client Message */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Client Message</Text>
-                  <View style={styles.messageBubble}>
-                    <Ionicons name="chatbubble-outline" size={16} color={GOLD} />
-                    <Text style={styles.messageText}>"{offer.message}"</Text>
-                  </View>
-                </View>
+                )}
 
                 {/* Action Buttons */}
-                {offer.status === 'pending' && (
+                {offer.status === 'pending' && !isExpired && (
                   <View style={styles.modalActions}>
                     <TouchableOpacity 
                       style={[styles.modalActionBtn, styles.modalAcceptBtn]}
@@ -366,7 +364,7 @@ export default function ReceivedOffers({ onNavigate }) {
                       onPress={() => handleCounterOffer(offer)}
                     >
                       <Ionicons name="chatbubble" size={20} color={GOLD} />
-                      <Text style={styles.modalCounterText}>Counter Offer</Text>
+                      <Text style={styles.modalCounterText}>Counter</Text>
                     </TouchableOpacity>
                     
                     <TouchableOpacity 
@@ -379,6 +377,16 @@ export default function ReceivedOffers({ onNavigate }) {
                   </View>
                 )}
 
+                {offer.status === 'pending' && isExpired && (
+                  <View style={styles.expiredMessage}>
+                    <Ionicons name="alert-circle" size={48} color={STATUS_EXPIRED} />
+                    <Text style={styles.expiredTitle}>Offer Expired</Text>
+                    <Text style={styles.expiredText}>
+                      This offer expired on {formatDate(offer.expiry_date)} and is no longer available.
+                    </Text>
+                  </View>
+                )}
+
                 {offer.status === 'accepted' && (
                   <View style={styles.modalAcceptedMessage}>
                     <Ionicons name="checkmark-circle" size={48} color={STATUS_ACCEPTED} />
@@ -388,10 +396,13 @@ export default function ReceivedOffers({ onNavigate }) {
                     </Text>
                     <TouchableOpacity 
                       style={styles.modalMessageBtn}
-                      onPress={() => onNavigate('Messages')}
+                      onPress={() => {
+                        onClose();
+                        onNavigate('Messages', { userId: offer.client_id });
+                      }}
                     >
                       <Ionicons name="chatbubble" size={20} color="#0a0a0a" />
-                      <Text style={styles.modalMessageBtnText}>Go to Messages</Text>
+                      <Text style={styles.modalMessageBtnText}>Message Client</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -403,6 +414,24 @@ export default function ReceivedOffers({ onNavigate }) {
     );
   };
 
+  if (isLoading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Received Offers</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={GOLD} />
+          <Text style={styles.loadingText}>Loading offers...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
@@ -410,8 +439,8 @@ export default function ReceivedOffers({ onNavigate }) {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.title}>Received Offers</Text>
-        <TouchableOpacity style={styles.filterBtn}>
-          <Ionicons name="options-outline" size={22} color={GOLD} />
+        <TouchableOpacity style={styles.filterBtn} onPress={onRefresh}>
+          <Ionicons name="refresh-outline" size={22} color={GOLD} />
         </TouchableOpacity>
       </View>
 
@@ -437,12 +466,15 @@ export default function ReceivedOffers({ onNavigate }) {
 
       <FlatList
         data={filteredOffers()}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item._id}
         renderItem={({ item }) => (
           <OfferCard offer={item} onPress={setSelectedOffer} />
         )}
         contentContainerStyle={styles.offersList}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />
+        }
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
             <Ionicons name="mail-open-outline" size={64} color="rgba(255,255,255,0.1)" />
@@ -452,6 +484,12 @@ export default function ReceivedOffers({ onNavigate }) {
                 ? "You haven't received any offers yet" 
                 : `No ${activeTab} offers to display`}
             </Text>
+            <TouchableOpacity 
+              style={styles.browseJobsBtn}
+              onPress={() => onNavigate('BrowseJobs')}
+            >
+              <Text style={styles.browseJobsText}>Browse Jobs</Text>
+            </TouchableOpacity>
           </View>
         )}
       />
@@ -496,6 +534,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: BORDER,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.4)',
   },
 
   // Tabs
@@ -626,7 +674,8 @@ const styles = StyleSheet.create({
   },
   offerDetails: {
     flexDirection: 'row',
-    gap: 16,
+    flexWrap: 'wrap',
+    gap: 12,
     marginBottom: 12,
     paddingTop: 8,
     borderTopWidth: 1,
@@ -690,6 +739,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255,255,255,0.4)',
     textAlign: 'center',
+    marginBottom: 20,
+  },
+  browseJobsBtn: {
+    backgroundColor: GOLD,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  browseJobsText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0a0a0a',
   },
 
   // Modal Styles
@@ -806,10 +867,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  modalDescription: {
+  messageBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  messageText: {
+    flex: 1,
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-    lineHeight: 20,
+    color: 'rgba(255,255,255,0.8)',
+    fontStyle: 'italic',
   },
   modalDetailsGrid: {
     flexDirection: 'row',
@@ -835,10 +907,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  modalDetailSub: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.3)',
-  },
   skillsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -855,22 +923,6 @@ const styles = StyleSheet.create({
   modalSkillText: {
     fontSize: 12,
     color: GOLD,
-  },
-  messageBubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  messageText: {
-    flex: 1,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    fontStyle: 'italic',
   },
   modalActions: {
     flexDirection: 'row',
@@ -914,6 +966,23 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#ef4444',
   },
+  expiredMessage: {
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  expiredTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  expiredText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
   modalAcceptedMessage: {
     alignItems: 'center',
     paddingVertical: 30,
@@ -947,5 +1016,3 @@ const styles = StyleSheet.create({
     color: '#0a0a0a',
   },
 });
-
-const INPUT_BG = '#111111';

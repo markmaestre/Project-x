@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,17 @@ import {
   Alert,
   ScrollView,
   Image,
-  Dimensions,
   Animated,
   TouchableWithoutFeedback,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../Redux/slices/authSlice';
+import { getReceivedOffers, getOfferStats } from '../../Redux/slices/offerSlice';
+import { getFreelancerJobs } from '../../Redux/slices/jobSlice';
 
 const GOLD = '#D4AF37';
 const BG = '#0a0a0a';
@@ -26,84 +29,129 @@ const SIDEBAR_WIDTH = 260;
 const MENU_ITEMS = [
   { key: 'Overview',      label: 'Overview',       icon: 'grid-outline',        badge: null },
   { key: 'BrowseJobs',    label: 'Browse Jobs',    icon: 'search-outline',      badge: null },
-  { key: 'MyJobs',        label: 'My Jobs',        icon: 'briefcase-outline',   badge: 4 },
-  { key: 'ReceivedOffers',label: 'Received Offers',icon: 'mail-open-outline',   badge: 5 },
+  { key: 'MyJobs',        label: 'My Jobs',        icon: 'briefcase-outline',   badge: null },
+  { key: 'ReceivedOffers',label: 'Received Offers',icon: 'mail-open-outline',   badge: null },
   { key: 'Portfolio',     label: 'Portfolio',      icon: 'images-outline',      badge: null },
 ];
 
 const COMM_ITEMS = [
-  { key: 'Messages', label: 'Messages',   icon: 'chatbubble-outline', badge: 3 },
+  { key: 'Messages', label: 'Messages',   icon: 'chatbubble-outline', badge: null },
   { key: 'Profile',  label: 'My Profile', icon: 'person-outline',     badge: null },
   { key: 'Settings', label: 'Settings',   icon: 'settings-outline',   badge: null },
-];
-
-const RECENT_ACTIVITY = [
-  {
-    id: '1',
-    icon: 'checkmark-circle',
-    iconColor: '#4ade80',
-    iconBg: 'rgba(74,222,128,0.12)',
-    title: 'Offer accepted by Servcorp Manila',
-    sub: 'Office Setup Consultation · ₱28,000',
-    time: '30 min ago',
-  },
-  {
-    id: '2',
-    icon: 'mail-open-outline',
-    iconColor: GOLD,
-    iconBg: 'rgba(212,175,55,0.12)',
-    title: 'New offer received from Apex',
-    sub: 'Branding Package · ₱45,000',
-    time: '2 hrs ago',
-  },
-  {
-    id: '3',
-    icon: 'briefcase-outline',
-    iconColor: GOLD,
-    iconBg: 'rgba(212,175,55,0.12)',
-    title: 'Applied for Motion Design Project',
-    sub: 'Luminary Digital · ₱20k–₱40k',
-    time: '4 hrs ago',
-  },
-  {
-    id: '4',
-    icon: 'checkmark-circle',
-    iconColor: '#4ade80',
-    iconBg: 'rgba(74,222,128,0.12)',
-    title: 'Job completed',
-    sub: 'Website Development · ₱35,000',
-    time: '6 hrs ago',
-  },
-  {
-    id: '5',
-    icon: 'chatbubble-outline',
-    iconColor: '#60a5fa',
-    iconBg: 'rgba(96,165,250,0.12)',
-    title: 'Client replied to your message',
-    sub: 'Servcorp Manila',
-    time: 'Yesterday',
-  },
-  {
-    id: '6',
-    icon: 'star-outline',
-    iconColor: GOLD,
-    iconBg: 'rgba(212,175,55,0.12)',
-    title: 'New review received',
-    sub: '5 stars from Apex Ventures',
-    time: 'Yesterday',
-  },
 ];
 
 export default function FreelancerScreen({ onNavigate }) {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
+  const { receivedOffers, stats: offerStats, isLoading: offersLoading } = useSelector((state) => state.offers);
+  const { list: jobs, isLoading: jobsLoading } = useSelector((state) => state.jobs.jobs);
+  
   const [activeMenu, setActiveMenu] = useState('Overview');
+  const [refreshing, setRefreshing] = useState(false);
+  const [recentActivities, setRecentActivities] = useState([]);
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const [sidebarVisible, setSidebarVisible] = useState(false);
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
   const fullName = `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
+
+  // Fetch dashboard data
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      await Promise.all([
+        dispatch(getReceivedOffers({})).unwrap(),
+        dispatch(getFreelancerJobs({ limit: 10 })).unwrap(),
+      ]);
+      
+      // Try to get offer stats, but don't fail if not available
+      try {
+        await dispatch(getOfferStats()).unwrap();
+      } catch (statsError) {
+        console.log('Offer stats not available yet');
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // Build recent activities from real data
+  useEffect(() => {
+    const activities = [];
+    
+    // Add recent offers received
+    if (receivedOffers && receivedOffers.length > 0) {
+      const recentOffers = receivedOffers.slice(0, 3);
+      recentOffers.forEach(offer => {
+        const statusColor = offer.status === 'pending' ? GOLD : offer.status === 'accepted' ? '#4ade80' : '#f87171';
+        activities.push({
+          id: `offer_${offer._id}`,
+          icon: 'mail-open-outline',
+          iconColor: statusColor,
+          iconBg: `rgba(${statusColor === GOLD ? '212,175,55' : statusColor === '#4ade80' ? '74,222,128' : '248,113,113'},0.12)`,
+          title: `Offer ${offer.status === 'pending' ? 'received from' : offer.status === 'accepted' ? 'accepted from' : 'declined from'} ${offer.client_name || 'Client'}`,
+          sub: `${offer.job_title || 'Job'} · ₱${offer.amount?.toLocaleString() || 0}`,
+          time: formatDate(offer.created_at),
+          type: 'offer',
+          status: offer.status,
+        });
+      });
+    }
+    
+    // Add recent jobs (from freelancer jobs list - jobs they applied to)
+    if (jobs && jobs.length > 0) {
+      const recentJobs = jobs.slice(0, 3);
+      recentJobs.forEach(job => {
+        activities.push({
+          id: `job_${job._id}`,
+          icon: 'briefcase-outline',
+          iconColor: GOLD,
+          iconBg: 'rgba(212,175,55,0.12)',
+          title: 'Applied for job',
+          sub: `${job.title} · ₱${job.budget_amount?.toLocaleString()}`,
+          time: formatDate(job.created_at),
+          type: 'job',
+        });
+      });
+    }
+    
+    // Sort by date (most recent first) and take first 6
+    const sortedActivities = activities.sort((a, b) => {
+      return b.time.localeCompare(a.time);
+    }).slice(0, 6);
+    
+    setRecentActivities(sortedActivities);
+  }, [receivedOffers, jobs]);
+
+  // Helper function to format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Just now';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffMinutes = Math.floor(diffTime / (1000 * 60));
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes < 60) return `${diffMinutes} min ago`;
+    if (diffHours < 24) return `${diffHours} hr ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    return `${Math.floor(diffDays / 30)} months ago`;
+  };
+
+  // Calculate statistics from real data
+  const activeJobs = jobs?.filter(job => job.status === 'open' || job.status === 'in_progress').length || 0;
+  const pendingOffers = receivedOffers?.filter(offer => offer.status === 'pending').length || 0;
+  const acceptedOffers = receivedOffers?.filter(offer => offer.status === 'accepted').length || 0;
+  const completedCount = acceptedOffers;
+  const totalEarned = offerStats?.totalEarnings || 0;
 
   const openSidebar = () => {
     setSidebarVisible(true);
@@ -143,6 +191,12 @@ export default function FreelancerScreen({ onNavigate }) {
     else openSidebar();
   };
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchDashboardData();
+    setRefreshing(false);
+  }, [fetchDashboardData]);
+
   const handleLogout = () => {
     closeSidebar();
     setTimeout(() => {
@@ -161,10 +215,8 @@ export default function FreelancerScreen({ onNavigate }) {
   };
 
   const handleMenuPress = (key) => {
-    // Close sidebar first
+    setActiveMenu(key);
     closeSidebar();
-    
-    // Navigate based on menu item
     setTimeout(() => {
       switch(key) {
         case 'BrowseJobs':
@@ -177,7 +229,7 @@ export default function FreelancerScreen({ onNavigate }) {
           onNavigate('ReceivedOffers');
           break;
         case 'Portfolio':
-          Alert.alert('Coming Soon', 'Portfolio feature coming soon!');
+          onNavigate('Portfolio');
           break;
         case 'Messages':
           onNavigate('Messages');
@@ -189,16 +241,21 @@ export default function FreelancerScreen({ onNavigate }) {
           onNavigate('Settings');
           break;
         case 'Overview':
-          setActiveMenu(key);
+          // stays on this screen
           break;
         default:
-          setActiveMenu(key);
           break;
       }
     }, 350);
   };
 
   const SidebarItem = ({ item }) => {
+    // Update badge counts dynamically
+    let badgeValue = null;
+    if (item.key === 'ReceivedOffers' && pendingOffers > 0) {
+      badgeValue = pendingOffers;
+    }
+    
     const active = activeMenu === item.key;
     return (
       <TouchableOpacity
@@ -215,10 +272,10 @@ export default function FreelancerScreen({ onNavigate }) {
         <Text style={[styles.menuLabel, active && styles.menuLabelActive]}>
           {item.label}
         </Text>
-        {item.badge && (
+        {badgeValue && (
           <View style={[styles.badge, active && styles.badgeActive]}>
             <Text style={[styles.badgeText, active && { color: '#0a0a0a' }]}>
-              {item.badge}
+              {badgeValue}
             </Text>
           </View>
         )}
@@ -226,11 +283,13 @@ export default function FreelancerScreen({ onNavigate }) {
     );
   };
 
+  const isLoading = jobsLoading || offersLoading;
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.root}>
 
-        {/* ── MAIN CONTENT ── */}
+        {/* MAIN CONTENT */}
         <View style={styles.main}>
           {/* Topbar */}
           <View style={styles.topbar}>
@@ -250,7 +309,7 @@ export default function FreelancerScreen({ onNavigate }) {
                 onPress={() => onNavigate('Notifications')}
               >
                 <Ionicons name="notifications-outline" size={20} color="rgba(255,255,255,0.7)" />
-                <View style={styles.notifDot} />
+                {pendingOffers > 0 && <View style={styles.notifDot} />}
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.iconBtn}
@@ -268,77 +327,123 @@ export default function FreelancerScreen({ onNavigate }) {
           </View>
 
           {/* Scrollable Content */}
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.mainScroll}>
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <View style={styles.statTop}>
-                  <Text style={styles.statLabel}>ACTIVE JOBS</Text>
-                  <Ionicons name="briefcase-outline" size={14} color="rgba(255,255,255,0.3)" />
+          <ScrollView 
+            showsVerticalScrollIndicator={false} 
+            contentContainerStyle={styles.mainScroll}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />
+            }
+          >
+            {isLoading && !refreshing ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={GOLD} />
+                <Text style={styles.loadingText}>Loading dashboard...</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.statsGrid}>
+                  <TouchableOpacity 
+                    style={styles.statCard}
+                    onPress={() => onNavigate('BrowseJobs')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.statTop}>
+                      <Text style={styles.statLabel}>ACTIVE JOBS</Text>
+                      <Ionicons name="briefcase-outline" size={14} color="rgba(255,255,255,0.3)" />
+                    </View>
+                    <Text style={styles.statNumber}>
+                      {activeJobs}
+                    </Text>
+                    <Text style={styles.statSub}>Active applications</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.statCard}
+                    onPress={() => onNavigate('ReceivedOffers')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.statTop}>
+                      <Text style={styles.statLabel}>RECEIVED OFFERS</Text>
+                      <Ionicons name="mail-open-outline" size={14} color="rgba(255,255,255,0.3)" />
+                    </View>
+                    <Text style={styles.statNumber}>{receivedOffers?.length || 0}</Text>
+                    {pendingOffers > 0 && (
+                      <Text style={[styles.statSub, { color: GOLD }]}>{pendingOffers} pending</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.statCard}
+                    onPress={() => onNavigate('BrowseJobs')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.statTop}>
+                      <Text style={styles.statLabel}>COMPLETED</Text>
+                      <Ionicons name="checkmark-circle-outline" size={14} color="rgba(255,255,255,0.3)" />
+                    </View>
+                    <Text style={styles.statNumber}>{completedCount}</Text>
+                    <Text style={styles.statSub}>Completed projects</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.statCard}>
+                    <View style={styles.statTop}>
+                      <Text style={styles.statLabel}>TOTAL EARNED</Text>
+                      <Ionicons name="cash-outline" size={14} color="rgba(255,255,255,0.3)" />
+                    </View>
+                    <Text style={[styles.statNumber, { color: GOLD }]}>
+                      ₱{totalEarned.toLocaleString()}
+                    </Text>
+                    <Text style={[styles.statSub, { color: GOLD }]}>Total earnings</Text>
+                  </View>
                 </View>
-                <Text style={styles.statNumber}>
-                  {user?.active_jobs ?? 3}
-                  <Text style={styles.statDelta}> +1</Text>
+
+                <Text style={styles.sectionTitle}>
+                  Recent <Text style={styles.sectionTitleItalic}>Activity</Text>
                 </Text>
-                <Text style={styles.statSub}>↑ +1 this week</Text>
-              </View>
 
-              <View style={styles.statCard}>
-                <View style={styles.statTop}>
-                  <Text style={styles.statLabel}>RECEIVED OFFERS</Text>
-                  <Ionicons name="mail-open-outline" size={14} color="rgba(255,255,255,0.3)" />
-                </View>
-                <Text style={styles.statNumber}>{user?.received_offers ?? 12}</Text>
-                <Text style={[styles.statSub, { color: GOLD }]}>5 new this week</Text>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={styles.statTop}>
-                  <Text style={styles.statLabel}>COMPLETED</Text>
-                  <Ionicons name="checkmark-circle-outline" size={14} color="rgba(255,255,255,0.3)" />
-                </View>
-                <Text style={styles.statNumber}>{user?.completed ?? 28}</Text>
-                <Text style={styles.statSub}>+ 3 this month</Text>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={styles.statTop}>
-                  <Text style={styles.statLabel}>TOTAL EARNED</Text>
-                  <Ionicons name="cash-outline" size={14} color="rgba(255,255,255,0.3)" />
-                </View>
-                <Text style={[styles.statNumber, { color: GOLD }]}>
-                  {user?.total_earned ?? '₱142k'}
-                </Text>
-                <Text style={[styles.statSub, { color: GOLD }]}>+ 12% vs last month</Text>
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>
-              Recent <Text style={styles.sectionTitleItalic}>Activity</Text>
-            </Text>
-
-            {RECENT_ACTIVITY.map((item) => (
-              <TouchableOpacity key={item.id} style={styles.activityCard} activeOpacity={0.7}>
-                <View style={[styles.activityIcon, { backgroundColor: item.iconBg }]}>
-                  <Ionicons name={item.icon} size={18} color={item.iconColor} />
-                </View>
-                <View style={styles.activityInfo}>
-                  <Text style={styles.activityTitle}>{item.title}</Text>
-                  <Text style={styles.activitySub}>{item.sub}</Text>
-                </View>
-                <Text style={styles.activityTime}>{item.time}</Text>
-              </TouchableOpacity>
-            ))}
+                {recentActivities.length === 0 ? (
+                  <View style={styles.emptyActivity}>
+                    <Ionicons name="time-outline" size={48} color="rgba(255,255,255,0.1)" />
+                    <Text style={styles.emptyActivityText}>No recent activity</Text>
+                  </View>
+                ) : (
+                  recentActivities.map((item) => (
+                    <TouchableOpacity 
+                      key={item.id} 
+                      style={styles.activityCard} 
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        if (item.type === 'offer') {
+                          onNavigate('ReceivedOffers');
+                        } else if (item.type === 'job') {
+                          onNavigate('BrowseJobs');
+                        }
+                      }}
+                    >
+                      <View style={[styles.activityIcon, { backgroundColor: item.iconBg }]}>
+                        <Ionicons name={item.icon} size={18} color={item.iconColor} />
+                      </View>
+                      <View style={styles.activityInfo}>
+                        <Text style={styles.activityTitle}>{item.title}</Text>
+                        <Text style={styles.activitySub}>{item.sub}</Text>
+                      </View>
+                      <Text style={styles.activityTime}>{item.time}</Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </>
+            )}
           </ScrollView>
         </View>
 
-        {/* ── OVERLAY ── */}
+        {/* OVERLAY */}
         {sidebarVisible && (
           <TouchableWithoutFeedback onPress={closeSidebar}>
             <Animated.View style={[styles.overlay, { opacity: overlayAnim }]} />
           </TouchableWithoutFeedback>
         )}
 
-        {/* ── SIDEBAR DRAWER ── */}
+        {/* SIDEBAR DRAWER */}
         <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
           <View style={styles.brand}>
             <View style={styles.brandIcon}>
@@ -555,6 +660,17 @@ const styles = StyleSheet.create({
   findWorkBtn: { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: GOLD, borderRadius: 10 },
   findWorkText: { fontSize: 11, fontWeight: '600', color: '#0a0a0a' },
   mainScroll: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 40 },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.4)',
+  },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 28 },
   statCard: {
     width: '47.5%',
@@ -565,7 +681,6 @@ const styles = StyleSheet.create({
   statTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   statLabel: { fontSize: 9, letterSpacing: 1.5, color: 'rgba(255,255,255,0.3)', fontWeight: '500' },
   statNumber: { fontSize: 26, fontWeight: '700', color: '#fff', marginBottom: 4 },
-  statDelta: { fontSize: 13, fontWeight: '400', color: 'rgba(255,255,255,0.35)' },
   statSub: { fontSize: 10, color: 'rgba(255,255,255,0.3)' },
   sectionTitle: { fontSize: 18, fontWeight: '300', color: '#fff', marginBottom: 14 },
   sectionTitleItalic: { fontStyle: 'italic', color: GOLD, fontWeight: '400' },
@@ -581,4 +696,14 @@ const styles = StyleSheet.create({
   activityTitle: { fontSize: 13, fontWeight: '500', color: '#fff', marginBottom: 2 },
   activitySub: { fontSize: 11, color: 'rgba(255,255,255,0.35)' },
   activityTime: { fontSize: 10, color: 'rgba(255,255,255,0.25)' },
+  emptyActivity: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyActivityText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.3)',
+  },
 });

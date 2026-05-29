@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, Text, TouchableOpacity, StyleSheet, 
-  Modal, Alert, FlatList, TextInput, ScrollView
+  Modal, Alert, FlatList, TextInput, ScrollView, RefreshControl, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useDispatch, useSelector } from 'react-redux';
+import { getReceivedOffers, updateOfferStatus } from '../../Redux/slices/offerSlice';
+import { getFreelancerJobs } from '../../Redux/slices/jobSlice';
 
 const BG = '#0a0a0a';
 const GOLD = '#D4AF37';
@@ -14,163 +17,109 @@ const INPUT_BG = '#111111';
 
 const STATUS_IN_PROGRESS = '#3b82f6';
 const STATUS_COMPLETED = '#4ade80';
-const STATUS_ON_HOLD = '#f59e0b';
+const STATUS_PENDING = '#f59e0b';
 const STATUS_CANCELLED = '#ef4444';
-const STATUS_REVIEW = '#8b5cf6';
-
-// Sample jobs data with 2026 dates
-const SAMPLE_JOBS = [
-  {
-    id: '1',
-    clientName: 'Servcorp Manila',
-    clientInitials: 'SM',
-    clientAvatar: null,
-    projectTitle: 'Office Setup Consultation',
-    description: 'Complete office setup consultation including IT infrastructure planning and layout design.',
-    budget: '₱28,000',
-    budgetType: 'Fixed',
-    startDate: '2026-01-10',
-    deadline: '2026-01-24',
-    status: 'in_progress',
-    progress: 65,
-    category: 'Consulting',
-    skills: ['Project Management', 'IT Consulting', 'Office Planning'],
-    milestones: [
-      { id: 'm1', title: 'Initial Assessment', completed: true, date: '2026-01-12' },
-      { id: 'm2', title: 'IT Infrastructure Plan', completed: true, date: '2026-01-15' },
-      { id: 'm3', title: 'Office Layout Design', completed: false, dueDate: '2026-01-20' },
-      { id: 'm4', title: 'Final Presentation', completed: false, dueDate: '2026-01-24' },
-    ],
-    messages: [
-      { id: 'msg1', from: 'client', message: 'Great work so far!', timestamp: '2026-01-16 10:30' },
-      { id: 'msg2', from: 'me', message: 'Thanks! Working on the layout design now.', timestamp: '2026-01-16 11:45' },
-    ],
-    clientRating: 4.8,
-    submittedForReview: false,
-  },
-  {
-    id: '2',
-    clientName: 'Apex Ventures',
-    clientInitials: 'AV',
-    clientAvatar: null,
-    projectTitle: 'Branding Package',
-    description: 'Complete branding package including logo design, brand guidelines, and marketing materials.',
-    budget: '₱45,000',
-    budgetType: 'Fixed',
-    startDate: '2026-01-05',
-    deadline: '2026-01-26',
-    status: 'in_progress',
-    progress: 40,
-    category: 'Design',
-    skills: ['Branding', 'Logo Design', 'Adobe Illustrator'],
-    milestones: [
-      { id: 'm1', title: 'Research & Discovery', completed: true, date: '2026-01-08' },
-      { id: 'm2', title: 'Logo Concepts', completed: true, date: '2026-01-12' },
-      { id: 'm3', title: 'Brand Guidelines', completed: false, dueDate: '2026-01-20' },
-      { id: 'm4', title: 'Marketing Materials', completed: false, dueDate: '2026-01-26' },
-    ],
-    messages: [
-      { id: 'msg1', from: 'client', message: 'Love the first concepts! Can we see more variations?', timestamp: '2026-01-13 14:20' },
-      { id: 'msg2', from: 'me', message: 'Of course! Working on additional options now.', timestamp: '2026-01-13 15:10' },
-    ],
-    clientRating: 5.0,
-    submittedForReview: false,
-  },
-  {
-    id: '3',
-    clientName: 'Digital Ocean PH',
-    clientInitials: 'DO',
-    clientAvatar: null,
-    projectTitle: 'React Native Mobile App',
-    description: 'Develop a cross-platform mobile app for our e-commerce platform.',
-    budget: '₱120,000',
-    budgetType: 'Fixed',
-    startDate: '2026-01-15',
-    deadline: '2026-02-26',
-    status: 'in_progress',
-    progress: 15,
-    category: 'Development',
-    skills: ['React Native', 'Node.js', 'MongoDB'],
-    milestones: [
-      { id: 'm1', title: 'Requirements Gathering', completed: true, date: '2026-01-16' },
-      { id: 'm2', title: 'UI/UX Design', completed: false, dueDate: '2026-01-30' },
-      { id: 'm3', title: 'Development', completed: false, dueDate: '2026-02-20' },
-      { id: 'm4', title: 'Testing & Deployment', completed: false, dueDate: '2026-02-26' },
-    ],
-    messages: [
-      { id: 'msg1', from: 'me', message: 'Starting the design phase this week.', timestamp: '2026-01-17 09:00' },
-    ],
-    clientRating: 4.5,
-    submittedForReview: false,
-  },
-  {
-    id: '4',
-    clientName: 'Creative Studio',
-    clientInitials: 'CS',
-    clientAvatar: null,
-    projectTitle: 'Video Editing Project',
-    description: 'Edit 5 promotional videos for social media campaigns.',
-    budget: '₱15,000',
-    budgetType: 'Fixed',
-    startDate: '2026-01-01',
-    deadline: '2026-01-15',
-    status: 'completed',
-    progress: 100,
-    category: 'Video',
-    skills: ['Premiere Pro', 'After Effects', 'Video Editing'],
-    milestones: [
-      { id: 'm1', title: 'Raw Footage Review', completed: true, date: '2026-01-03' },
-      { id: 'm2', title: 'First Cut', completed: true, date: '2026-01-08' },
-      { id: 'm3', title: 'Revisions', completed: true, date: '2026-01-12' },
-      { id: 'm4', title: 'Final Delivery', completed: true, date: '2026-01-15' },
-    ],
-    messages: [
-      { id: 'msg1', from: 'client', message: 'The videos look amazing! Thank you!', timestamp: '2026-01-15 16:20' },
-      { id: 'msg2', from: 'me', message: 'Glad you liked them! Looking forward to working again.', timestamp: '2026-01-15 17:00' },
-    ],
-    clientRating: 4.9,
-    submittedForReview: false,
-  },
-  {
-    id: '5',
-    clientName: 'TechStart Inc.',
-    clientInitials: 'TI',
-    clientAvatar: null,
-    projectTitle: 'UI/UX Design for Dashboard',
-    description: 'Design a modern dashboard for our analytics platform.',
-    budget: '₱35,000',
-    budgetType: 'Fixed',
-    startDate: '2026-02-01',
-    deadline: '2026-02-28',
-    status: 'pending',
-    progress: 0,
-    category: 'Design',
-    skills: ['Figma', 'UI Design', 'UX Research'],
-    milestones: [
-      { id: 'm1', title: 'Research', completed: false, dueDate: '2026-02-07' },
-      { id: 'm2', title: 'Wireframes', completed: false, dueDate: '2026-02-14' },
-      { id: 'm3', title: 'High Fidelity Designs', completed: false, dueDate: '2026-02-21' },
-      { id: 'm4', title: 'Handoff', completed: false, dueDate: '2026-02-28' },
-    ],
-    messages: [],
-    clientRating: 4.7,
-    submittedForReview: false,
-  },
-];
 
 export default function MyJobs({ onNavigate }) {
-  const [jobs, setJobs] = useState(SAMPLE_JOBS);
+  const dispatch = useDispatch();
+  const { receivedOffers, isLoading: offersLoading } = useSelector((state) => state.offers);
+  const { list: jobs, isLoading: jobsLoading } = useSelector((state) => state.jobs.jobs);
+  const { user } = useSelector((state) => state.auth);
+  
   const [selectedJob, setSelectedJob] = useState(null);
   const [activeTab, setActiveTab] = useState('active');
   const [messageInput, setMessageInput] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [myJobs, setMyJobs] = useState([]);
+
+  // Fetch data
+  const fetchData = useCallback(async () => {
+    try {
+      await Promise.all([
+        dispatch(getReceivedOffers({})).unwrap(),
+        dispatch(getFreelancerJobs({ limit: 50 })).unwrap(),
+      ]);
+    } catch (error) {
+      console.error('Error fetching jobs:', error);
+      Alert.alert('Error', 'Failed to load jobs');
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Process accepted offers into jobs
+  useEffect(() => {
+    if (receivedOffers && receivedOffers.length > 0) {
+      const acceptedJobs = receivedOffers
+        .filter(offer => offer.status === 'accepted')
+        .map(offer => ({
+          id: offer._id,
+          offerId: offer._id,
+          clientName: offer.client_name || 'Client',
+          clientId: offer.client_id,
+          projectTitle: offer.job_title || 'Untitled Project',
+          description: offer.message || 'No description provided',
+          budget: `₱${offer.amount?.toLocaleString() || 0}`,
+          budgetType: 'Fixed',
+          startDate: formatDate(offer.created_at),
+          deadline: offer.expiry_date ? formatDate(offer.expiry_date) : 'Not specified',
+          status: offer.status === 'accepted' ? 'in_progress' : offer.status,
+          progress: calculateProgress(offer.created_at, offer.updated_at),
+          category: offer.job_category || 'General',
+          skills: offer.required_skills || [],
+          milestones: generateMilestones(offer),
+          messages: offer.messages || [],
+          clientRating: offer.client_rating || 4.5,
+          submittedForReview: offer.submitted_for_review || false,
+          created_at: offer.created_at,
+        }));
+      
+      setMyJobs(acceptedJobs);
+    }
+  }, [receivedOffers]);
+
+  // Helper function to format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
+  };
+
+  // Helper function to calculate progress
+  const calculateProgress = (startDate, lastUpdate) => {
+    if (!startDate) return 0;
+    const start = new Date(startDate);
+    const now = new Date();
+    const daysSinceStart = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+    // Assume project takes 30 days, calculate progress
+    const progress = Math.min(Math.floor((daysSinceStart / 30) * 100), 95);
+    return progress;
+  };
+
+  // Generate milestones based on offer
+  const generateMilestones = (offer) => {
+    return [
+      { id: 'm1', title: 'Project Started', completed: true, date: formatDate(offer.created_at) },
+      { id: 'm2', title: 'Work in Progress', completed: false, dueDate: formatDate(new Date(new Date(offer.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)) },
+      { id: 'm3', title: 'Submit for Review', completed: false, dueDate: formatDate(new Date(new Date(offer.created_at).getTime() + 14 * 24 * 60 * 60 * 1000)) },
+      { id: 'm4', title: 'Project Completion', completed: false, dueDate: formatDate(new Date(new Date(offer.created_at).getTime() + 30 * 24 * 60 * 60 * 1000)) },
+    ];
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  }, [fetchData]);
 
   const getStatusColor = (status) => {
     switch(status) {
       case 'in_progress': return STATUS_IN_PROGRESS;
       case 'completed': return STATUS_COMPLETED;
-      case 'on_hold': return STATUS_ON_HOLD;
+      case 'pending': return STATUS_PENDING;
       case 'cancelled': return STATUS_CANCELLED;
-      case 'pending': return STATUS_REVIEW;
       default: return '#fff';
     }
   };
@@ -179,9 +128,8 @@ export default function MyJobs({ onNavigate }) {
     switch(status) {
       case 'in_progress': return 'In Progress';
       case 'completed': return 'Completed';
-      case 'on_hold': return 'On Hold';
+      case 'pending': return 'Pending';
       case 'cancelled': return 'Cancelled';
-      case 'pending': return 'Pending Start';
       default: return status;
     }
   };
@@ -190,9 +138,8 @@ export default function MyJobs({ onNavigate }) {
     switch(status) {
       case 'in_progress': return 'play-circle-outline';
       case 'completed': return 'checkmark-circle-outline';
-      case 'on_hold': return 'pause-circle-outline';
-      case 'cancelled': return 'close-circle-outline';
       case 'pending': return 'time-outline';
+      case 'cancelled': return 'close-circle-outline';
       default: return 'help-outline';
     }
   };
@@ -205,13 +152,19 @@ export default function MyJobs({ onNavigate }) {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Submit',
-          onPress: () => {
-            const updatedJobs = jobs.map(j => 
-              j.id === job.id ? { ...j, submittedForReview: true, status: 'review' } : j
-            );
-            setJobs(updatedJobs);
-            Alert.alert('Success', 'Project submitted for client review!');
-            setSelectedJob(null);
+          onPress: async () => {
+            try {
+              await dispatch(updateOfferStatus({ 
+                offerId: job.offerId, 
+                status: 'completed' 
+              })).unwrap();
+              
+              Alert.alert('Success', 'Project submitted for client review!');
+              fetchData();
+              setSelectedJob(null);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to submit project');
+            }
           }
         }
       ]
@@ -226,13 +179,19 @@ export default function MyJobs({ onNavigate }) {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Complete',
-          onPress: () => {
-            const updatedJobs = jobs.map(j => 
-              j.id === job.id ? { ...j, status: 'completed', progress: 100 } : j
-            );
-            setJobs(updatedJobs);
-            Alert.alert('Success', 'Project marked as completed!');
-            setSelectedJob(null);
+          onPress: async () => {
+            try {
+              await dispatch(updateOfferStatus({ 
+                offerId: job.offerId, 
+                status: 'completed' 
+              })).unwrap();
+              
+              Alert.alert('Success', 'Project marked as completed!');
+              fetchData();
+              setSelectedJob(null);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update project status');
+            }
           }
         }
       ]
@@ -241,37 +200,13 @@ export default function MyJobs({ onNavigate }) {
 
   const sendMessage = () => {
     if (!messageInput.trim()) return;
-    
-    const updatedJobs = jobs.map(job => {
-      if (job.id === selectedJob.id) {
-        const newMessage = {
-          id: Date.now().toString(),
-          from: 'me',
-          message: messageInput.trim(),
-          timestamp: new Date().toLocaleString(),
-        };
-        return {
-          ...job,
-          messages: [...(job.messages || []), newMessage]
-        };
-      }
-      return job;
-    });
-    
-    setJobs(updatedJobs);
-    setSelectedJob(prev => ({
-      ...prev,
-      messages: [...(prev.messages || []), {
-        id: Date.now().toString(),
-        from: 'me',
-        message: messageInput.trim(),
-        timestamp: new Date().toLocaleString(),
-      }]
-    }));
+    // In a real app, you would send this to your backend
+    Alert.alert('Message Sent', 'Your message has been sent to the client');
     setMessageInput('');
   };
 
   const calculateDaysRemaining = (deadline) => {
+    if (!deadline || deadline === 'Not specified') return null;
     const today = new Date();
     const deadlineDate = new Date(deadline);
     const diffTime = deadlineDate - today;
@@ -285,87 +220,96 @@ export default function MyJobs({ onNavigate }) {
     return '#4ade80';
   };
 
+  const getClientInitials = (clientName) => {
+    return clientName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
   const filteredJobs = () => {
     if (activeTab === 'active') {
-      return jobs.filter(job => job.status === 'in_progress');
+      return myJobs.filter(job => job.status === 'in_progress');
     } else if (activeTab === 'completed') {
-      return jobs.filter(job => job.status === 'completed');
+      return myJobs.filter(job => job.status === 'completed');
     } else {
-      return jobs.filter(job => job.status === 'pending');
+      return myJobs.filter(job => job.status === 'pending');
     }
   };
 
   const getTabCount = (tab) => {
-    if (tab === 'active') return jobs.filter(job => job.status === 'in_progress').length;
-    if (tab === 'completed') return jobs.filter(job => job.status === 'completed').length;
-    return jobs.filter(job => job.status === 'pending').length;
+    if (tab === 'active') return myJobs.filter(job => job.status === 'in_progress').length;
+    if (tab === 'completed') return myJobs.filter(job => job.status === 'completed').length;
+    return myJobs.filter(job => job.status === 'pending').length;
   };
 
-  const JobCard = ({ job, onPress }) => (
-    <TouchableOpacity 
-      style={styles.jobCard}
-      onPress={() => onPress(job)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.jobHeader}>
-        <View style={styles.clientInfo}>
-          <View style={styles.clientAvatar}>
-            <Text style={styles.clientInitials}>{job.clientInitials}</Text>
-          </View>
-          <View>
-            <Text style={styles.clientName}>{job.clientName}</Text>
-            <View style={styles.ratingContainer}>
-              <Ionicons name="star" size={12} color={GOLD} />
-              <Text style={styles.ratingText}>{job.clientRating}</Text>
+  const isLoading = jobsLoading || offersLoading;
+
+  const JobCard = ({ job, onPress }) => {
+    const daysRemaining = calculateDaysRemaining(job.deadline);
+    const isUrgent = daysRemaining !== null && daysRemaining <= 3;
+    
+    return (
+      <TouchableOpacity 
+        style={styles.jobCard}
+        onPress={() => onPress(job)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.jobHeader}>
+          <View style={styles.clientInfo}>
+            <View style={styles.clientAvatar}>
+              <Text style={styles.clientInitials}>{getClientInitials(job.clientName)}</Text>
+            </View>
+            <View>
+              <Text style={styles.clientName}>{job.clientName}</Text>
+              <View style={styles.ratingContainer}>
+                <Ionicons name="star" size={12} color={GOLD} />
+                <Text style={styles.ratingText}>{job.clientRating}</Text>
+              </View>
             </View>
           </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(job.status) + '20' }]}>
+            <Ionicons name={getStatusIcon(job.status)} size={12} color={getStatusColor(job.status)} />
+            <Text style={[styles.statusText, { color: getStatusColor(job.status) }]}>
+              {getStatusText(job.status)}
+            </Text>
+          </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(job.status) + '20' }]}>
-          <Ionicons name={getStatusIcon(job.status)} size={12} color={getStatusColor(job.status)} />
-          <Text style={[styles.statusText, { color: getStatusColor(job.status) }]}>
-            {getStatusText(job.status)}
-          </Text>
-        </View>
-      </View>
 
-      <Text style={styles.projectTitle}>{job.projectTitle}</Text>
-      <Text style={styles.projectCategory}>{job.category}</Text>
+        <Text style={styles.projectTitle}>{job.projectTitle}</Text>
+        <Text style={styles.projectCategory}>{job.category}</Text>
 
-      <View style={styles.progressSection}>
-        <View style={styles.progressHeader}>
-          <Text style={styles.progressLabel}>Progress</Text>
-          <Text style={styles.progressPercent}>{job.progress}%</Text>
+        <View style={styles.progressSection}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressLabel}>Progress</Text>
+            <Text style={styles.progressPercent}>{job.progress}%</Text>
+          </View>
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: `${job.progress}%`, backgroundColor: getProgressBarColor(job.progress) }]} />
+          </View>
         </View>
-        <View style={styles.progressBarBg}>
-          <View style={[styles.progressBarFill, { width: `${job.progress}%`, backgroundColor: getProgressBarColor(job.progress) }]} />
-        </View>
-      </View>
 
-      <View style={styles.jobDetails}>
-        <View style={styles.detailItem}>
-          <Ionicons name="cash-outline" size={14} color={GOLD} />
-          <Text style={styles.detailText}>{job.budget}</Text>
+        <View style={styles.jobDetails}>
+          <View style={styles.detailItem}>
+            <Ionicons name="cash-outline" size={14} color={GOLD} />
+            <Text style={styles.detailText}>{job.budget}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Ionicons name="calendar-outline" size={14} color={GOLD} />
+            <Text style={styles.detailText}>
+              {job.status === 'pending' ? `Starts: ${job.startDate}` : `Due: ${job.deadline}`}
+            </Text>
+          </View>
         </View>
-        <View style={styles.detailItem}>
-          <Ionicons name="calendar-outline" size={14} color={GOLD} />
-          <Text style={styles.detailText}>
-            {job.status === 'pending' ? `Starts: ${job.startDate}` : `Due: ${job.deadline}`}
-          </Text>
-        </View>
-      </View>
 
-      {job.status === 'in_progress' && (
-        <View style={styles.deadlineWarning}>
-          {calculateDaysRemaining(job.deadline) <= 3 && (
-            <Ionicons name="warning" size={14} color="#ef4444" />
-          )}
-          <Text style={[styles.deadlineText, calculateDaysRemaining(job.deadline) <= 3 && styles.deadlineUrgent]}>
-            {calculateDaysRemaining(job.deadline)} days remaining
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+        {job.status === 'in_progress' && daysRemaining !== null && (
+          <View style={styles.deadlineWarning}>
+            {isUrgent && <Ionicons name="warning" size={14} color="#ef4444" />}
+            <Text style={[styles.deadlineText, isUrgent && styles.deadlineUrgent]}>
+              {daysRemaining} days remaining
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   const JobDetailModal = ({ job, visible, onClose }) => {
     if (!job) return null;
@@ -396,14 +340,13 @@ export default function MyJobs({ onNavigate }) {
                 {/* Client Info */}
                 <View style={styles.modalClientSection}>
                   <View style={styles.modalClientAvatar}>
-                    <Text style={styles.modalClientInitials}>{job.clientInitials}</Text>
+                    <Text style={styles.modalClientInitials}>{getClientInitials(job.clientName)}</Text>
                   </View>
                   <View style={styles.modalClientInfo}>
                     <Text style={styles.modalClientName}>{job.clientName}</Text>
                     <View style={styles.modalRating}>
                       <Ionicons name="star" size={14} color={GOLD} />
                       <Text style={styles.modalRatingText}>{job.clientRating}</Text>
-                      <Text style={styles.modalReviewCount}>(24 reviews)</Text>
                     </View>
                   </View>
                   <View style={[styles.modalStatusBadge, { backgroundColor: getStatusColor(job.status) + '20' }]}>
@@ -488,31 +431,23 @@ export default function MyJobs({ onNavigate }) {
                 </View>
 
                 {/* Skills */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Skills Required</Text>
-                  <View style={styles.skillsContainer}>
-                    {job.skills.map((skill, index) => (
-                      <View key={index} style={styles.modalSkillChip}>
-                        <Text style={styles.modalSkillText}>{skill}</Text>
-                      </View>
-                    ))}
+                {job.skills && job.skills.length > 0 && (
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionTitle}>Skills Required</Text>
+                    <View style={styles.skillsContainer}>
+                      {job.skills.map((skill, index) => (
+                        <View key={index} style={styles.modalSkillChip}>
+                          <Text style={styles.modalSkillText}>{skill}</Text>
+                        </View>
+                      ))}
+                    </View>
                   </View>
-                </View>
+                )}
 
                 {/* Messages */}
                 <View style={styles.modalSection}>
                   <Text style={styles.modalSectionTitle}>Messages</Text>
                   <ScrollView style={styles.messagesContainer} nestedScrollEnabled={true}>
-                    {job.messages?.map((msg) => (
-                      <View key={msg.id} style={[styles.messageItem, msg.from === 'me' ? styles.myMessage : styles.clientMessage]}>
-                        <Text style={[styles.messageText, msg.from === 'me' && styles.myMessageText]}>
-                          {msg.message}
-                        </Text>
-                        <Text style={[styles.messageTime, msg.from === 'me' && styles.myMessageTime]}>
-                          {msg.timestamp}
-                        </Text>
-                      </View>
-                    ))}
                     {(!job.messages || job.messages.length === 0) && (
                       <Text style={styles.noMessages}>No messages yet</Text>
                     )}
@@ -558,7 +493,7 @@ export default function MyJobs({ onNavigate }) {
                     <Ionicons name="checkmark-circle" size={48} color={STATUS_COMPLETED} />
                     <Text style={styles.completedTitle}>Project Completed!</Text>
                     <Text style={styles.completedText}>
-                      This project has been successfully completed on {job.deadline}
+                      This project has been successfully completed
                     </Text>
                     <TouchableOpacity 
                       style={styles.leaveReviewBtn}
@@ -577,6 +512,24 @@ export default function MyJobs({ onNavigate }) {
     );
   };
 
+  if (isLoading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.title}>My Jobs</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={GOLD} />
+          <Text style={styles.loadingText}>Loading your jobs...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
@@ -584,9 +537,7 @@ export default function MyJobs({ onNavigate }) {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.title}>My Jobs</Text>
-        <TouchableOpacity style={styles.filterBtn}>
-          <Ionicons name="options-outline" size={22} color={GOLD} />
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       {/* Tabs */}
@@ -617,6 +568,9 @@ export default function MyJobs({ onNavigate }) {
         )}
         contentContainerStyle={styles.jobsList}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />
+        }
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
             <Ionicons name="briefcase-outline" size={64} color="rgba(255,255,255,0.1)" />
@@ -669,15 +623,15 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
   },
   title: { fontSize: 18, fontWeight: '600', color: '#fff' },
-  filterBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: CARD_BG,
-    alignItems: 'center',
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.4)',
   },
 
   // Tabs
@@ -946,10 +900,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#fff',
   },
-  modalReviewCount: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
-  },
   modalStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1087,35 +1037,6 @@ const styles = StyleSheet.create({
   messagesContainer: {
     maxHeight: 200,
     marginBottom: 12,
-  },
-  messageItem: {
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 8,
-    maxWidth: '85%',
-  },
-  clientMessage: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignSelf: 'flex-start',
-  },
-  myMessage: {
-    backgroundColor: GOLD,
-    alignSelf: 'flex-end',
-  },
-  messageText: {
-    fontSize: 13,
-    color: '#fff',
-  },
-  myMessageText: {
-    color: '#0a0a0a',
-  },
-  messageTime: {
-    fontSize: 9,
-    color: 'rgba(255,255,255,0.5)',
-    marginTop: 4,
-  },
-  myMessageTime: {
-    color: 'rgba(0,0,0,0.5)',
   },
   noMessages: {
     textAlign: 'center',

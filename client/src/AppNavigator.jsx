@@ -12,7 +12,7 @@ import PostJob from './components/client/Postjob';
 import Mypostings from './components/client/Mypostings';
 import Sentoffers from './components/client/Sentoffers';
 import Hiredtalents from './components/client/Hiredtalents';
-import ClientProfile from './components/client/CientProfile';
+import ClientProfile from './components/client/ClientProfile';
 import Settings from './components/client/Settings';
 import Message from './components/client/Message';
 

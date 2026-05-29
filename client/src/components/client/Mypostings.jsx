@@ -2,57 +2,22 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
   Alert, ActivityIndicator, RefreshControl, Modal,
-  TextInput,
+  TextInput, Image, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { getClientJobs, deleteJob, updateJobStatus, updateJob } from '../../Redux/slices/jobSlice';
+import { getClientJobs, deleteJob, updateJobStatus } from '../../Redux/slices/jobSlice';
+import { getJobApplications, updateApplicationStatus, sendOffer } from '../../Redux/slices/applicationSlice';
 
 const GOLD = '#D4AF37';
 const BG = '#0a0a0a';
 const CARD_BG = '#141414';
 const BORDER = 'rgba(255,255,255,0.07)';
+const INPUT_BG = '#1c1c1c';
 
 const TABS = ['All', 'open', 'in_progress', 'completed', 'cancelled'];
 
-// Job Types
-const JOB_TYPES = [
-  { label: 'Full Time', value: 'full_time' },
-  { label: 'Part Time', value: 'part_time' },
-  { label: 'Contract', value: 'contract' },
-  { label: 'One Time', value: 'one_time' },
-];
-
-// Work Setup
-const WORK_SETUPS = [
-  { label: 'Remote', value: 'remote' },
-  { label: 'Onsite', value: 'onsite' },
-  { label: 'Hybrid', value: 'hybrid' },
-];
-
-// Urgency Levels
-const URGENCY_LEVELS = [
-  { label: 'Low', value: 'low' },
-  { label: 'Normal', value: 'normal' },
-  { label: 'Urgent', value: 'urgent' },
-];
-
-// Experience Levels
-const EXPERIENCE_LEVELS = [
-  { label: 'Entry', value: 'Entry' },
-  { label: 'Intermediate', value: 'Intermediate' },
-  { label: 'Expert', value: 'Expert' },
-  { label: 'Senior', value: 'Senior' },
-];
-
-// Budget Types
-const BUDGET_TYPES = [
-  { label: 'Fixed Price', value: 'fixed' },
-  { label: 'Hourly Rate', value: 'hourly' },
-];
-
-// Helper function to format status display
 const formatStatus = (status) => {
   const statusMap = {
     'open': 'Open',
@@ -63,17 +28,16 @@ const formatStatus = (status) => {
   return statusMap[status] || status;
 };
 
-// Helper function to get budget display
 const getBudgetDisplay = (job) => {
   if (job.budget_type === 'hourly') {
     return `₱${job.budget_amount}/hr`;
   } else {
-    return `₱${job.budget_amount.toLocaleString()}`;
+    return `₱${job.budget_amount?.toLocaleString()}`;
   }
 };
 
-// Helper function to format date
 const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
   const date = new Date(dateString);
   const now = new Date();
   const diffTime = Math.abs(now - date);
@@ -85,45 +49,29 @@ const formatDate = (dateString) => {
   return `${Math.floor(diffDays / 30)} months ago`;
 };
 
-export default function MyPostingsScreen({ onNavigate }) {
+export default function MyPostings({ onNavigate }) {
   const dispatch = useDispatch();
-  const { clientJobs, isLoading, updateJobSuccess } = useSelector((state) => state.jobs.jobs);
+  const { clientJobs, isLoading } = useSelector((state) => state.jobs.jobs);
   const { token } = useSelector((state) => state.auth);
   const [activeTab, setActiveTab] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
-  
-  // Edit modal states
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [viewModalVisible, setViewModalVisible] = useState(false);
-  const [editingJob, setEditingJob] = useState(null);
-  const [editFormData, setEditFormData] = useState({
-    title: '',
-    description: '',
-    required_skills: [],
-    job_type: 'one_time',
-    work_setup: 'remote',
-    urgency_level: 'normal',
-    experience_level: '',
-    budget_type: 'fixed',
-    budget_amount: '',
-    estimated_duration: '',
-    contact_preference: 'chat',
-  });
-  const [skillInput, setSkillInput] = useState('');
+  const [showApplicantsModal, setShowApplicantsModal] = useState(false);
+  const [applications, setApplications] = useState([]);
+  const [loadingApplications, setLoadingApplications] = useState(false);
+  const [showOfferModal, setShowOfferModal] = useState(false);
+  const [showApplicantProfileModal, setShowApplicantProfileModal] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState(null);
+  const [selectedApplicant, setSelectedApplicant] = useState(null);
+  const [offerAmount, setOfferAmount] = useState('');
+  const [offerMessage, setOfferMessage] = useState('');
+  const [requirements, setRequirements] = useState('');
+  const [deadline, setDeadline] = useState('');
+  const [startDate, setStartDate] = useState('');
 
-  // Fetch jobs when screen loads
   useEffect(() => {
     fetchJobs();
   }, []);
-
-  // Close modal when update is successful
-  useEffect(() => {
-    if (updateJobSuccess) {
-      setEditModalVisible(false);
-      fetchJobs();
-    }
-  }, [updateJobSuccess]);
 
   const fetchJobs = async () => {
     if (!token) {
@@ -139,181 +87,475 @@ export default function MyPostingsScreen({ onNavigate }) {
     }
   };
 
+  const fetchApplications = async (jobId) => {
+    setLoadingApplications(true);
+    try {
+      const response = await dispatch(getJobApplications({ jobId })).unwrap();
+      setApplications(response.applications || []);
+      setShowApplicantsModal(true);
+    } catch (error) {
+      console.error('Error fetching applications:', error);
+      Alert.alert('Error', 'Failed to load applications');
+    } finally {
+      setLoadingApplications(false);
+    }
+  };
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchJobs();
     setRefreshing(false);
   }, []);
 
-  // Filter jobs based on active tab
   const filteredJobs = clientJobs.filter((job) =>
     activeTab === 'All' ? true : job.status === activeTab
   );
 
-  // Handle delete job
-  const handleDeleteJob = (jobId) => {
-    Alert.alert(
-      'Delete Job',
-      'Are you sure you want to delete this job posting? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await dispatch(deleteJob(jobId)).unwrap();
-              Alert.alert('Success', 'Job deleted successfully');
-              fetchJobs();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete job');
-            }
-          }
-        }
-      ]
-    );
+  const handleViewApplicantProfile = (application) => {
+    setSelectedApplicant(application.freelancer_id);
+    setSelectedApplication(application);
+    setShowApplicantProfileModal(true);
   };
 
-  // Handle update job status
-  const handleUpdateStatus = (jobId, newStatus) => {
-    Alert.alert(
-      'Update Status',
-      `Change job status to ${formatStatus(newStatus)}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Update',
-          onPress: async () => {
-            try {
-              await dispatch(updateJobStatus({ jobId, status: newStatus })).unwrap();
-              Alert.alert('Success', `Job status updated to ${formatStatus(newStatus)}`);
-              fetchJobs();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to update job status');
-            }
-          }
-        }
-      ]
-    );
+  const handleSendOfferFromProfile = () => {
+    setShowApplicantProfileModal(false);
+    setTimeout(() => {
+      setOfferAmount(selectedApplication?.proposed_rate?.toString() || '');
+      setOfferMessage(`I'm impressed with your application for ${selectedJob?.title}. I'd like to offer you the position.`);
+      setRequirements(`Please provide the following requirements:
+- Portfolio/Work samples
+- Resume/CV
+- Government IDs
+- Bank account details
+- NDA (Non-Disclosure Agreement)`);
+      setDeadline(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+      setStartDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+      setShowOfferModal(true);
+    }, 300);
   };
 
-  // Open edit modal
-  const openEditModal = (job) => {
-    setEditingJob(job);
-    setEditFormData({
-      title: job.title,
-      description: job.description,
-      required_skills: job.required_skills || [],
-      job_type: job.job_type || 'one_time',
-      work_setup: job.work_setup || 'remote',
-      urgency_level: job.urgency_level || 'normal',
-      experience_level: job.experience_level || '',
-      budget_type: job.budget_type || 'fixed',
-      budget_amount: job.budget_amount?.toString() || '',
-      estimated_duration: job.estimated_duration || '',
-      contact_preference: job.contact_preference || 'chat',
-    });
-    setSkillInput('');
-    setEditModalVisible(true);
-  };
-
-  // Open view details modal
-  const openViewModal = (job) => {
-    setSelectedJob(job);
-    setViewModalVisible(true);
-  };
-
-  // Add skill to edit form
-  const addSkill = () => {
-    if (skillInput.trim() && !editFormData.required_skills.includes(skillInput.trim())) {
-      setEditFormData({
-        ...editFormData,
-        required_skills: [...editFormData.required_skills, skillInput.trim()]
-      });
-      setSkillInput('');
-    }
-  };
-
-  // Remove skill from edit form
-  const removeSkill = (skill) => {
-    setEditFormData({
-      ...editFormData,
-      required_skills: editFormData.required_skills.filter(s => s !== skill)
-    });
-  };
-
-  // Save edited job
-  const saveEditJob = async () => {
-    if (!editFormData.title.trim()) {
-      Alert.alert('Error', 'Job title is required');
+  const handleSendOffer = async () => {
+    if (!offerAmount || parseFloat(offerAmount) <= 0) {
+      Alert.alert('Error', 'Please enter a valid offer amount');
       return;
     }
-    if (!editFormData.description.trim()) {
-      Alert.alert('Error', 'Job description is required');
-      return;
-    }
-    if (!editFormData.budget_amount || parseFloat(editFormData.budget_amount) <= 0) {
-      Alert.alert('Error', 'Valid budget amount is required');
-      return;
-    }
-
-    const updatedData = {
-      title: editFormData.title.trim(),
-      description: editFormData.description.trim(),
-      required_skills: editFormData.required_skills,
-      job_type: editFormData.job_type,
-      work_setup: editFormData.work_setup,
-      urgency_level: editFormData.urgency_level,
-      experience_level: editFormData.experience_level || null,
-      budget_type: editFormData.budget_type,
-      budget_amount: parseFloat(editFormData.budget_amount),
-      estimated_duration: editFormData.estimated_duration.trim() || null,
-      contact_preference: editFormData.contact_preference,
-    };
 
     try {
-      await dispatch(updateJob({ jobId: editingJob._id, jobData: updatedData })).unwrap();
-      Alert.alert('Success', 'Job updated successfully');
-      setEditModalVisible(false);
-      fetchJobs();
+      await dispatch(sendOffer({
+        applicationId: selectedApplication._id,
+        amount: parseFloat(offerAmount),
+        message: offerMessage,
+        requirements: requirements,
+        deadline: deadline,
+        start_date: startDate,
+      })).unwrap();
+      
+      Alert.alert(
+        'Success', 
+        'Offer sent to freelancer!\n\nThey will be notified and can accept or decline the offer.',
+        [{ text: 'OK', onPress: () => {
+          setShowOfferModal(false);
+          setOfferAmount('');
+          setOfferMessage('');
+          setRequirements('');
+          setDeadline('');
+          setStartDate('');
+          if (selectedJob) {
+            fetchApplications(selectedJob._id);
+          }
+        }}]
+      );
     } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to update job');
+      Alert.alert('Error', error.message || 'Failed to send offer');
     }
   };
 
-  // Show action menu for a job
-  const showJobActions = (job) => {
-    Alert.alert(
-      job.title,
-      'Choose an action',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'View Details', onPress: () => openViewModal(job) },
-        { text: 'Edit Job', onPress: () => openEditModal(job) },
-        ...(job.status === 'open' ? [
-          { text: 'Mark In Progress', onPress: () => handleUpdateStatus(job._id, 'in_progress') }
-        ] : []),
-        ...(job.status === 'in_progress' ? [
-          { text: 'Mark Completed', onPress: () => handleUpdateStatus(job._id, 'completed') }
-        ] : []),
-        ...(job.status === 'open' || job.status === 'in_progress' ? [
-          { text: 'Cancel Job', onPress: () => handleUpdateStatus(job._id, 'cancelled') }
-        ] : []),
-        { text: 'Delete Job', style: 'destructive', onPress: () => handleDeleteJob(job._id) }
-      ]
-    );
+  const handleMessageFreelancer = (freelancerId) => {
+    onNavigate('Messages', { userId: freelancerId, userRole: 'freelancer' });
   };
 
-  // Render loading state
+  const ApplicantsModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={showApplicantsModal}
+      onRequestClose={() => setShowApplicantsModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Applicants - {selectedJob?.title}</Text>
+            <TouchableOpacity onPress={() => setShowApplicantsModal(false)}>
+              <Ionicons name="close" size={24} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          </View>
+          
+          {loadingApplications ? (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator size="large" color={GOLD} />
+              <Text style={styles.loadingText}>Loading applications...</Text>
+            </View>
+          ) : applications.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="people-outline" size={64} color="rgba(255,255,255,0.1)" />
+              <Text style={styles.emptyTitle}>No applications yet</Text>
+              <Text style={styles.emptyText}>Freelancers will appear here when they apply</Text>
+            </View>
+          ) : (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {applications.map((application) => (
+                <TouchableOpacity 
+                  key={application._id} 
+                  style={styles.applicationCard}
+                  onPress={() => handleViewApplicantProfile(application)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.applicantHeader}>
+                    <View style={styles.applicantAvatar}>
+                      {application.freelancer_id?.profile_picture ? (
+                        <Image source={{ uri: application.freelancer_id.profile_picture }} style={styles.avatarImage} />
+                      ) : (
+                        <Text style={styles.applicantInitials}>
+                          {application.freelancer_id?.first_name?.[0]}{application.freelancer_id?.last_name?.[0]}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.applicantInfo}>
+                      <Text style={styles.applicantName}>
+                        {application.freelancer_id?.first_name} {application.freelancer_id?.last_name}
+                      </Text>
+                      <Text style={styles.applicantRole}>{application.freelancer_id?.experience_level || 'Freelancer'}</Text>
+                      <View style={styles.applicantSkills}>
+                        {application.freelancer_id?.skills?.slice(0, 2).map((skill, idx) => (
+                          <View key={idx} style={styles.applicantSkillChip}>
+                            <Text style={styles.applicantSkillText}>{skill}</Text>
+                          </View>
+                        ))}
+                        {application.freelancer_id?.skills?.length > 2 && (
+                          <Text style={styles.moreSkillsText}>+{application.freelancer_id.skills.length - 2}</Text>
+                        )}
+                      </View>
+                    </View>
+                    <View style={[
+                      styles.applicationStatusBadge, 
+                      application.status === 'pending' && styles.statusPending,
+                      application.status === 'reviewed' && styles.statusReviewed,
+                      application.status === 'offered' && styles.statusOffered,
+                      application.status === 'rejected' && styles.statusRejected,
+                    ]}>
+                      <Text style={styles.applicationStatusText}>
+                        {application.status === 'pending' ? 'Pending' : 
+                         application.status === 'reviewed' ? 'Reviewed' :
+                         application.status === 'offered' ? 'Offered' : 'Rejected'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.coverLetter} numberOfLines={3}>{application.cover_letter}</Text>
+                  
+                  {application.proposed_rate && (
+                    <Text style={styles.proposedRate}>
+                      💰 Proposed Rate: ₱{application.proposed_rate?.toLocaleString()}
+                    </Text>
+                  )}
+
+                  <View style={styles.applicationFooter}>
+                    <Text style={styles.appliedDate}>
+                      Applied: {formatDate(application.applied_at)}
+                    </Text>
+                    <TouchableOpacity 
+                      style={styles.viewProfileBtn}
+                      onPress={() => handleViewApplicantProfile(application)}
+                    >
+                      <Ionicons name="person-outline" size={14} color={GOLD} />
+                      <Text style={styles.viewProfileText}>View Profile</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const ApplicantProfileModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={showApplicantProfileModal}
+      onRequestClose={() => setShowApplicantProfileModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Freelancer Profile</Text>
+            <TouchableOpacity onPress={() => setShowApplicantProfileModal(false)}>
+              <Ionicons name="close" size={24} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          </View>
+
+          {selectedApplicant && (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Profile Header */}
+              <View style={styles.profileHeader}>
+                <View style={styles.profileAvatar}>
+                  {selectedApplicant.profile_picture ? (
+                    <Image source={{ uri: selectedApplicant.profile_picture }} style={styles.profileAvatarImage} />
+                  ) : (
+                    <Text style={styles.profileInitials}>
+                      {selectedApplicant.first_name?.[0]}{selectedApplicant.last_name?.[0]}
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.profileName}>
+                  {selectedApplicant.first_name} {selectedApplicant.last_name}
+                </Text>
+                <Text style={styles.profileUsername}>@{selectedApplicant.username}</Text>
+                
+                <View style={styles.profileStats}>
+                  <View style={styles.profileStat}>
+                    <Ionicons name="star" size={16} color={GOLD} />
+                    <Text style={styles.profileStatValue}>4.8</Text>
+                    <Text style={styles.profileStatLabel}>Rating</Text>
+                  </View>
+                  <View style={styles.profileStatDivider} />
+                  <View style={styles.profileStat}>
+                    <Ionicons name="briefcase-outline" size={16} color={GOLD} />
+                    <Text style={styles.profileStatValue}>{selectedApplicant.completed_projects || 0}</Text>
+                    <Text style={styles.profileStatLabel}>Completed</Text>
+                  </View>
+                  <View style={styles.profileStatDivider} />
+                  <View style={styles.profileStat}>
+                    <Ionicons name="time-outline" size={16} color={GOLD} />
+                    <Text style={styles.profileStatValue}>
+                      {selectedApplicant.experience_level || 'Entry'}
+                    </Text>
+                    <Text style={styles.profileStatLabel}>Level</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Contact Information */}
+              <View style={styles.profileSection}>
+                <Text style={styles.profileSectionTitle}>Contact Information</Text>
+                <View style={styles.contactInfo}>
+                  <View style={styles.contactItem}>
+                    <Ionicons name="mail-outline" size={16} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.contactText}>{selectedApplicant.email_address}</Text>
+                  </View>
+                  {selectedApplicant.phone_number && (
+                    <View style={styles.contactItem}>
+                      <Ionicons name="call-outline" size={16} color="rgba(255,255,255,0.5)" />
+                      <Text style={styles.contactText}>{selectedApplicant.phone_number}</Text>
+                    </View>
+                  )}
+                  {selectedApplicant.location && (
+                    <View style={styles.contactItem}>
+                      <Ionicons name="location-outline" size={16} color="rgba(255,255,255,0.5)" />
+                      <Text style={styles.contactText}>{selectedApplicant.location}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Skills */}
+              {selectedApplicant.skills && selectedApplicant.skills.length > 0 && (
+                <View style={styles.profileSection}>
+                  <Text style={styles.profileSectionTitle}>Skills</Text>
+                  <View style={styles.profileSkills}>
+                    {selectedApplicant.skills.map((skill, idx) => (
+                      <View key={idx} style={styles.profileSkillChip}>
+                        <Text style={styles.profileSkillText}>{skill}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* About */}
+              {selectedApplicant.bio_about_me && (
+                <View style={styles.profileSection}>
+                  <Text style={styles.profileSectionTitle}>About</Text>
+                  <Text style={styles.profileBio}>{selectedApplicant.bio_about_me}</Text>
+                </View>
+              )}
+
+              {/* Portfolio & Links */}
+              {(selectedApplicant.portfolio_link || selectedApplicant.github_link) && (
+                <View style={styles.profileSection}>
+                  <Text style={styles.profileSectionTitle}>Portfolio & Links</Text>
+                  {selectedApplicant.portfolio_link && (
+                    <TouchableOpacity 
+                      style={styles.linkItem}
+                      onPress={() => Linking.openURL(selectedApplicant.portfolio_link)}
+                    >
+                      <Ionicons name="globe-outline" size={16} color={GOLD} />
+                      <Text style={styles.linkText}>View Portfolio</Text>
+                    </TouchableOpacity>
+                  )}
+                  {selectedApplicant.github_link && (
+                    <TouchableOpacity 
+                      style={styles.linkItem}
+                      onPress={() => Linking.openURL(selectedApplicant.github_link)}
+                    >
+                      <Ionicons name="logo-github" size={16} color={GOLD} />
+                      <Text style={styles.linkText}>GitHub Profile</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* Application Details */}
+              {selectedApplication && (
+                <View style={styles.profileSection}>
+                  <Text style={styles.profileSectionTitle}>Application Details</Text>
+                  <View style={styles.applicationDetail}>
+                    <Text style={styles.applicationDetailLabel}>Cover Letter:</Text>
+                    <Text style={styles.applicationDetailText}>{selectedApplication.cover_letter}</Text>
+                  </View>
+                  {selectedApplication.proposed_rate && (
+                    <View style={styles.applicationDetail}>
+                      <Text style={styles.applicationDetailLabel}>Proposed Rate:</Text>
+                      <Text style={[styles.applicationDetailText, { color: GOLD }]}>
+                        ₱{selectedApplication.proposed_rate.toLocaleString()}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.applicationDetail}>
+                    <Text style={styles.applicationDetailLabel}>Applied:</Text>
+                    <Text style={styles.applicationDetailText}>
+                      {new Date(selectedApplication.applied_at).toLocaleDateString()}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Action Buttons */}
+              <View style={styles.profileActions}>
+                <TouchableOpacity 
+                  style={[styles.profileActionBtn, styles.messageBtn]}
+                  onPress={() => handleMessageFreelancer(selectedApplicant._id)}
+                >
+                  <Ionicons name="chatbubble-outline" size={18} color="#fff" />
+                  <Text style={styles.messageBtnText}>Send Message</Text>
+                </TouchableOpacity>
+                
+                {selectedApplication?.status === 'pending' && (
+                  <TouchableOpacity 
+                    style={[styles.profileActionBtn, styles.offerProfileBtn]}
+                    onPress={handleSendOfferFromProfile}
+                  >
+                    <Ionicons name="gift-outline" size={18} color="#0a0a0a" />
+                    <Text style={styles.offerProfileBtnText}>Send Offer</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </ScrollView>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const OfferModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={showOfferModal}
+      onRequestClose={() => setShowOfferModal(false)}
+    >
+      <View style={styles.offerModalOverlay}>
+        <View style={styles.offerModalContent}>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.offerModalHeader}>
+              <Text style={styles.offerModalTitle}>Send Offer to {selectedApplication?.freelancer_id?.first_name}</Text>
+              <TouchableOpacity onPress={() => setShowOfferModal(false)}>
+                <Ionicons name="close" size={24} color="rgba(255,255,255,0.7)" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.offerLabel}>Offer Amount *</Text>
+            <TextInput
+              style={styles.offerInput}
+              placeholder="Enter amount"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              value={offerAmount}
+              onChangeText={setOfferAmount}
+              keyboardType="numeric"
+            />
+
+            <Text style={styles.offerLabel}>Start Date</Text>
+            <TextInput
+              style={styles.offerInput}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              value={startDate}
+              onChangeText={setStartDate}
+            />
+
+            <Text style={styles.offerLabel}>Project Deadline</Text>
+            <TextInput
+              style={styles.offerInput}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              value={deadline}
+              onChangeText={setDeadline}
+            />
+
+            <Text style={styles.offerLabel}>Requirements</Text>
+            <TextInput
+              style={[styles.offerInput, styles.offerTextArea]}
+              placeholder="List down the requirements needed from the freelancer..."
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              value={requirements}
+              onChangeText={setRequirements}
+              multiline
+              numberOfLines={6}
+            />
+
+            <Text style={styles.offerLabel}>Personal Message</Text>
+            <TextInput
+              style={[styles.offerInput, styles.offerTextAreaSmall]}
+              placeholder="Add a personal message..."
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              value={offerMessage}
+              onChangeText={setOfferMessage}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={styles.offerButtons}>
+              <TouchableOpacity 
+                style={[styles.offerBtn, styles.offerCancelBtn]}
+                onPress={() => setShowOfferModal(false)}
+              >
+                <Text style={styles.offerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.offerBtn, styles.offerSendBtn]}
+                onPress={handleSendOffer}
+              >
+                <Ionicons name="send-outline" size={18} color="#0a0a0a" />
+                <Text style={styles.offerSendText}>Send Offer</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
   if (isLoading && !refreshing) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <View style={styles.topbar}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('ClientDashboard')} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('ClientDashboard')}>
             <Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.7)" />
           </TouchableOpacity>
           <Text style={styles.topbarTitle}>My <Text style={styles.gold}>Postings</Text></Text>
-          <TouchableOpacity style={styles.addBtn} onPress={() => onNavigate('PostJob')} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.addBtn} onPress={() => onNavigate('PostJob')}>
             <Ionicons name="add" size={20} color="#0a0a0a" />
           </TouchableOpacity>
         </View>
@@ -328,16 +570,15 @@ export default function MyPostingsScreen({ onNavigate }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.topbar}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('ClientDashboard')} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('ClientDashboard')}>
           <Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.7)" />
         </TouchableOpacity>
         <Text style={styles.topbarTitle}>My <Text style={styles.gold}>Postings</Text></Text>
-        <TouchableOpacity style={styles.addBtn} onPress={() => onNavigate('PostJob')} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.addBtn} onPress={() => onNavigate('PostJob')}>
           <Ionicons name="add" size={20} color="#0a0a0a" />
         </TouchableOpacity>
       </View>
 
-      {/* Tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll}>
         <View style={styles.tabRow}>
           {TABS.map((tab) => (
@@ -345,7 +586,6 @@ export default function MyPostingsScreen({ onNavigate }) {
               key={tab}
               style={[styles.tab, activeTab === tab && styles.tabActive]}
               onPress={() => setActiveTab(tab)}
-              activeOpacity={0.7}
             >
               <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                 {tab === 'All' ? 'All' : formatStatus(tab)}
@@ -371,21 +611,13 @@ export default function MyPostingsScreen({ onNavigate }) {
                 ? "You haven't posted any jobs yet" 
                 : `No ${formatStatus(activeTab).toLowerCase()} jobs found`}
             </Text>
-            <TouchableOpacity 
-              style={styles.postJobBtn}
-              onPress={() => onNavigate('PostJob')}
-            >
+            <TouchableOpacity style={styles.postJobBtn} onPress={() => onNavigate('PostJob')}>
               <Text style={styles.postJobBtnText}>Post Your First Job</Text>
             </TouchableOpacity>
           </View>
         ) : (
           filteredJobs.map((item) => (
-            <TouchableOpacity 
-              key={item._id} 
-              style={styles.card} 
-              activeOpacity={0.75}
-              onPress={() => showJobActions(item)}
-            >
+            <View key={item._id} style={styles.card}>
               <View style={styles.cardTop}>
                 <View style={styles.categoryBadge}>
                   <Text style={styles.categoryText}>
@@ -443,298 +675,34 @@ export default function MyPostingsScreen({ onNavigate }) {
                   <Ionicons name="people-outline" size={12} color="rgba(255,255,255,0.35)" />
                   <Text style={styles.metaText}>{item.total_applicants || 0} applicants</Text>
                 </View>
-                <Text style={styles.postedText}>
-                  {formatDate(item.created_at)}
-                </Text>
+                <Text style={styles.postedText}>{formatDate(item.created_at)}</Text>
               </View>
               
               <View style={styles.cardFooter}>
                 <Text style={styles.workSetup}>
                   {item.work_setup?.replace('_', ' ').toUpperCase()}
                 </Text>
-                <View style={styles.actionIcons}>
-                  <TouchableOpacity onPress={() => openViewModal(item)}>
-                    <Ionicons name="eye-outline" size={18} color="rgba(255,255,255,0.4)" />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => openEditModal(item)}>
-                    <Ionicons name="create-outline" size={18} color="rgba(255,255,255,0.4)" />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDeleteJob(item._id)}>
-                    <Ionicons name="trash-outline" size={18} color="rgba(255,107,107,0.6)" />
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity 
+                  style={styles.viewApplicantsBtn}
+                  onPress={() => {
+                    setSelectedJob(item);
+                    fetchApplications(item._id);
+                  }}
+                >
+                  <Ionicons name="people-outline" size={16} color={GOLD} />
+                  <Text style={styles.viewApplicantsText}>
+                    View Applicants ({item.total_applicants || 0})
+                  </Text>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
           ))
         )}
       </ScrollView>
 
-      {/* View Details Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={viewModalVisible}
-        onRequestClose={() => setViewModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Job Details</Text>
-              <TouchableOpacity onPress={() => setViewModalVisible(false)}>
-                <Ionicons name="close" size={24} color="rgba(255,255,255,0.7)" />
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {selectedJob && (
-                <>
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Job Title</Text>
-                    <Text style={styles.detailValue}>{selectedJob.title}</Text>
-                  </View>
-
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Description</Text>
-                    <Text style={styles.detailValue}>{selectedJob.description}</Text>
-                  </View>
-
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Required Skills</Text>
-                    <View style={styles.detailSkillsContainer}>
-                      {selectedJob.required_skills?.map((skill, idx) => (
-                        <View key={idx} style={styles.detailSkillChip}>
-                          <Text style={styles.detailSkillText}>{skill}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <View style={styles.detailHalf}>
-                      <Text style={styles.detailLabel}>Job Type</Text>
-                      <Text style={styles.detailValue}>
-                        {JOB_TYPES.find(t => t.value === selectedJob.job_type)?.label || selectedJob.job_type}
-                      </Text>
-                    </View>
-                    <View style={styles.detailHalf}>
-                      <Text style={styles.detailLabel}>Work Setup</Text>
-                      <Text style={styles.detailValue}>
-                        {WORK_SETUPS.find(w => w.value === selectedJob.work_setup)?.label || selectedJob.work_setup}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <View style={styles.detailHalf}>
-                      <Text style={styles.detailLabel}>Urgency Level</Text>
-                      <Text style={styles.detailValue}>
-                        {URGENCY_LEVELS.find(u => u.value === selectedJob.urgency_level)?.label || selectedJob.urgency_level}
-                      </Text>
-                    </View>
-                    <View style={styles.detailHalf}>
-                      <Text style={styles.detailLabel}>Experience Level</Text>
-                      <Text style={styles.detailValue}>
-                        {selectedJob.experience_level || 'Not specified'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <View style={styles.detailHalf}>
-                      <Text style={styles.detailLabel}>Budget Type</Text>
-                      <Text style={styles.detailValue}>
-                        {BUDGET_TYPES.find(b => b.value === selectedJob.budget_type)?.label || selectedJob.budget_type}
-                      </Text>
-                    </View>
-                    <View style={styles.detailHalf}>
-                      <Text style={styles.detailLabel}>Budget Amount</Text>
-                      <Text style={[styles.detailValue, { color: GOLD }]}>
-                        {getBudgetDisplay(selectedJob)}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Estimated Duration</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedJob.estimated_duration || 'Not specified'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Contact Preference</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedJob.contact_preference?.charAt(0).toUpperCase() + selectedJob.contact_preference?.slice(1)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Status</Text>
-                    <Text style={[styles.detailValue, { color: selectedJob.status === 'open' ? '#4ade80' : GOLD }]}>
-                      {formatStatus(selectedJob.status)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Total Applicants</Text>
-                    <Text style={styles.detailValue}>{selectedJob.total_applicants || 0}</Text>
-                  </View>
-
-                  <TouchableOpacity 
-                    style={styles.closeModalBtn}
-                    onPress={() => setViewModalVisible(false)}
-                  >
-                    <Text style={styles.closeModalBtnText}>Close</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Edit Job Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={editModalVisible}
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Job</Text>
-              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-                <Ionicons name="close" size={24} color="rgba(255,255,255,0.7)" />
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.editLabel}>Job Title *</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editFormData.title}
-                onChangeText={(text) => setEditFormData({...editFormData, title: text})}
-                placeholderTextColor="rgba(255,255,255,0.2)"
-              />
-
-              <Text style={styles.editLabel}>Description *</Text>
-              <TextInput
-                style={[styles.editInput, styles.textArea]}
-                value={editFormData.description}
-                onChangeText={(text) => setEditFormData({...editFormData, description: text})}
-                multiline
-                numberOfLines={4}
-                placeholderTextColor="rgba(255,255,255,0.2)"
-              />
-
-              <Text style={styles.editLabel}>Required Skills</Text>
-              <View style={styles.skillInputContainer}>
-                <TextInput
-                  style={styles.skillInput}
-                  placeholder="Add a skill"
-                  value={skillInput}
-                  onChangeText={setSkillInput}
-                  onSubmitEditing={addSkill}
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                />
-                <TouchableOpacity style={styles.addSkillBtn} onPress={addSkill}>
-                  <Ionicons name="add-circle" size={32} color={GOLD} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.editSkillsContainer}>
-                {editFormData.required_skills.map((skill) => (
-                  <View key={skill} style={styles.editSkillChip}>
-                    <Text style={styles.editSkillText}>{skill}</Text>
-                    <TouchableOpacity onPress={() => removeSkill(skill)}>
-                      <Ionicons name="close-circle" size={16} color={BG} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-
-              <Text style={styles.editLabel}>Job Type</Text>
-              <View style={styles.editChipRow}>
-                {JOB_TYPES.map((type) => (
-                  <TouchableOpacity
-                    key={type.value}
-                    style={[styles.editChip, editFormData.job_type === type.value && styles.editChipActive]}
-                    onPress={() => setEditFormData({...editFormData, job_type: type.value})}
-                  >
-                    <Text style={[styles.editChipText, editFormData.job_type === type.value && styles.editChipTextActive]}>
-                      {type.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.editLabel}>Work Setup</Text>
-              <View style={styles.editChipRow}>
-                {WORK_SETUPS.map((setup) => (
-                  <TouchableOpacity
-                    key={setup.value}
-                    style={[styles.editChip, editFormData.work_setup === setup.value && styles.editChipActive]}
-                    onPress={() => setEditFormData({...editFormData, work_setup: setup.value})}
-                  >
-                    <Text style={[styles.editChipText, editFormData.work_setup === setup.value && styles.editChipTextActive]}>
-                      {setup.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.editLabel}>Budget Type</Text>
-              <View style={styles.editChipRow}>
-                {BUDGET_TYPES.map((type) => (
-                  <TouchableOpacity
-                    key={type.value}
-                    style={[styles.editChip, editFormData.budget_type === type.value && styles.editChipActive]}
-                    onPress={() => setEditFormData({...editFormData, budget_type: type.value})}
-                  >
-                    <Text style={[styles.editChipText, editFormData.budget_type === type.value && styles.editChipTextActive]}>
-                      {type.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.editLabel}>Budget Amount *</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editFormData.budget_amount}
-                onChangeText={(text) => setEditFormData({...editFormData, budget_amount: text})}
-                keyboardType="numeric"
-                placeholderTextColor="rgba(255,255,255,0.2)"
-              />
-
-              <Text style={styles.editLabel}>Estimated Duration</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editFormData.estimated_duration}
-                onChangeText={(text) => setEditFormData({...editFormData, estimated_duration: text})}
-                placeholder="e.g., 2 weeks, 1 month"
-                placeholderTextColor="rgba(255,255,255,0.2)"
-              />
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity 
-                  style={[styles.modalButton, styles.cancelButton]} 
-                  onPress={() => setEditModalVisible(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.modalButton, styles.saveButton]} 
-                  onPress={saveEditJob}
-                >
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <ApplicantsModal />
+      <ApplicantProfileModal />
+      <OfferModal />
     </SafeAreaView>
   );
 }
@@ -774,6 +742,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 60,
   },
   loadingText: {
     marginTop: 12,
@@ -838,9 +807,21 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.3)',
     textTransform: 'uppercase',
   },
-  actionIcons: {
+  viewApplicantsBtn: {
     flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: GOLD,
+  },
+  viewApplicantsText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: GOLD,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -871,19 +852,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0a0a0a',
   },
-  // Modal styles
+  // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   modalContent: {
     backgroundColor: CARD_BG,
     borderRadius: 16,
-    padding: 20,
-    width: '90%',
-    maxHeight: '80%',
+    width: '100%',
+    maxHeight: '85%',
     borderWidth: 1,
     borderColor: BORDER,
   },
@@ -891,8 +872,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 10,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
@@ -901,169 +881,369 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  detailSection: {
-    marginBottom: 16,
+  applicationCard: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
   },
-  detailRow: {
+  applicantHeader: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  detailHalf: {
+  applicantAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  avatarImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  applicantInitials: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0a0a0a',
+  },
+  applicantInfo: {
     flex: 1,
   },
-  detailLabel: {
-    fontSize: 11,
+  applicantName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  applicantRole: {
+    fontSize: 12,
     color: 'rgba(255,255,255,0.4)',
     marginBottom: 4,
-    letterSpacing: 0.5,
   },
-  detailValue: {
-    fontSize: 14,
-    color: '#fff',
-  },
-  detailSkillsContainer: {
+  applicantSkills: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 4,
+    gap: 4,
   },
-  detailSkillChip: {
+  applicantSkillChip: {
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  applicantSkillText: {
+    fontSize: 9,
+    color: GOLD,
+  },
+  moreSkillsText: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.3)',
+    alignSelf: 'center',
+  },
+  applicationStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusPending: {
+    backgroundColor: 'rgba(212,175,55,0.15)',
+  },
+  statusReviewed: {
+    backgroundColor: 'rgba(96,165,250,0.15)',
+  },
+  statusOffered: {
+    backgroundColor: 'rgba(74,222,128,0.15)',
+  },
+  statusRejected: {
+    backgroundColor: 'rgba(248,113,113,0.15)',
+  },
+  applicationStatusText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  coverLetter: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  proposedRate: {
+    fontSize: 12,
+    color: GOLD,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  applicationFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  appliedDate: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.3)',
+  },
+  viewProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  viewProfileText: {
+    fontSize: 11,
+    color: GOLD,
+  },
+  // Applicant Profile Modal Styles
+  profileHeader: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  profileAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  profileAvatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  profileInitials: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#0a0a0a',
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  profileUsername: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
+    marginBottom: 16,
+  },
+  profileStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
+  profileStat: {
+    alignItems: 'center',
+  },
+  profileStatValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  profileStatLabel: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: 2,
+  },
+  profileStatDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: BORDER,
+  },
+  profileSection: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  profileSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: GOLD,
+    marginBottom: 12,
+  },
+  contactInfo: {
+    gap: 8,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  contactText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  profileSkills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  profileSkillChip: {
+    backgroundColor: 'rgba(212,175,55,0.1)',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    backgroundColor: 'rgba(212,175,55,0.1)',
     borderRadius: 6,
     borderWidth: 0.5,
     borderColor: 'rgba(212,175,55,0.3)',
   },
-  detailSkillText: {
-    fontSize: 11,
+  profileSkillText: {
+    fontSize: 12,
     color: GOLD,
   },
-  closeModalBtn: {
-    backgroundColor: GOLD,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 20,
+  profileBio: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    lineHeight: 18,
   },
-  closeModalBtnText: {
+  linkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  linkText: {
+    fontSize: 13,
+    color: GOLD,
+    textDecorationLine: 'underline',
+  },
+  applicationDetail: {
+    marginBottom: 10,
+  },
+  applicationDetailLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.5)',
+    marginBottom: 4,
+  },
+  applicationDetailText: {
+    fontSize: 13,
+    color: '#fff',
+  },
+  profileActions: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+  },
+  profileActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  messageBtn: {
+    backgroundColor: 'rgba(96,165,250,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(96,165,250,0.3)',
+  },
+  messageBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#60a5fa',
+  },
+  offerProfileBtn: {
+    backgroundColor: GOLD,
+  },
+  offerProfileBtnText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#0a0a0a',
   },
-  // Edit form styles
-  editLabel: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
+  offerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  offerModalContent: {
+    backgroundColor: CARD_BG,
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxHeight: '85%',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  offerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  offerModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    flex: 1,
+  },
+  offerLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.5)',
     marginBottom: 8,
     marginTop: 12,
-    letterSpacing: 0.5,
   },
-  editInput: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+  offerInput: {
+    backgroundColor: INPUT_BG,
+    borderRadius: 10,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     color: '#fff',
     fontSize: 14,
     borderWidth: 1,
     borderColor: BORDER,
+    marginBottom: 16,
   },
-  textArea: {
+  offerTextArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  offerTextAreaSmall: {
     height: 80,
     textAlignVertical: 'top',
   },
-  skillInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  skillInput: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#fff',
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  addSkillBtn: {
-    padding: 4,
-  },
-  editSkillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
-  editSkillChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: GOLD,
-  },
-  editSkillText: {
-    fontSize: 12,
-    color: '#0a0a0a',
-    fontWeight: '600',
-  },
-  editChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  editChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  editChipActive: {
-    backgroundColor: 'rgba(212,175,55,0.15)',
-    borderColor: GOLD,
-  },
-  editChipText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-  },
-  editChipTextActive: {
-    color: GOLD,
-    fontWeight: '600',
-  },
-  modalButtons: {
+  offerButtons: {
     flexDirection: 'row',
     gap: 12,
     marginTop: 20,
     marginBottom: 10,
   },
-  modalButton: {
+  offerBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
-  cancelButton: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+  offerCancelBtn: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderWidth: 1,
     borderColor: BORDER,
   },
-  saveButton: {
-    backgroundColor: GOLD,
-  },
-  cancelButtonText: {
+  offerCancelText: {
     fontSize: 14,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.7)',
   },
-  saveButtonText: {
+  offerSendBtn: {
+    backgroundColor: GOLD,
+  },
+  offerSendText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#0a0a0a',

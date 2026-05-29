@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,14 @@ import {
   Modal,
   Animated,
   TouchableWithoutFeedback,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useDispatch, useSelector } from 'react-redux';
+import { getFreelancerJobs, searchJobs } from '../../Redux/slices/jobSlice';
+import { applyForJob, getFreelancerApplications } from '../../Redux/slices/applicationSlice';
 
 const GOLD = '#D4AF37';
 const BG = '#0a0a0a';
@@ -20,102 +25,63 @@ const CARD_BG = '#141414';
 const BORDER = 'rgba(255,255,255,0.08)';
 const INPUT_BG = '#1c1c1c';
 
-const SAMPLE_JOBS = [
-  {
-    id: '1',
-    title: 'Senior UI/UX Designer',
-    company: 'Servcorp Manila',
-    location: 'Remote',
-    type: 'Full-time',
-    salary: '₱80,000 - ₱120,000',
-    posted: '2 hours ago',
-    description: 'Looking for an experienced UI/UX designer to lead our product design team...',
-    skills: ['Figma', 'Adobe XD', 'User Research', 'Prototyping'],
-    applicants: 12,
-    isUrgent: true,
-    isFeatured: true,
-  },
-  {
-    id: '2',
-    title: 'Mobile App Developer (React Native)',
-    company: 'Apex Ventures',
-    location: 'Hybrid',
-    type: 'Contract',
-    salary: '₱60,000 - ₱90,000',
-    posted: '5 hours ago',
-    description: 'Join our growing team to build amazing mobile experiences...',
-    skills: ['React Native', 'TypeScript', 'Redux', 'Firebase'],
-    applicants: 28,
-    isUrgent: true,
-    isFeatured: false,
-  },
-  {
-    id: '3',
-    title: 'Brand Identity Designer',
-    company: 'Luminary Digital',
-    location: 'Remote',
-    type: 'Freelance',
-    salary: '₱40,000 - ₱60,000',
-    posted: '1 day ago',
-    description: 'Seeking creative brand designer for comprehensive brand identity project...',
-    skills: ['Branding', 'Logo Design', 'Typography', 'Illustrator'],
-    applicants: 45,
-    isUrgent: false,
-    isFeatured: true,
-  },
-  {
-    id: '4',
-    title: 'Backend Developer (Node.js)',
-    company: 'TechStart Solutions',
-    location: 'Remote',
-    type: 'Full-time',
-    salary: '₱90,000 - ₱130,000',
-    posted: '2 days ago',
-    description: 'Building scalable backend systems for our growing platform...',
-    skills: ['Node.js', 'Express', 'MongoDB', 'AWS'],
-    applicants: 34,
-    isUrgent: false,
-    isFeatured: false,
-  },
-  {
-    id: '5',
-    title: 'Content Writer & SEO Specialist',
-    company: 'Digital Marketing Pro',
-    location: 'Remote',
-    type: 'Part-time',
-    salary: '₱30,000 - ₱45,000',
-    posted: '3 days ago',
-    description: 'Create engaging content and optimize for search engines...',
-    skills: ['SEO', 'Content Writing', 'WordPress', 'Analytics'],
-    applicants: 18,
-    isUrgent: true,
-    isFeatured: false,
-  },
-];
-
-// Plain text labels — no broken icons
-const CATEGORIES = [
-  { id: 'all', name: 'All' },
-  { id: 'design', name: 'Design' },
-  { id: 'development', name: 'Dev' },
-  { id: 'writing', name: 'Writing' },
-  { id: 'marketing', name: 'Marketing' },
-];
-
-const JOB_TYPES = ['All', 'Full-time', 'Part-time', 'Contract', 'Freelance'];
+const JOB_TYPES = ['All', 'full_time', 'part_time', 'contract', 'one_time'];
+const WORK_SETUPS = ['All', 'remote', 'onsite', 'hybrid'];
+const EXPERIENCE_LEVELS = ['All', 'Entry', 'Intermediate', 'Expert', 'Senior'];
 
 export default function BrowseJobs({ onNavigate, onBack }) {
+  const dispatch = useDispatch();
+  const { list: jobs, isLoading: jobsLoading } = useSelector((state) => state.jobs.jobs);
+  const { user } = useSelector((state) => state.auth);
+  const [appliedJobIds, setAppliedJobIds] = useState([]);
+  
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedJobType, setSelectedJobType] = useState('All');
+  const [selectedWorkSetup, setSelectedWorkSetup] = useState('All');
+  const [selectedExperience, setSelectedExperience] = useState('All');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showJobModal, setShowJobModal] = useState(false);
-  const [appliedJobs, setAppliedJobs] = useState([]);
-  const [savedJobs, setSavedJobs] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [coverLetter, setCoverLetter] = useState('');
+  const [proposedRate, setProposedRate] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const filterAnim = useRef(new Animated.Value(300)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
+
+  // Fetch jobs on mount
+  const fetchJobs = useCallback(async () => {
+    try {
+      await dispatch(getFreelancerJobs({ limit: 50 })).unwrap();
+    } catch (error) {
+      console.error('Error fetching jobs:', error);
+      Alert.alert('Error', 'Failed to load jobs');
+    }
+  }, [dispatch]);
+
+  // Fetch freelancer's applications to know which jobs they already applied to
+  const fetchApplications = useCallback(async () => {
+    try {
+      const result = await dispatch(getFreelancerApplications({})).unwrap();
+      const appliedIds = result.applications.map(app => app.job_id._id);
+      setAppliedJobIds(appliedIds);
+    } catch (error) {
+      console.error('Error fetching applications:', error);
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    fetchJobs();
+    fetchApplications();
+  }, [fetchJobs, fetchApplications]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchJobs(), fetchApplications()]);
+    setRefreshing(false);
+  }, [fetchJobs, fetchApplications]);
 
   const openFilters = () => {
     setShowFilters(true);
@@ -132,138 +98,213 @@ export default function BrowseJobs({ onNavigate, onBack }) {
     ]).start(() => setShowFilters(false));
   };
 
+  const handleSearch = async () => {
+    if (searchQuery.trim()) {
+      try {
+        await dispatch(searchJobs({ searchTerm: searchQuery })).unwrap();
+      } catch (error) {
+        console.error('Search error:', error);
+      }
+    } else {
+      await fetchJobs();
+    }
+  };
+
+  const handleApplyFilters = async () => {
+    const filters = {};
+    if (selectedJobType !== 'All') filters.job_type = selectedJobType;
+    if (selectedWorkSetup !== 'All') filters.work_setup = selectedWorkSetup;
+    if (selectedExperience !== 'All') filters.experience_level = selectedExperience;
+    
+    try {
+      await dispatch(getFreelancerJobs(filters)).unwrap();
+      closeFilters();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to apply filters');
+    }
+  };
+
   const handleApplyJob = (job) => {
-    if (appliedJobs.includes(job.id)) {
+    setSelectedJob(job);
+    setProposedRate(job.budget_amount?.toString() || '');
+    setCoverLetter(`I'm very interested in the ${job.title} position. My skills in ${job.required_skills?.join(', ') || 'this field'} make me a great fit for this role.`);
+    setShowApplyModal(true);
+  };
+
+  const submitApplication = async () => {
+    if (!coverLetter.trim()) {
+      Alert.alert('Error', 'Please write a cover letter');
+      return;
+    }
+
+    // Check if already applied
+    if (appliedJobIds.includes(selectedJob._id)) {
       Alert.alert('Already Applied', 'You have already applied for this position.');
       return;
     }
-    Alert.alert(
-      'Apply for Job',
-      `Apply for "${job.title}" at ${job.company}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Apply',
-          onPress: () => {
-            setAppliedJobs([...appliedJobs, job.id]);
-            Alert.alert('Success', 'Application submitted!');
-          },
-        },
-      ]
-    );
-  };
 
-  const handleSaveJob = (jobId) => {
-    setSavedJobs((prev) =>
-      prev.includes(jobId) ? prev.filter((id) => id !== jobId) : [...prev, jobId]
-    );
+    setSubmitting(true);
+
+    try {
+      // Submit application to backend
+      const result = await dispatch(applyForJob({
+        job_id: selectedJob._id,
+        cover_letter: coverLetter.trim(),
+        proposed_rate: proposedRate ? parseFloat(proposedRate) : null,
+      })).unwrap();
+      
+      console.log('Application submitted:', result);
+      
+      // Add to applied jobs list
+      setAppliedJobIds([...appliedJobIds, selectedJob._id]);
+      
+      Alert.alert(
+        'Application Submitted!',
+        `Your application for ${selectedJob.title} has been sent to the client. They will review your application and may send you an offer.`,
+        [{ text: 'OK', onPress: () => {
+          setShowApplyModal(false);
+          setCoverLetter('');
+          setProposedRate('');
+          // Refresh jobs to update applicant count
+          fetchJobs();
+        }}]
+      );
+    } catch (error) {
+      console.error('Submit application error:', error);
+      Alert.alert('Error', error.message || 'Failed to submit application. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const getFilteredJobs = () => {
-    let filtered = SAMPLE_JOBS;
+    let filtered = jobs || [];
+    
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (j) =>
-          j.title.toLowerCase().includes(q) ||
-          j.company.toLowerCase().includes(q) ||
-          j.skills.some((s) => s.toLowerCase().includes(q))
+          j.title?.toLowerCase().includes(q) ||
+          j.description?.toLowerCase().includes(q) ||
+          j.required_skills?.some((s) => s.toLowerCase().includes(q))
       );
     }
-    if (selectedJobType !== 'All') {
-      filtered = filtered.filter((j) => j.type === selectedJobType);
-    }
+    
     return filtered;
   };
 
-  const JobCard = ({ job }) => {
-    const isApplied = appliedJobs.includes(job.id);
-    const isSaved = savedJobs.includes(job.id);
+  const getCategoryIcon = (job) => {
+    const title = job.title?.toLowerCase() || '';
+    if (title.includes('design') || title.includes('ui') || title.includes('ux')) return '🎨';
+    if (title.includes('dev') || title.includes('developer') || title.includes('react') || title.includes('node')) return '💻';
+    if (title.includes('write') || title.includes('content')) return '✍️';
+    if (title.includes('market') || title.includes('seo')) return '📊';
+    return '💼';
+  };
 
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Recently';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffHours < 1) return 'Just now';
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffDays === 1) return '1 day ago';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return `${Math.floor(diffDays / 7)} weeks ago`;
+  };
+
+  const getWorkSetupLabel = (setup) => {
+    const labels = {
+      remote: 'Remote',
+      onsite: 'On-site',
+      hybrid: 'Hybrid'
+    };
+    return labels[setup] || setup;
+  };
+
+  const getJobTypeLabel = (type) => {
+    const labels = {
+      full_time: 'Full-time',
+      part_time: 'Part-time',
+      contract: 'Contract',
+      one_time: 'One-time'
+    };
+    return labels[type] || type;
+  };
+
+  const JobCard = ({ job }) => {
+    const isUrgent = job.urgency_level === 'urgent';
+    const hasApplied = appliedJobIds.includes(job._id);
+    
     return (
       <TouchableOpacity
         style={styles.jobCard}
         onPress={() => { setSelectedJob(job); setShowJobModal(true); }}
         activeOpacity={0.85}
       >
-        {/* Badges — top-right row, no overlap */}
-        {(job.isFeatured || job.isUrgent) && (
+        {isUrgent && (
           <View style={styles.badgeRow}>
-            {job.isFeatured && (
-              <View style={styles.featuredBadge}>
-                <Text style={styles.featuredText}>★ Featured</Text>
+            <View style={styles.urgentBadge}>
+              <Text style={styles.urgentText}>⚡ Urgent</Text>
+            </View>
+          </View>
+        )}
+
+        <View style={styles.jobHeader}>
+          <View style={styles.companyLogo}>
+            <Text style={styles.logoText}>{getCategoryIcon(job)}</Text>
+          </View>
+          <View style={styles.jobHeaderInfo}>
+            <Text style={styles.jobTitle} numberOfLines={2}>{job.title}</Text>
+            <Text style={styles.companyName}>{job.client_id?.company_name || 'Client'}</Text>
+          </View>
+        </View>
+
+        <View style={styles.metaRow}>
+          <View style={styles.metaChip}>
+            <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.4)" />
+            <Text style={styles.metaText}>{getWorkSetupLabel(job.work_setup)}</Text>
+          </View>
+          <View style={styles.metaChip}>
+            <Ionicons name="briefcase-outline" size={12} color="rgba(255,255,255,0.4)" />
+            <Text style={styles.metaText}>{getJobTypeLabel(job.job_type)}</Text>
+          </View>
+          <View style={styles.metaChip}>
+            <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.4)" />
+            <Text style={styles.metaText}>{formatDate(job.created_at)}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.salary}>
+          {job.budget_type === 'hourly' ? `₱${job.budget_amount}/hr` : `₱${job.budget_amount?.toLocaleString()}`}
+        </Text>
+
+        {job.required_skills && job.required_skills.length > 0 && (
+          <View style={styles.skillsRow}>
+            {job.required_skills.slice(0, 3).map((s, i) => (
+              <View key={i} style={styles.skillBadge}>
+                <Text style={styles.skillText}>{s}</Text>
               </View>
-            )}
-            {job.isUrgent && (
-              <View style={styles.urgentBadge}>
-                <Text style={styles.urgentText}>⚡ Urgent</Text>
+            ))}
+            {job.required_skills.length > 3 && (
+              <View style={styles.skillBadge}>
+                <Text style={styles.skillText}>+{job.required_skills.length - 3}</Text>
               </View>
             )}
           </View>
         )}
 
-        {/* Company row */}
-        <View style={styles.jobHeader}>
-          <View style={styles.companyLogo}>
-            <Text style={styles.logoText}>{job.company[0]}</Text>
-          </View>
-          <View style={styles.jobHeaderInfo}>
-            <Text style={styles.jobTitle} numberOfLines={2}>{job.title}</Text>
-            <Text style={styles.companyName}>{job.company}</Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => handleSaveJob(job.id)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons
-              name={isSaved ? 'bookmark' : 'bookmark-outline'}
-              size={20}
-              color={isSaved ? GOLD : 'rgba(255,255,255,0.35)'}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Meta row */}
-        <View style={styles.metaRow}>
-          <View style={styles.metaChip}>
-            <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.4)" />
-            <Text style={styles.metaText}>{job.location}</Text>
-          </View>
-          <View style={styles.metaChip}>
-            <Ionicons name="briefcase-outline" size={12} color="rgba(255,255,255,0.4)" />
-            <Text style={styles.metaText}>{job.type}</Text>
-          </View>
-          <View style={styles.metaChip}>
-            <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.4)" />
-            <Text style={styles.metaText}>{job.posted}</Text>
-          </View>
-        </View>
-
-        {/* Salary */}
-        <Text style={styles.salary}>{job.salary}</Text>
-
-        {/* Skills */}
-        <View style={styles.skillsRow}>
-          {job.skills.slice(0, 3).map((s, i) => (
-            <View key={i} style={styles.skillBadge}>
-              <Text style={styles.skillText}>{s}</Text>
-            </View>
-          ))}
-          {job.skills.length > 3 && (
-            <View style={styles.skillBadge}>
-              <Text style={styles.skillText}>+{job.skills.length - 3}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Apply button */}
         <TouchableOpacity
-          style={[styles.applyBtn, isApplied && styles.appliedBtn]}
+          style={[styles.applyBtn, hasApplied && styles.appliedBtn]}
           onPress={() => handleApplyJob(job)}
-          disabled={isApplied}
+          disabled={hasApplied}
         >
-          <Text style={[styles.applyBtnText, isApplied && styles.appliedBtnText]}>
-            {isApplied ? '✓  Applied' : 'Apply Now'}
+          <Text style={[styles.applyBtnText, hasApplied && styles.appliedBtnText]}>
+            {hasApplied ? '✓ Applied' : 'Apply Now'}
           </Text>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -272,11 +313,28 @@ export default function BrowseJobs({ onNavigate, onBack }) {
 
   const filtered = getFilteredJobs();
 
+  if (jobsLoading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.iconBtn} onPress={onBack}>
+            <Ionicons name="arrow-back" size={20} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Browse Jobs</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={GOLD} />
+          <Text style={styles.loadingText}>Loading jobs...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.root}>
 
-        {/* ── Header ── */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.iconBtn} onPress={onBack}>
             <Ionicons name="arrow-back" size={20} color="#fff" />
@@ -287,7 +345,6 @@ export default function BrowseJobs({ onNavigate, onBack }) {
           </TouchableOpacity>
         </View>
 
-        {/* ── Search ── */}
         <View style={styles.searchBox}>
           <Ionicons name="search-outline" size={16} color="rgba(255,255,255,0.35)" />
           <TextInput
@@ -296,62 +353,26 @@ export default function BrowseJobs({ onNavigate, onBack }) {
             placeholderTextColor="rgba(255,255,255,0.28)"
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearch}
           />
           {!!searchQuery && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <TouchableOpacity onPress={() => { setSearchQuery(''); fetchJobs(); }}>
               <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.35)" />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* ── Categories + Type in ONE compact combined row ── */}
-        <View style={styles.filtersBlock}>
-          {/* Category row */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.pillRow}
-          >
-            {CATEGORIES.map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                style={[styles.pill, selectedCategory === cat.id && styles.pillActiveGold]}
-                onPress={() => setSelectedCategory(cat.id)}
-              >
-                <Text style={[styles.pillText, selectedCategory === cat.id && styles.pillTextActiveGold]}>
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Job type row */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={[styles.pillRow, { marginTop: 6 }]}
-          >
-            {JOB_TYPES.map((type) => (
-              <TouchableOpacity
-                key={type}
-                style={[styles.pill, selectedJobType === type && styles.pillActiveSolid]}
-                onPress={() => setSelectedJobType(type)}
-              >
-                <Text style={[styles.pillText, selectedJobType === type && styles.pillTextActiveSolid]}>
-                  {type}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* ── Results label ── */}
         <Text style={styles.resultsLabel}>{filtered.length} {filtered.length === 1 ? 'job' : 'jobs'} found</Text>
 
-        {/* ── Job list ── */}
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent}>
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />
+          }
+        >
           {filtered.length > 0 ? (
-            filtered.map((job) => <JobCard key={job.id} job={job} />)
+            filtered.map((job) => <JobCard key={job._id} job={job} />)
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyIcon}>💼</Text>
@@ -361,7 +382,7 @@ export default function BrowseJobs({ onNavigate, onBack }) {
           )}
         </ScrollView>
 
-        {/* ── Filter overlay + drawer ── */}
+        {/* Filter Drawer */}
         {showFilters && (
           <TouchableWithoutFeedback onPress={closeFilters}>
             <Animated.View style={[styles.overlay, { opacity: overlayAnim }]} />
@@ -375,29 +396,57 @@ export default function BrowseJobs({ onNavigate, onBack }) {
             </TouchableOpacity>
           </View>
           <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-            <Text style={styles.drawerSection}>Experience Level</Text>
+            <Text style={styles.drawerSection}>Job Type</Text>
             <View style={styles.drawerChips}>
-              {['Entry', 'Junior', 'Mid', 'Senior', 'Lead'].map((l) => (
-                <TouchableOpacity key={l} style={styles.drawerChip}>
-                  <Text style={styles.drawerChipText}>{l}</Text>
+              {JOB_TYPES.map((type) => (
+                <TouchableOpacity 
+                  key={type} 
+                  style={[styles.drawerChip, selectedJobType === type && styles.drawerChipActive]}
+                  onPress={() => setSelectedJobType(type)}
+                >
+                  <Text style={[styles.drawerChipText, selectedJobType === type && styles.drawerChipTextActive]}>
+                    {type === 'All' ? 'All' : getJobTypeLabel(type)}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={styles.drawerSection}>Remote Options</Text>
+
+            <Text style={styles.drawerSection}>Work Setup</Text>
             <View style={styles.drawerChips}>
-              {['Remote', 'Hybrid', 'On-site'].map((o) => (
-                <TouchableOpacity key={o} style={styles.drawerChip}>
-                  <Text style={styles.drawerChipText}>{o}</Text>
+              {WORK_SETUPS.map((setup) => (
+                <TouchableOpacity 
+                  key={setup} 
+                  style={[styles.drawerChip, selectedWorkSetup === setup && styles.drawerChipActive]}
+                  onPress={() => setSelectedWorkSetup(setup)}
+                >
+                  <Text style={[styles.drawerChipText, selectedWorkSetup === setup && styles.drawerChipTextActive]}>
+                    {setup === 'All' ? 'All' : getWorkSetupLabel(setup)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.drawerSection}>Experience Level</Text>
+            <View style={styles.drawerChips}>
+              {EXPERIENCE_LEVELS.map((level) => (
+                <TouchableOpacity 
+                  key={level} 
+                  style={[styles.drawerChip, selectedExperience === level && styles.drawerChipActive]}
+                  onPress={() => setSelectedExperience(level)}
+                >
+                  <Text style={[styles.drawerChipText, selectedExperience === level && styles.drawerChipTextActive]}>
+                    {level}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
           </ScrollView>
-          <TouchableOpacity style={styles.drawerApplyBtn} onPress={closeFilters}>
+          <TouchableOpacity style={styles.drawerApplyBtn} onPress={handleApplyFilters}>
             <Text style={styles.drawerApplyText}>Apply Filters</Text>
           </TouchableOpacity>
         </Animated.View>
 
-        {/* ── Job Detail Modal ── */}
+        {/* Job Detail Modal */}
         <Modal
           visible={showJobModal}
           animationType="slide"
@@ -406,10 +455,7 @@ export default function BrowseJobs({ onNavigate, onBack }) {
         >
           <View style={styles.modalWrap}>
             <View style={styles.modalSheet}>
-              {/* handle */}
               <View style={styles.modalHandle} />
-
-              {/* close */}
               <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowJobModal(false)}>
                 <Ionicons name="close" size={18} color="#fff" />
               </TouchableOpacity>
@@ -418,20 +464,20 @@ export default function BrowseJobs({ onNavigate, onBack }) {
                 <ScrollView showsVerticalScrollIndicator={false}>
                   <View style={styles.modalHeader}>
                     <View style={styles.modalLogo}>
-                      <Text style={styles.modalLogoText}>{selectedJob.company[0]}</Text>
+                      <Text style={styles.modalLogoText}>{getCategoryIcon(selectedJob)}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.modalTitle}>{selectedJob.title}</Text>
-                      <Text style={styles.modalCompany}>{selectedJob.company}</Text>
+                      <Text style={styles.modalCompany}>{selectedJob.client_id?.company_name || 'Client'}</Text>
                     </View>
                   </View>
 
                   <View style={styles.modalMeta}>
                     {[
-                      { icon: 'location-outline', label: selectedJob.location },
-                      { icon: 'briefcase-outline', label: selectedJob.type },
-                      { icon: 'time-outline', label: selectedJob.posted },
-                      { icon: 'people-outline', label: `${selectedJob.applicants} applicants` },
+                      { icon: 'location-outline', label: getWorkSetupLabel(selectedJob.work_setup) },
+                      { icon: 'briefcase-outline', label: getJobTypeLabel(selectedJob.job_type) },
+                      { icon: 'time-outline', label: formatDate(selectedJob.created_at) },
+                      { icon: 'people-outline', label: `${selectedJob.total_applicants || 0} applicants` },
                     ].map(({ icon, label }) => (
                       <View key={label} style={styles.modalMetaItem}>
                         <Ionicons name={icon} size={14} color="rgba(255,255,255,0.45)" />
@@ -440,27 +486,38 @@ export default function BrowseJobs({ onNavigate, onBack }) {
                     ))}
                   </View>
 
-                  <Text style={styles.modalSalary}>{selectedJob.salary}</Text>
+                  <Text style={styles.modalSalary}>
+                    {selectedJob.budget_type === 'hourly' 
+                      ? `₱${selectedJob.budget_amount}/hr` 
+                      : `₱${selectedJob.budget_amount?.toLocaleString()}`}
+                  </Text>
 
                   <Text style={styles.modalSection}>Description</Text>
                   <Text style={styles.modalDesc}>{selectedJob.description}</Text>
 
-                  <Text style={styles.modalSection}>Required Skills</Text>
-                  <View style={styles.modalSkills}>
-                    {selectedJob.skills.map((s, i) => (
-                      <View key={i} style={styles.modalSkillBadge}>
-                        <Text style={styles.modalSkillText}>{s}</Text>
+                  {selectedJob.required_skills && selectedJob.required_skills.length > 0 && (
+                    <>
+                      <Text style={styles.modalSection}>Required Skills</Text>
+                      <View style={styles.modalSkills}>
+                        {selectedJob.required_skills.map((s, i) => (
+                          <View key={i} style={styles.modalSkillBadge}>
+                            <Text style={styles.modalSkillText}>{s}</Text>
+                          </View>
+                        ))}
                       </View>
-                    ))}
-                  </View>
+                    </>
+                  )}
 
                   <TouchableOpacity
-                    style={[styles.modalApplyBtn, appliedJobs.includes(selectedJob.id) && styles.modalAppliedBtn]}
-                    onPress={() => { handleApplyJob(selectedJob); }}
-                    disabled={appliedJobs.includes(selectedJob.id)}
+                    style={[styles.modalApplyBtn, appliedJobIds.includes(selectedJob._id) && styles.modalAppliedBtn]}
+                    onPress={() => {
+                      setShowJobModal(false);
+                      handleApplyJob(selectedJob);
+                    }}
+                    disabled={appliedJobIds.includes(selectedJob._id)}
                   >
-                    <Text style={[styles.modalApplyText, appliedJobs.includes(selectedJob.id) && { color: '#4ade80' }]}>
-                      {appliedJobs.includes(selectedJob.id) ? '✓  Already Applied' : 'Apply Now'}
+                    <Text style={[styles.modalApplyText, appliedJobIds.includes(selectedJob._id) && { color: '#4ade80' }]}>
+                      {appliedJobIds.includes(selectedJob._id) ? '✓ Already Applied' : 'Apply Now'}
                     </Text>
                   </TouchableOpacity>
                 </ScrollView>
@@ -469,6 +526,73 @@ export default function BrowseJobs({ onNavigate, onBack }) {
           </View>
         </Modal>
 
+        {/* Apply Modal */}
+        <Modal
+          visible={showApplyModal}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setShowApplyModal(false)}
+        >
+          <View style={styles.applyModalWrap}>
+            <View style={styles.applyModalSheet}>
+              <View style={styles.applyModalHeader}>
+                <Text style={styles.applyModalTitle}>Apply for Job</Text>
+                <TouchableOpacity onPress={() => setShowApplyModal(false)}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              {selectedJob && (
+                <>
+                  <Text style={styles.applyJobTitle}>{selectedJob.title}</Text>
+                  <Text style={styles.applyJobCompany}>{selectedJob.client_id?.company_name || 'Client'}</Text>
+
+                  <Text style={styles.applyLabel}>Proposed Rate (Optional)</Text>
+                  <TextInput
+                    style={styles.applyInput}
+                    placeholder="Enter your proposed rate"
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    value={proposedRate}
+                    onChangeText={setProposedRate}
+                    keyboardType="numeric"
+                  />
+
+                  <Text style={styles.applyLabel}>Cover Letter *</Text>
+                  <TextInput
+                    style={[styles.applyInput, styles.applyTextArea]}
+                    placeholder="Tell the client why you're the best fit for this job..."
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    value={coverLetter}
+                    onChangeText={setCoverLetter}
+                    multiline
+                    numberOfLines={6}
+                  />
+
+                  <View style={styles.applyButtons}>
+                    <TouchableOpacity 
+                      style={[styles.applyBtn, styles.applyCancelBtn]}
+                      onPress={() => setShowApplyModal(false)}
+                      disabled={submitting}
+                    >
+                      <Text style={styles.applyCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.applyBtn, styles.applySubmitBtn]}
+                      onPress={submitApplication}
+                      disabled={submitting}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator size="small" color="#0a0a0a" />
+                      ) : (
+                        <Text style={styles.applySubmitText}>Submit Application</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -477,8 +601,6 @@ export default function BrowseJobs({ onNavigate, onBack }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
   root: { flex: 1 },
-
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -499,8 +621,16 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
   },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
-
-  // Search
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.4)',
+  },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -516,37 +646,6 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
   },
   searchInput: { flex: 1, color: '#fff', fontSize: 13 },
-
-  // Filter pills block — tight spacing
-  filtersBlock: {
-    marginTop: 10,
-    marginBottom: 2,
-  },
-  pillRow: {
-    paddingHorizontal: 14,
-    gap: 7,
-  },
-  pill: {
-    paddingHorizontal: 13,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: CARD_BG,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  pillActiveGold: {
-    backgroundColor: 'rgba(212,175,55,0.13)',
-    borderColor: GOLD,
-  },
-  pillActiveSolid: {
-    backgroundColor: GOLD,
-    borderColor: GOLD,
-  },
-  pillText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
-  pillTextActiveGold: { color: GOLD, fontWeight: '700' },
-  pillTextActiveSolid: { color: '#0a0a0a', fontWeight: '700' },
-
-  // Results label
   resultsLabel: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.28)',
@@ -554,11 +653,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 6,
   },
-
-  // List
   listContent: { paddingHorizontal: 14, paddingBottom: 24, gap: 12 },
-
-  // Job card
   jobCard: {
     backgroundColor: CARD_BG,
     borderRadius: 14,
@@ -572,13 +667,6 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 8,
   },
-  featuredBadge: {
-    backgroundColor: 'rgba(212,175,55,0.13)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  featuredText: { fontSize: 10, color: GOLD, fontWeight: '700' },
   urgentBadge: {
     backgroundColor: 'rgba(255,107,107,0.13)',
     paddingHorizontal: 8,
@@ -586,7 +674,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   urgentText: { fontSize: 10, color: '#ff6b6b', fontWeight: '700' },
-
   jobHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
   companyLogo: {
     width: 44,
@@ -601,13 +688,10 @@ const styles = StyleSheet.create({
   jobHeaderInfo: { flex: 1 },
   jobTitle: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 2, lineHeight: 19 },
   companyName: { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
-
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   metaChip: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   metaText: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
-
   salary: { fontSize: 14, fontWeight: '700', color: GOLD, marginBottom: 10 },
-
   skillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   skillBadge: {
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -616,19 +700,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   skillText: { fontSize: 11, color: 'rgba(255,255,255,0.45)' },
-
   applyBtn: { backgroundColor: GOLD, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   appliedBtn: { backgroundColor: 'rgba(74,222,128,0.1)', borderWidth: 1, borderColor: '#4ade80' },
   applyBtnText: { fontSize: 13, fontWeight: '700', color: '#0a0a0a' },
   appliedBtnText: { color: '#4ade80' },
-
-  // Empty state
   emptyState: { alignItems: 'center', paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyTitle: { fontSize: 16, color: 'rgba(255,255,255,0.4)', fontWeight: '600' },
   emptySub: { fontSize: 12, color: 'rgba(255,255,255,0.2)', marginTop: 6 },
-
-  // Filter drawer
   overlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 99,
@@ -650,11 +729,14 @@ const styles = StyleSheet.create({
     backgroundColor: CARD_BG, paddingHorizontal: 12, paddingVertical: 7,
     borderRadius: 8, borderWidth: 1, borderColor: BORDER,
   },
+  drawerChipActive: {
+    backgroundColor: 'rgba(212,175,55,0.15)',
+    borderColor: GOLD,
+  },
   drawerChipText: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
+  drawerChipTextActive: { color: GOLD, fontWeight: '600' },
   drawerApplyBtn: { backgroundColor: GOLD, paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginTop: 18 },
   drawerApplyText: { fontSize: 14, fontWeight: '700', color: '#0a0a0a' },
-
-  // Modal
   modalWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: '#111', borderTopLeftRadius: 20, borderTopRightRadius: 20,
@@ -695,4 +777,95 @@ const styles = StyleSheet.create({
   modalApplyBtn: { backgroundColor: GOLD, paddingVertical: 13, borderRadius: 10, alignItems: 'center', marginBottom: 14 },
   modalAppliedBtn: { backgroundColor: 'rgba(74,222,128,0.1)', borderWidth: 1, borderColor: '#4ade80' },
   modalApplyText: { fontSize: 14, fontWeight: '700', color: '#0a0a0a' },
+  applyModalWrap: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  applyModalSheet: {
+    backgroundColor: CARD_BG,
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxHeight: '85%',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  applyModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  applyModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  applyJobTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  applyJobCompany: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
+    marginBottom: 20,
+  },
+  applyLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.5)',
+    marginBottom: 8,
+  },
+  applyInput: {
+    backgroundColor: INPUT_BG,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    color: '#fff',
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    marginBottom: 16,
+  },
+  applyTextArea: {
+    height: 120,
+    textAlignVertical: 'top',
+  },
+  applyButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 10,
+  },
+  applyBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  applyCancelBtn: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  applyCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  applySubmitBtn: {
+    backgroundColor: GOLD,
+  },
+  applySubmitText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0a0a0a',
+  },
 });
