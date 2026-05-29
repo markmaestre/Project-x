@@ -1,95 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../services/api';
-
-// Storage helper functions
-const storeToken = async (token) => {
-  try {
-    if (token) {
-      await AsyncStorage.setItem('token', token);
-    }
-  } catch (error) {
-    console.error('Error storing token:', error);
-  }
-};
-
-const storeUser = async (user) => {
-  try {
-    if (user) {
-      await AsyncStorage.setItem('user', JSON.stringify(user));
-    }
-  } catch (error) {
-    console.error('Error storing user:', error);
-  }
-};
-
-const getToken = async () => {
-  try {
-    return await AsyncStorage.getItem('token');
-  } catch (error) {
-    console.error('Error getting token:', error);
-    return null;
-  }
-};
-
-const getUser = async () => {
-  try {
-    const userStr = await AsyncStorage.getItem('user');
-    return userStr ? JSON.parse(userStr) : null;
-  } catch (error) {
-    console.error('Error getting user:', error);
-    return null;
-  }
-};
-
-const removeToken = async () => {
-  try {
-    await AsyncStorage.removeItem('token');
-  } catch (error) {
-    console.error('Error removing token:', error);
-  }
-};
-
-const removeUser = async () => {
-  try {
-    await AsyncStorage.removeItem('user');
-  } catch (error) {
-    console.error('Error removing user:', error);
-  }
-};
-
-// Helper function to create FormData for file uploads
-const createFormData = (data, isFreelancer = false) => {
-  const formData = new FormData();
-  
-  Object.keys(data).forEach(key => {
-    if (key === 'profile_picture' && data[key]) {
-      // Handle file upload
-      formData.append('profile_picture', {
-        uri: data[key].uri,
-        type: data[key].type || 'image/jpeg',
-        name: data[key].fileName || data[key].name || `profile_${Date.now()}.jpg`,
-      });
-    } else if (key === 'skills' || key === 'languages' || key === 'certifications') {
-      // Handle arrays - send as JSON string
-      if (data[key] && Array.isArray(data[key]) && data[key].length > 0) {
-        formData.append(key, JSON.stringify(data[key]));
-      } else if (data[key] && typeof data[key] === 'string') {
-        // If it's already a string, send as is
-        formData.append(key, data[key]);
-      }
-    } else if (key === 'terms_accepted') {
-      // Send boolean as string 'true' or 'false'
-      const booleanValue = data[key] === true || data[key] === 'true';
-      formData.append(key, booleanValue ? 'true' : 'false');
-    } else if (data[key] !== null && data[key] !== undefined && data[key] !== '') {
-      // For all other fields that have values, send as string
-      formData.append(key, String(data[key]));
-    }
-  });
-  
-  return formData;
-};
 
 // Register Client with profile picture
 export const registerClient = createAsyncThunk(
@@ -166,8 +76,6 @@ export const login = createAsyncThunk(
   async (credentials, { rejectWithValue }) => {
     try {
       const response = await api.post('/auth/login', credentials);
-      await storeToken(response.data.token);
-      await storeUser(response.data.user);
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || { message: error.message });
@@ -189,17 +97,11 @@ export const getProfile = createAsyncThunk(
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      // Update stored user
-      if (response.data.user) {
-        await storeUser(response.data.user);
-      }
-      
       return response.data;
     } catch (error) {
       if (error.response?.status === 401) {
         // Token expired or invalid
-        await removeToken();
-        await removeUser();
+        return rejectWithValue({ message: 'Unauthorized', status: 401 });
       }
       return rejectWithValue(error.response?.data || { message: error.message });
     }
@@ -276,11 +178,6 @@ export const updateProfile = createAsyncThunk(
       
       console.log('Profile update response:', response.data);
       
-      // Update local storage with new user data
-      if (response.data.user) {
-        await storeUser(response.data.user);
-      }
-      
       return response.data;
     } catch (error) {
       console.error('Profile update error:', error.response?.data);
@@ -302,13 +199,6 @@ export const deleteProfilePicture = createAsyncThunk(
       const response = await api.delete('/auth/profile/picture', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      // Update local storage by removing profile picture
-      const currentUser = getState().auth.user;
-      if (currentUser) {
-        const updatedUser = { ...currentUser, profile_picture: null, profile_picture_public_id: null };
-        await storeUser(updatedUser);
-      }
       
       return response.data;
     } catch (error) {
@@ -343,19 +233,16 @@ export const fetchFreelancers = createAsyncThunk(
 export const logout = createAsyncThunk(
   'auth/logout',
   async () => {
-    await removeToken();
-    await removeUser();
     return {};
   }
 );
 
-// Initialize auth
+// Initialize auth (no async storage)
 export const initializeAuth = createAsyncThunk(
   'auth/initialize',
   async () => {
-    const token = await getToken();
-    const user = await getUser();
-    return { token, user };
+    // Return empty auth state - token should be managed by Redux state only
+    return { token: null, user: null };
   }
 );
 
@@ -388,7 +275,6 @@ const authSlice = createSlice({
     },
     updateUserLocally: (state, action) => {
       state.user = { ...state.user, ...action.payload };
-      storeUser(state.user);
     },
     selectFreelancer: (state, action) => {
       state.freelancers.selectedFreelancer = action.payload;
@@ -400,6 +286,23 @@ const authSlice = createSlice({
     },
     clearRegistrationSuccess: (state) => {
       state.registrationSuccess = false;
+    },
+    setAuth: (state, action) => {
+      state.user = action.payload.user;
+      state.token = action.payload.token;
+      state.isAuthenticated = !!action.payload.token;
+      state.role = action.payload.user?.role || null;
+    },
+    clearAuth: (state) => {
+      state.user = null;
+      state.token = null;
+      state.isAuthenticated = false;
+      state.role = null;
+      state.error = null;
+      state.registrationSuccess = false;
+      state.freelancers.list = [];
+      state.freelancers.selectedFreelancer = null;
+      state.freelancers.totalCount = 0;
     },
   },
   extraReducers: (builder) => {
@@ -484,7 +387,6 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.user = action.payload.user;
         state.role = action.payload.user.role;
-        // Don't store user here as it's already stored in the thunk
       })
       .addCase(getProfile.rejected, (state, action) => {
         state.isLoading = false;
@@ -506,7 +408,6 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.user = action.payload.user;
         state.role = action.payload.user.role;
-        // User is already stored in the thunk
       })
       .addCase(updateProfile.rejected, (state, action) => {
         state.isLoading = false;
@@ -524,7 +425,6 @@ const authSlice = createSlice({
           state.user.profile_picture = null;
           state.user.profile_picture_public_id = null;
         }
-        // User is already updated in the thunk
       })
       .addCase(deleteProfilePicture.rejected, (state, action) => {
         state.isLoading = false;
@@ -566,7 +466,42 @@ export const {
   updateUserLocally, 
   selectFreelancer, 
   clearFreelancers,
-  clearRegistrationSuccess 
+  clearRegistrationSuccess,
+  setAuth,
+  clearAuth
 } = authSlice.actions;
 
 export default authSlice.reducer;
+
+// Helper function to create FormData for file uploads
+const createFormData = (data, isFreelancer = false) => {
+  const formData = new FormData();
+  
+  Object.keys(data).forEach(key => {
+    if (key === 'profile_picture' && data[key]) {
+      // Handle file upload
+      formData.append('profile_picture', {
+        uri: data[key].uri,
+        type: data[key].type || 'image/jpeg',
+        name: data[key].fileName || data[key].name || `profile_${Date.now()}.jpg`,
+      });
+    } else if (key === 'skills' || key === 'languages' || key === 'certifications') {
+      // Handle arrays - send as JSON string
+      if (data[key] && Array.isArray(data[key]) && data[key].length > 0) {
+        formData.append(key, JSON.stringify(data[key]));
+      } else if (data[key] && typeof data[key] === 'string') {
+        // If it's already a string, send as is
+        formData.append(key, data[key]);
+      }
+    } else if (key === 'terms_accepted') {
+      // Send boolean as string 'true' or 'false'
+      const booleanValue = data[key] === true || data[key] === 'true';
+      formData.append(key, booleanValue ? 'true' : 'false');
+    } else if (data[key] !== null && data[key] !== undefined && data[key] !== '') {
+      // For all other fields that have values, send as string
+      formData.append(key, String(data[key]));
+    }
+  });
+  
+  return formData;
+};

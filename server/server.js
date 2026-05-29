@@ -1,10 +1,14 @@
 import "./src/config/env.js";
 import express from "express";
 import cors from "cors";
+import multer from "multer";
 import authRoutes from "./src/routes/authRoutes.js";
+import jobRoutes from "./src/routes/jobRoutes.js";
+import offerRoutes from "./src/routes/offerRoutes.js";
 import connectDB from "./src/config/mongodb.js";
 
 const app = express();
+const upload = multer(); // Initialize multer to parse multipart/form-data
 
 connectDB();
 
@@ -12,9 +16,13 @@ connectDB();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// Parse multipart/form-data (for FormData from frontend)
+app.use(upload.none()); // This will parse FormData without file uploads
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api", jobRoutes);
+app.use("/api", offerRoutes); // Add offer routes
 
 // Error handler
 app.use((err, req, res, next) => {
@@ -32,7 +40,8 @@ app.use((err, req, res, next) => {
 
 // Handle 404 routes
 app.use((req, res) => {
-  res.status(404).json({ message: "Route not found" });
+  console.log(`404 - Route not found: ${req.method} ${req.url}`);
+  res.status(404).json({ message: `Route not found: ${req.method} ${req.url}` });
 });
 
 const PORT = process.env.PORT || 5000;

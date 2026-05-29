@@ -5,14 +5,25 @@ import Login from './components/dashboard/Login';
 import RoleSelection from './components/dashboard/RoleSelection';
 import ClientRegistration from './components/client/ClientRegistration';
 import FreelancerRegistration from './components/freelancer/FreelancerRegistration';
+
+// Client Screens
 import ClientScreen from './components/client/ClientScreen';
+import PostJob from './components/client/Postjob';
+import Mypostings from './components/client/Mypostings';
+import Sentoffers from './components/client/Sentoffers';
+import Hiredtalents from './components/client/Hiredtalents';
+import ClientProfile from './components/client/CientProfile';
+import Settings from './components/client/Settings';
+import Message from './components/client/Message';
+
+// Freelancer Screens
 import FreelancerScreen from './components/freelancer/FreelancerScreen';
 import FreelancerProfile from './components/freelancer/FreelancerProfile';
 import BrowseJobs from './components/freelancer/BrowseJobs';
 import MyJobs from './components/freelancer/MyJobs';
 import ReceivedOffers from './components/freelancer/ReceivedOffers';
 import Messages from './components/freelancer/Messages';
-import Settings from './components/freelancer/Settings';
+
 
 
 export default function AppNavigator() {
@@ -25,12 +36,9 @@ export default function AppNavigator() {
   }, []);
 
   const getScreen = () => {
-    // If user is authenticated, always respect their role
-    // regardless of what 'route' says
     if (isAuthenticated && user) {
       const role = user.role?.toLowerCase();
       if (route === 'Home' || route === 'Login') {
-        // Redirect away from public screens if already logged in
         if (role === 'freelancer') return 'Freelancer';
         if (role === 'client') return 'Client';
       }
@@ -39,11 +47,12 @@ export default function AppNavigator() {
   };
 
   const activeRoute = getScreen();
+  const isClient = user?.role?.toLowerCase() === 'client';
 
   console.log('Active route:', activeRoute);
 
   switch (activeRoute) {
-    // Authentication & Public Screens
+    // ── Auth & Public ──────────────────────────────────────
     case 'Login':
       return <Login onNavigate={handleNavigate} />;
     case 'RoleSelection':
@@ -52,18 +61,41 @@ export default function AppNavigator() {
       return <ClientRegistration onNavigate={handleNavigate} />;
     case 'FreelancerRegistration':
       return <FreelancerRegistration onNavigate={handleNavigate} />;
-    
-    // Client Screens
+
+    // ── Client ─────────────────────────────────────
     case 'Client':
     case 'ClientDashboard':
       return <ClientScreen onNavigate={handleNavigate} />;
-    
-    // Freelancer Main Screens
+    case 'PostJob':
+      return <PostJob onNavigate={handleNavigate} />; 
+    case 'Mypostings':
+      return <Mypostings onNavigate={handleNavigate} />;  
+    case 'Sentoffers':
+      return <Sentoffers onNavigate={handleNavigate} />;  
+    case 'Hiredtalents':
+      return <Hiredtalents onNavigate={handleNavigate} />;
+    case 'ClientProfile':
+      return <ClientProfile onNavigate={handleNavigate} />; 
+    case 'Settings':
+      return <Settings onNavigate={handleNavigate} />;  
+    case 'Message':
+      return <Message onNavigate={handleNavigate} />;  
+
+
+    // ── Shared screens — role-aware ────────────────────────
+    case 'Messages':
+      return isClient
+        ? <ClientMessagesScreen onNavigate={handleNavigate} />
+        : <Messages onNavigate={handleNavigate} />;
+    case 'Settings':
+      return isClient
+        ? <ClientSettingsScreen onNavigate={handleNavigate} />
+        : <Settings onNavigate={handleNavigate} />;
+
+    // ── Freelancer  ─────────────────────────────────
     case 'Freelancer':
     case 'FreelancerDashboard':
       return <FreelancerScreen onNavigate={handleNavigate} />;
-    
-    // Freelancer Sub-screens
     case 'FreelancerProfile':
       return <FreelancerProfile onNavigate={handleNavigate} />;
     case 'BrowseJobs':
@@ -72,16 +104,8 @@ export default function AppNavigator() {
       return <MyJobs onNavigate={handleNavigate} />;
     case 'ReceivedOffers':
       return <ReceivedOffers onNavigate={handleNavigate} />;
-    case 'Messages':
-      return <Messages onNavigate={handleNavigate} />;
-    case 'Settings':
-      return <Settings onNavigate={handleNavigate} />;
-    case 'Notifications':
-      return <Notifications onNavigate={handleNavigate} />;
-    case 'Search':
-      return <Search onNavigate={handleNavigate} />;
-    
-    // Home Screen
+
+    // ── Home ───────────────────────────────────────────────
     case 'Home':
     default:
       return <Home onNavigate={handleNavigate} />;
