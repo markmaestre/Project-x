@@ -1,274 +1,112 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  TextInput,
   Image,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  RefreshControl,
+  TextInput,
   Modal,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
-import { updateProfile, deleteProfilePicture } from '../../Redux/slices/authSlice';
+import { updateProfile, getProfile } from '../../Redux/slices/authSlice';
 
 const GOLD = '#D4AF37';
 const BG = '#0a0a0a';
 const CARD_BG = '#141414';
 const BORDER = 'rgba(255,255,255,0.07)';
-const INPUT_BG = '#111111';
+const INPUT_BG = 'rgba(255,255,255,0.05)';
 
-const EXPERIENCE_LEVELS = ['Entry', 'Intermediate', 'Expert', 'Senior'];
-
-const SKILL_SUGGESTIONS = [
-  'React Native', 'React.js', 'Node.js', 'UI/UX Design', 'Figma',
-  'Python', 'Laravel', 'WordPress', 'SEO', 'Copywriting',
-  'Video Editing', 'Graphic Design', 'Social Media', 'Data Entry',
-];
-
-// Local CV storage directory
-const CV_DIRECTORY = `${FileSystem.documentDirectory}cvs/`;
-
-export default function FreelancerProfile({ onNavigate }) {
+export default function ClientProfile({ onNavigate }) {
   const dispatch = useDispatch();
-  const { user, isLoading } = useSelector((state) => state.auth);
+  const { user, token, isLoading } = useSelector((state) => state.auth);
+  
+  const [refreshing, setRefreshing] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [profileData, setProfileData] = useState({
+    first_name: '',
+    last_name: '',
+    company_name: '',
+    phone_number: '',
+    email_address: '',
+    country: '',
+    city: '',
+    address: '',
+    business_type: '',
+    industry: '',
+    bio_about: '',
+    website: '',
+    budget_range: '',
+    preferred_communication_method: '',
+  });
+  const [selectedImage, setSelectedImage] = useState(null);
 
-  const [skillInput, setSkillInput] = useState('');
-  const [imageModalVisible, setImageModalVisible] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [uploadingCV, setUploadingCV] = useState(false);
-  const [savedCV, setSavedCV] = useState(null); // Store local CV info
-
-  // Store all form fields in individual useState calls
-  const [firstName, setFirstName] = useState(user?.first_name ?? '');
-  const [lastName, setLastName] = useState(user?.last_name ?? '');
-  const [username, setUsername] = useState(user?.username ?? '');
-  const [phone, setPhone] = useState(user?.phone_number ?? '');
-  const [bio, setBio] = useState(user?.bio_about_me ?? '');
-  const [skills, setSkills] = useState(user?.skills ?? []);
-  const [experienceLevel, setExperienceLevel] = useState(user?.experience_level ?? '');
-  const [yearsExp, setYearsExp] = useState(user?.years_of_experience?.toString() ?? '');
-  const [hourlyRate, setHourlyRate] = useState(user?.hourly_rate?.toString() ?? '');
-  const [fixedRate, setFixedRate] = useState(user?.fixed_rate?.toString() ?? '');
-  const [city, setCity] = useState(user?.city ?? '');
-  const [country, setCountry] = useState(user?.country ?? '');
-  const [portfolioUrl, setPortfolioUrl] = useState(user?.portfolio_link ?? '');
-
-  const initials = `${firstName?.[0] ?? ''}${lastName?.[0] ?? ''}`.toUpperCase();
-
-  // Load locally stored CV on component mount
   useEffect(() => {
-    loadLocalCV();
-  }, []);
-
-  // Create CV directory if it doesn't exist
-  const ensureCVDirectory = async () => {
-    const dirInfo = await FileSystem.getInfoAsync(CV_DIRECTORY);
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(CV_DIRECTORY, { intermediates: true });
+    if (user) {
+      setProfileData({
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        company_name: user.company_name || '',
+        phone_number: user.phone_number || '',
+        email_address: user.email_address || '',
+        country: user.country || '',
+        city: user.city || '',
+        address: user.address || '',
+        business_type: user.business_type || '',
+        industry: user.industry || '',
+        bio_about: user.bio_about || '',
+        website: user.website || '',
+        budget_range: user.budget_range || '',
+        preferred_communication_method: user.preferred_communication_method || '',
+      });
     }
-  };
+  }, [user]);
 
-  // Load saved CV from local storage
-  const loadLocalCV = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
-      await ensureCVDirectory();
-      
-      // Look for CV files in the directory
-      const files = await FileSystem.readDirectoryAsync(CV_DIRECTORY);
-      const cvFiles = files.filter(file => 
-        file.endsWith('.pdf') || file.endsWith('.doc') || file.endsWith('.docx')
-      );
-      
-      if (cvFiles.length > 0) {
-        const latestCV = cvFiles[0];
-        const cvInfo = await FileSystem.getInfoAsync(`${CV_DIRECTORY}${latestCV}`);
-        setSavedCV({
-          uri: cvInfo.uri,
-          name: latestCV,
-          size: cvInfo.size,
-        });
-      } else {
-        setSavedCV(null);
-      }
+      await dispatch(getProfile()).unwrap();
     } catch (error) {
-      console.error('Error loading local CV:', error);
+      console.error('Error fetching profile:', error);
+      Alert.alert('Error', 'Failed to load profile');
     }
-  };
+  }, [dispatch]);
 
-  // Upload CV to local storage
-  const uploadCV = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-        copyToCacheDirectory: true,
-      });
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchProfile();
+    setRefreshing(false);
+  }, [fetchProfile]);
 
-      if (result.canceled) {
-        return;
-      }
-
-      const document = result.assets[0];
-      
-      // Validate file size (max 5MB)
-      if (document.size && document.size > 5 * 1024 * 1024) {
-        Alert.alert('Error', 'File size must be less than 5MB');
-        return;
-      }
-
-      // Validate file extension
-      const fileName = document.name;
-      const fileExtension = fileName.split('.').pop().toLowerCase();
-      const allowedExtensions = ['pdf', 'doc', 'docx'];
-      
-      if (!allowedExtensions.includes(fileExtension)) {
-        Alert.alert('Error', 'Please upload PDF, DOC, or DOCX files only');
-        return;
-      }
-
-      setUploadingCV(true);
-      
-      // Ensure directory exists
-      await ensureCVDirectory();
-      
-      // Create unique filename with timestamp
-      const timestamp = Date.now();
-      const savedFileName = `cv_${timestamp}_${fileName}`;
-      const localUri = `${CV_DIRECTORY}${savedFileName}`;
-      
-      // Copy the selected file to app's local storage
-      await FileSystem.copyAsync({
-        from: document.uri,
-        to: localUri,
-      });
-      
-      // Get file info to confirm save
-      const fileInfo = await FileSystem.getInfoAsync(localUri);
-      
-      // Delete old CV if exists
-      if (savedCV) {
-        await FileSystem.deleteAsync(savedCV.uri, { idempotent: true });
-      }
-      
-      setSavedCV({
-        uri: fileInfo.uri,
-        name: savedFileName,
-        size: fileInfo.size,
-      });
-      
-      Alert.alert('Success', 'CV saved locally on your device!');
-      
-    } catch (error) {
-      console.error('Error uploading CV:', error);
-      Alert.alert('Error', 'Failed to save CV. Please try again.');
-    } finally {
-      setUploadingCV(false);
-    }
-  };
-
-  // Delete CV from local storage
-  const handleDeleteCV = async () => {
-    Alert.alert(
-      'Delete CV',
-      'Are you sure you want to delete your CV from this device?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setUploadingCV(true);
-            try {
-              if (savedCV) {
-                await FileSystem.deleteAsync(savedCV.uri, { idempotent: true });
-                setSavedCV(null);
-                Alert.alert('Success', 'CV deleted successfully');
-              }
-            } catch (error) {
-              console.error('Error deleting CV:', error);
-              Alert.alert('Error', 'Failed to delete CV');
-            } finally {
-              setUploadingCV(false);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  // View CV - opens with default app
-  const viewCV = async () => {
-    if (savedCV && savedCV.uri) {
-      try {
-        // Check if file still exists
-        const fileInfo = await FileSystem.getInfoAsync(savedCV.uri);
-        if (fileInfo.exists) {
-          await Linking.openURL(savedCV.uri);
-        } else {
-          Alert.alert('Error', 'CV file not found. Please upload again.');
-          setSavedCV(null);
-        }
-      } catch (error) {
-        console.error('Error opening CV:', error);
-        Alert.alert('Error', 'Cannot open file. Please try again.');
-      }
-    }
-  };
-
-  // Format file size for display
-  const formatFileSize = (bytes) => {
-    if (!bytes) return 'Unknown size';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
-
-  // Request permission for image picker
-  const requestPermission = async () => {
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Please grant permission to access your photos to change your profile picture.');
-        return false;
-      }
-      return true;
-    }
-    return true;
-  };
-
-  // Pick image from gallery
   const pickImage = async () => {
-    const hasPermission = await requestPermission();
-    if (!hasPermission) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant camera roll permissions to change profile picture');
+      return;
+    }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], 
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
-      base64: false,
     });
 
     if (!result.canceled) {
-      await uploadProfilePicture(result.assets[0]);
+      setSelectedImage(result.assets[0]);
     }
   };
 
-  // Take photo with camera
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Needed', 'Please grant permission to access your camera.');
+      Alert.alert('Permission needed', 'Please grant camera permissions to take a photo');
       return;
     }
 
@@ -279,990 +117,410 @@ export default function FreelancerProfile({ onNavigate }) {
     });
 
     if (!result.canceled) {
-      await uploadProfilePicture(result.assets[0]);
+      setSelectedImage(result.assets[0]);
     }
   };
 
-  // Upload profile picture (this still goes to server)
-  const uploadProfilePicture = async (imageAsset) => {
-    setUploadingImage(true);
-    try {
-      const imageFile = {
-        uri: imageAsset.uri,
-        type: 'image/jpeg',
-        name: `profile_${Date.now()}.jpg`,
-      };
-
-      const result = await dispatch(updateProfile({ 
-        profileData: {}, 
-        profilePicture: imageFile 
-      }));
-
-      if (updateProfile.fulfilled.match(result)) {
-        Alert.alert('Success', 'Profile picture updated successfully!');
-        setImageModalVisible(false);
-      } else {
-        Alert.alert('Error', result.payload?.message || 'Failed to update profile picture');
-      }
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      Alert.alert('Error', 'Failed to upload profile picture');
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  // Delete profile picture
-  const handleDeleteProfilePicture = async () => {
+  const handleChangeProfilePicture = () => {
     Alert.alert(
-      'Delete Profile Picture',
-      'Are you sure you want to delete your profile picture?',
+      'Change Profile Picture',
+      'Choose an option',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setUploadingImage(true);
-            try {
-              const result = await dispatch(deleteProfilePicture());
-              if (deleteProfilePicture.fulfilled.match(result)) {
-                Alert.alert('Success', 'Profile picture deleted successfully');
-                setImageModalVisible(false);
-              } else {
-                Alert.alert('Error', result.payload?.message || 'Failed to delete profile picture');
-              }
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete profile picture');
-            } finally {
-              setUploadingImage(false);
-            }
-          }
-        }
+        { text: 'Take Photo', onPress: takePhoto },
+        { text: 'Choose from Library', onPress: pickImage },
       ]
     );
   };
 
-  const addSkill = useCallback((skill) => {
-    const trimmed = skill.trim();
-    if (!trimmed) return;
-    setSkills((prev) => {
-      if (prev.includes(trimmed)) return prev;
-      return [...prev, trimmed];
-    });
-    setSkillInput('');
-  }, []);
-
-  const removeSkill = useCallback((skill) => {
-    setSkills((prev) => prev.filter((s) => s !== skill));
-  }, []);
-
   const handleSave = async () => {
-    // Validation
-    if (!firstName.trim() || !lastName.trim()) {
-      Alert.alert('Validation Error', 'First and last name are required.');
+    if (!profileData.first_name.trim()) {
+      Alert.alert('Error', 'First name is required');
       return;
     }
-
-    if (!experienceLevel) {
-      Alert.alert('Validation Error', 'Please select your experience level.');
+    if (!profileData.last_name.trim()) {
+      Alert.alert('Error', 'Last name is required');
       return;
     }
-
-    // Map fields to match backend expectations
-    const profileData = {
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      username: username.trim() || undefined,
-      phone_number: phone.trim() || undefined,
-      bio_about_me: bio.trim() || undefined,
-      skills: skills.length > 0 ? skills : undefined,
-      experience_level: experienceLevel,
-      years_of_experience: yearsExp ? parseInt(yearsExp, 10) : null,
-      hourly_rate: hourlyRate ? parseFloat(hourlyRate) : null,
-      fixed_rate: fixedRate ? parseFloat(fixedRate) : null,
-      city: city.trim() || undefined,
-      country: country.trim() || undefined,
-      portfolio_link: portfolioUrl.trim() || undefined,
-    };
-
-    // Remove undefined values
-    Object.keys(profileData).forEach(key => {
-      if (profileData[key] === undefined) {
-        delete profileData[key];
-      }
-    });
-
-    console.log('Updating profile with data:', profileData);
 
     try {
-      const result = await dispatch(updateProfile({ profileData, profilePicture: null, cv: null }));
+      await dispatch(updateProfile({ 
+        profileData, 
+        profilePicture: selectedImage 
+      })).unwrap();
       
-      if (updateProfile.fulfilled.match(result)) {
-        Alert.alert('Success', 'Your profile has been updated!', [
-          { text: 'OK', onPress: () => onNavigate('Freelancer') },
-        ]);
-      } else {
-        const errMsg = result.payload?.message || result.payload?.error || 'Failed to update profile. Please try again.';
-        Alert.alert('Error', errMsg);
-      }
+      Alert.alert('Success', 'Profile updated successfully');
+      setEditing(false);
+      setSelectedImage(null);
+      await fetchProfile();
     } catch (error) {
-      console.error('Update error:', error);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      Alert.alert('Error', error.message || 'Failed to update profile');
     }
   };
 
-  const Label = ({ text, required }) => (
-    <Text style={styles.label}>
-      {text}
-      {required && <Text style={styles.labelRequired}> *</Text>}
-    </Text>
+  const handleCancel = () => {
+    setEditing(false);
+    setSelectedImage(null);
+    if (user) {
+      setProfileData({
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        company_name: user.company_name || '',
+        phone_number: user.phone_number || '',
+        email_address: user.email_address || '',
+        country: user.country || '',
+        city: user.city || '',
+        address: user.address || '',
+        business_type: user.business_type || '',
+        industry: user.industry || '',
+        bio_about: user.bio_about || '',
+        website: user.website || '',
+        budget_range: user.budget_range || '',
+        preferred_communication_method: user.preferred_communication_method || '',
+      });
+    }
+  };
+
+  const getInitials = () => {
+    return `${profileData.first_name?.[0] || ''}${profileData.last_name?.[0] || ''}`.toUpperCase();
+  };
+
+  const renderField = (label, key, placeholder, multiline = false) => (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      {editing ? (
+        <TextInput
+          style={[styles.fieldInput, multiline && styles.textArea]}
+          value={profileData[key]}
+          onChangeText={(text) => setProfileData({ ...profileData, [key]: text })}
+          placeholder={placeholder}
+          placeholderTextColor="rgba(255,255,255,0.2)"
+          multiline={multiline}
+          numberOfLines={multiline ? 3 : 1}
+        />
+      ) : (
+        <Text style={styles.fieldValue}>
+          {profileData[key] || 'Not specified'}
+        </Text>
+      )}
+    </View>
+  );
+
+  const renderReadOnlyField = (label, key, placeholder) => (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text style={styles.fieldValue}>
+        {profileData[key] || 'Not specified'}
+      </Text>
+    </View>
   );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => onNavigate('Freelancer')}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={20} color={GOLD} />
+      <View style={styles.topbar}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('ClientDashboard')} activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.7)" />
+        </TouchableOpacity>
+        <Text style={styles.topbarTitle}>My <Text style={styles.gold}>Profile</Text></Text>
+        {!editing ? (
+          <TouchableOpacity style={styles.editBtn} onPress={() => setEditing(true)} activeOpacity={0.7}>
+            <Ionicons name="create-outline" size={18} color={GOLD} />
+            <Text style={styles.editBtnText}>Edit</Text>
           </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>My Profile</Text>
-            <Text style={styles.headerSub}>Edit your information</Text>
+        ) : (
+          <View style={styles.editActions}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel} activeOpacity={0.7}>
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.7}>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#0a0a0a" />
+              ) : (
+                <Text style={styles.saveBtnText}>Save</Text>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.saveBtn, isLoading && styles.saveBtnDisabled]}
-            onPress={handleSave}
-            disabled={isLoading}
-            activeOpacity={0.8}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#0a0a0a" />
-            ) : (
-              <Text style={styles.saveBtnText}>Save</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        )}
+      </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="none"
-        >
-          {/* Avatar Section */}
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />
+        }
+      >
+        {/* Profile Picture Section */}
+        <View style={styles.profileImageSection}>
           <TouchableOpacity 
-            style={styles.avatarSection}
-            onPress={() => setImageModalVisible(true)}
-            activeOpacity={0.9}
+            style={styles.avatarContainer} 
+            onPress={editing ? handleChangeProfilePicture : null}
+            activeOpacity={editing ? 0.7 : 1}
           >
-            <View style={styles.avatarWrap}>
-              {user?.profile_picture ? (
-                <Image source={{ uri: user.profile_picture }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarInitials}>{initials || '?'}</Text>
-                </View>
-              )}
-              <View style={styles.avatarEditBtn}>
-                <Ionicons name="camera-outline" size={16} color="#0a0a0a" />
-              </View>
-            </View>
-            <Text style={styles.avatarName}>{firstName} {lastName}</Text>
-            <Text style={styles.avatarUsername}>@{username}</Text>
-            <Text style={styles.changePhotoText}>Tap to change photo</Text>
-          </TouchableOpacity>
-
-          {/* BASIC INFO */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="person-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Basic Information</Text>
-            </View>
-
-            <View style={styles.row}>
-              <View style={styles.halfField}>
-                <Label text="First Name" required />
-                <TextInput
-                  style={styles.input}
-                  placeholder="First name"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                />
-              </View>
-              <View style={styles.halfField}>
-                <Label text="Last Name" required />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Last name"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={lastName}
-                  onChangeText={setLastName}
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                />
-              </View>
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Label text="Username" />
-              <TextInput
-                style={styles.input}
-                placeholder="@username"
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
-                blurOnSubmit={false}
-              />
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Label text="Email Address" />
-              <TextInput
-                style={[styles.input, styles.inputDisabled]}
-                value={user?.email_address ?? ''}
-                editable={false}
-                placeholderTextColor="rgba(255,255,255,0.2)"
-              />
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Label text="Phone Number" />
-              <TextInput
-                style={styles.input}
-                placeholder="+63 9XX XXX XXXX"
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                blurOnSubmit={false}
-              />
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Label text="About Me" />
-              <TextInput
-                style={[styles.input, styles.inputMultiline]}
-                placeholder="Tell clients about yourself..."
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={bio}
-                onChangeText={setBio}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-                blurOnSubmit={false}
-                autoCorrect={false}
-              />
-            </View>
-          </View>
-
-          {/* SKILLS */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="code-slash-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Skills</Text>
-            </View>
-
-            <View style={styles.skillInputRow}>
-              <TextInput
-                style={styles.skillInput}
-                placeholder="Add a skill..."
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={skillInput}
-                onChangeText={setSkillInput}
-                onSubmitEditing={() => addSkill(skillInput)}
-                returnKeyType="done"
-                blurOnSubmit={false}
-                autoCorrect={false}
-              />
-              <TouchableOpacity
-                style={styles.skillAddBtn}
-                onPress={() => addSkill(skillInput)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="add" size={20} color="#0a0a0a" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.suggestionRow}
-              keyboardShouldPersistTaps="handled"
-            >
-              {SKILL_SUGGESTIONS.filter((s) => !skills.includes(s)).map((s) => (
-                <TouchableOpacity
-                  key={s}
-                  style={styles.suggestionChip}
-                  onPress={() => addSkill(s)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="add" size={12} color="rgba(255,255,255,0.4)" />
-                  <Text style={styles.suggestionText}>{s}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {skills.length > 0 && (
-              <View style={styles.skillsWrap}>
-                {skills.map((skill) => (
-                  <View key={skill} style={styles.skillChip}>
-                    <Text style={styles.skillChipText}>{skill}</Text>
-                    <TouchableOpacity
-                      onPress={() => removeSkill(skill)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="close" size={14} color={GOLD} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* CV UPLOAD SECTION - Local Storage Only */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="document-text-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Resume / CV</Text>
-            </View>
-
-            <View style={styles.cvContainer}>
-              {savedCV ? (
-                <View style={styles.cvInfoContainer}>
-                  <View style={styles.cvFileInfo}>
-                    <Ionicons name="document-text" size={32} color={GOLD} />
-                    <View style={styles.cvFileDetails}>
-                      <Text style={styles.cvFileName} numberOfLines={1}>
-                        {savedCV.name}
-                      </Text>
-                      <Text style={styles.cvFileStatus}>
-                        Saved locally • {formatFileSize(savedCV.size)}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.cvActions}>
-                    <TouchableOpacity 
-                      style={[styles.cvActionBtn, styles.cvViewBtn]} 
-                      onPress={viewCV}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="eye-outline" size={18} color={GOLD} />
-                      <Text style={styles.cvViewBtnText}>Open</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.cvActionBtn, styles.cvDeleteBtn]} 
-                      onPress={handleDeleteCV}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="trash-outline" size={18} color="#ff4444" />
-                      <Text style={styles.cvDeleteBtnText}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.cvUploadArea}>
-                  <Ionicons name="cloud-upload-outline" size={48} color={GOLD} />
-                  <Text style={styles.cvUploadTitle}>Upload your CV/Resume</Text>
-                  <Text style={styles.cvUploadSubtitle}>
-                    PDF, DOC, or DOCX (Max 5MB)
-                  </Text>
-                  <Text style={styles.cvLocalNote}>
-                    * File will be stored locally on your device only
-                  </Text>
-                  <TouchableOpacity 
-                    style={styles.cvUploadBtn}
-                    onPress={uploadCV}
-                    disabled={uploadingCV}
-                    activeOpacity={0.8}
-                  >
-                    {uploadingCV ? (
-                      <ActivityIndicator size="small" color="#0a0a0a" />
-                    ) : (
-                      <>
-                        <Ionicons name="add" size={18} color="#0a0a0a" />
-                        <Text style={styles.cvUploadBtnText}>Choose File</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* EXPERIENCE */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="briefcase-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Experience</Text>
-            </View>
-
-            <Label text="Experience Level" required />
-            <View style={styles.pillRow}>
-              {EXPERIENCE_LEVELS.map((level) => (
-                <TouchableOpacity
-                  key={level}
-                  style={[styles.pill, experienceLevel === level && styles.pillActive]}
-                  onPress={() => setExperienceLevel(level)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.pillText, experienceLevel === level && styles.pillTextActive]}>
-                    {level}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {!experienceLevel && (
-              <Text style={styles.errorText}>Please select your experience level</Text>
-            )}
-
-            <View style={styles.fieldGroup}>
-              <Label text="Years of Experience" />
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. 3"
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={yearsExp}
-                onChangeText={setYearsExp}
-                keyboardType="numeric"
-                blurOnSubmit={false}
-              />
-            </View>
-          </View>
-
-          {/* RATES */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="cash-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Rates</Text>
-            </View>
-            <View style={styles.row}>
-              <View style={styles.halfField}>
-                <Label text="Hourly Rate (₱)" />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. 500"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={hourlyRate}
-                  onChangeText={setHourlyRate}
-                  keyboardType="numeric"
-                  blurOnSubmit={false}
-                />
-              </View>
-              <View style={styles.halfField}>
-                <Label text="Fixed Rate (₱)" />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. 15000"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={fixedRate}
-                  onChangeText={setFixedRate}
-                  keyboardType="numeric"
-                  blurOnSubmit={false}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* LOCATION */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="location-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Location</Text>
-            </View>
-            <View style={styles.row}>
-              <View style={styles.halfField}>
-                <Label text="City" />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Manila"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={city}
-                  onChangeText={setCity}
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                />
-              </View>
-              <View style={styles.halfField}>
-                <Label text="Country" />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Philippines"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={country}
-                  onChangeText={setCountry}
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* PORTFOLIO LINK */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="link-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Portfolio</Text>
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Label text="Portfolio URL" />
-              <View style={styles.linkInputWrap}>
-                <Ionicons name="globe-outline" size={16} color="rgba(255,255,255,0.3)" style={styles.linkIcon} />
-                <TextInput
-                  style={styles.linkInput}
-                  placeholder="https://yourportfolio.com"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={portfolioUrl}
-                  onChangeText={setPortfolioUrl}
-                  keyboardType="url"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* BOTTOM SAVE BUTTON */}
-          <TouchableOpacity
-            style={[styles.bottomSaveBtn, isLoading && styles.saveBtnDisabled]}
-            onPress={handleSave}
-            disabled={isLoading}
-            activeOpacity={0.85}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#0a0a0a" />
+            {selectedImage ? (
+              <Image source={{ uri: selectedImage.uri }} style={styles.avatarImage} />
+            ) : user?.profile_picture ? (
+              <Image source={{ uri: user.profile_picture }} style={styles.avatarImage} />
             ) : (
-              <>
-                <Ionicons name="checkmark-circle-outline" size={18} color="#0a0a0a" />
-                <Text style={styles.bottomSaveBtnText}>Save Profile</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Image Picker Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={imageModalVisible}
-        onRequestClose={() => setImageModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Profile Picture</Text>
-              <TouchableOpacity onPress={() => setImageModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity style={styles.modalOption} onPress={pickImage}>
-              <Ionicons name="images-outline" size={24} color={GOLD} />
-              <Text style={styles.modalOptionText}>Choose from Gallery</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.modalOption} onPress={takePhoto}>
-              <Ionicons name="camera-outline" size={24} color={GOLD} />
-              <Text style={styles.modalOptionText}>Take Photo</Text>
-            </TouchableOpacity>
-
-            {user?.profile_picture && (
-              <TouchableOpacity 
-                style={[styles.modalOption, styles.modalOptionDanger]} 
-                onPress={handleDeleteProfilePicture}
-              >
-                <Ionicons name="trash-outline" size={24} color="#ff4444" />
-                <Text style={[styles.modalOptionText, styles.modalOptionTextDanger]}>Delete Picture</Text>
-              </TouchableOpacity>
-            )}
-
-            {uploadingImage && (
-              <View style={styles.uploadingContainer}>
-                <ActivityIndicator size="large" color={GOLD} />
-                <Text style={styles.uploadingText}>Updating profile picture...</Text>
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarInitials}>{getInitials()}</Text>
               </View>
             )}
+            {editing && (
+              <View style={styles.editIconOverlay}>
+                <Ionicons name="camera" size={20} color="#fff" />
+              </View>
+            )}
+          </TouchableOpacity>
+          {editing && (
+            <Text style={styles.editPhotoText}>Tap to change profile picture</Text>
+          )}
+        </View>
+
+        {/* Personal Information */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Personal Information</Text>
+          <View style={styles.sectionContent}>
+            {renderField('First Name', 'first_name', 'Enter first name')}
+            {renderField('Last Name', 'last_name', 'Enter last name')}
+            {renderReadOnlyField('Email Address', 'email_address', 'Email address')}
+            {renderField('Phone Number', 'phone_number', 'Enter phone number')}
           </View>
         </View>
-      </Modal>
+
+        {/* Company Information */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Company Information</Text>
+          <View style={styles.sectionContent}>
+            {renderField('Company Name', 'company_name', 'Enter company name')}
+            {renderField('Business Type', 'business_type', 'e.g., Corporation, Sole Proprietorship')}
+            {renderField('Industry', 'industry', 'e.g., Technology, Retail, Healthcare')}
+            {renderField('Website', 'website', 'https://yourcompany.com')}
+          </View>
+        </View>
+
+        {/* Location */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Location</Text>
+          <View style={styles.sectionContent}>
+            {renderField('Country', 'country', 'Enter country')}
+            {renderField('City', 'city', 'Enter city')}
+            {renderField('Address', 'address', 'Enter street address')}
+          </View>
+        </View>
+
+        {/* Business Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Business Details</Text>
+          <View style={styles.sectionContent}>
+            {renderField('About / Bio', 'bio_about', 'Tell us about your business', true)}
+            {renderField('Budget Range', 'budget_range', 'e.g., ₱10k - ₱50k')}
+            {renderField('Preferred Communication', 'preferred_communication_method', 'e.g., Email, Phone, Chat')}
+          </View>
+        </View>
+
+        {/* Account Actions */}
+        <View style={styles.actionsSection}>
+          <TouchableOpacity 
+            style={styles.passwordBtn}
+            onPress={() => onNavigate('ChangePassword')}
+          >
+            <Ionicons name="key-outline" size={18} color={GOLD} />
+            <Text style={styles.passwordBtnText}>Change Password</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
-  flex: { flex: 1 },
-
-  header: {
+  topbar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
-    gap: 12,
   },
   backBtn: {
-    width: 36, height: 36,
+    width: 36,
+    height: 36,
     borderRadius: 10,
     backgroundColor: CARD_BG,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: BORDER,
-  },
-  headerCenter: { flex: 1 },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
-  headerSub: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 1 },
-  saveBtn: {
-    paddingHorizontal: 18, paddingVertical: 8,
-    backgroundColor: GOLD,
-    borderRadius: 10,
-    minWidth: 60,
-    alignItems: 'center',
-  },
-  saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { fontSize: 13, fontWeight: '600', color: '#0a0a0a' },
-
-  scroll: { paddingBottom: 60 },
-
-  avatarSection: {
-    alignItems: 'center',
-    paddingVertical: 28,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    marginBottom: 8,
-  },
-  avatarWrap: { position: 'relative', marginBottom: 12 },
-  avatar: {
-    width: 90, height: 90,
-    borderRadius: 45,
-    borderWidth: 2, borderColor: GOLD,
-  },
-  avatarPlaceholder: {
-    width: 90, height: 90,
-    borderRadius: 45,
-    backgroundColor: GOLD,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: GOLD,
-  },
-  avatarInitials: { fontSize: 32, fontWeight: '700', color: '#0a0a0a' },
-  avatarEditBtn: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 28, height: 28,
-    borderRadius: 14,
-    backgroundColor: GOLD,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: BG,
-  },
-  avatarName: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 2 },
-  avatarUsername: { fontSize: 13, color: 'rgba(255,255,255,0.4)' },
-  changePhotoText: {
-    fontSize: 12,
-    color: GOLD,
-    marginTop: 8,
-    opacity: 0.7,
-  },
-
-  section: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    backgroundColor: CARD_BG,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1, borderColor: BORDER,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#fff' },
-
-  fieldGroup: { marginBottom: 14 },
-  label: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,0.5)', marginBottom: 6 },
-  labelRequired: { color: GOLD },
-  input: {
-    backgroundColor: INPUT_BG,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 11,
-    fontSize: 14, color: '#fff',
-  },
-  inputMultiline: { height: 100, paddingTop: 11 },
-  inputDisabled: { opacity: 0.45 },
-  row: { flexDirection: 'row', gap: 12, marginBottom: 14 },
-  halfField: { flex: 1 },
-
-  skillInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  skillInput: {
-    flex: 1,
-    backgroundColor: INPUT_BG,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 10,
-    fontSize: 14, color: '#fff',
-  },
-  skillAddBtn: {
-    width: 42, height: 42,
-    borderRadius: 10,
-    backgroundColor: GOLD,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  suggestionRow: { paddingBottom: 10, gap: 6 },
-  suggestionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10, paddingVertical: 6,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 999,
-    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.1)',
-  },
-  suggestionText: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
-  skillsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  skillChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12, paddingVertical: 7,
-    backgroundColor: 'rgba(212,175,55,0.1)',
-    borderRadius: 999,
-    borderWidth: 1, borderColor: 'rgba(212,175,55,0.3)',
-  },
-  skillChipText: { fontSize: 12, color: GOLD, fontWeight: '500' },
-
-  pillRow: { flexDirection: 'row', gap: 8, marginBottom: 14, marginTop: 6 },
-  pill: {
-    flex: 1, paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: INPUT_BG,
-    alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-  },
-  pillActive: {
-    backgroundColor: 'rgba(212,175,55,0.12)',
-    borderColor: 'rgba(212,175,55,0.4)',
-  },
-  pillText: { fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '500' },
-  pillTextActive: { color: GOLD },
-
-  linkInputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: INPUT_BG,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-  },
-  linkIcon: { marginRight: 8 },
-  linkInput: { flex: 1, paddingVertical: 11, fontSize: 14, color: '#fff' },
-
-  bottomSaveBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 24,
-    marginBottom: 20,
-    paddingVertical: 15,
-    backgroundColor: GOLD,
-    borderRadius: 14,
-  },
-  bottomSaveBtnText: { fontSize: 15, fontWeight: '600', color: '#0a0a0a' },
-  
-  errorText: {
-    fontSize: 11,
-    color: '#ff4444',
-    marginTop: -8,
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-
-  // CV Styles
-  cvContainer: {
-    marginTop: 4,
-  },
-  cvUploadArea: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderRadius: 12,
     borderWidth: 1,
     borderColor: BORDER,
-    borderStyle: 'dashed',
   },
-  cvUploadTitle: {
-    fontSize: 15,
-    fontWeight: '600',
+  topbarTitle: {
+    fontSize: 16,
+    fontWeight: '300',
     color: '#fff',
-    marginTop: 12,
-    marginBottom: 4,
   },
-  cvUploadSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    marginBottom: 8,
-  },
-  cvLocalNote: {
-    fontSize: 10,
+  gold: {
     color: GOLD,
-    marginBottom: 16,
     fontStyle: 'italic',
+    fontWeight: '400',
   },
-  cvUploadBtn: {
+  editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: GOLD,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderWidth: 0.5,
+    borderColor: GOLD,
   },
-  cvUploadBtnText: {
-    fontSize: 13,
+  editBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: GOLD,
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  cancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  cancelBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  saveBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: GOLD,
+  },
+  saveBtnText: {
+    fontSize: 12,
     fontWeight: '600',
     color: '#0a0a0a',
   },
-  cvInfoContainer: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
+  scroll: {
+    paddingBottom: 40,
+  },
+  profileImageSection: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  avatarContainer: {
+    position: 'relative',
+  },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#0a0a0a',
+  },
+  editIconOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: GOLD,
+    borderRadius: 20,
+    padding: 6,
+    borderWidth: 2,
+    borderColor: BG,
+  },
+  editPhotoText: {
+    marginTop: 8,
+    fontSize: 11,
+    color: GOLD,
+  },
+  section: {
+    marginTop: 20,
+    paddingHorizontal: 16,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: GOLD,
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  sectionContent: {
+    backgroundColor: CARD_BG,
     borderRadius: 12,
-    padding: 12,
     borderWidth: 1,
     borderColor: BORDER,
+    overflow: 'hidden',
   },
-  cvFileInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
+  fieldContainer: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
   },
-  cvFileDetails: {
-    flex: 1,
-  },
-  cvFileName: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#fff',
-    marginBottom: 2,
-  },
-  cvFileStatus: {
+  fieldLabel: {
     fontSize: 10,
-    color: '#4ade80',
+    color: 'rgba(255,255,255,0.4)',
+    marginBottom: 4,
+    letterSpacing: 0.5,
   },
-  cvActions: {
-    flexDirection: 'row',
-    gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-    paddingTop: 12,
+  fieldValue: {
+    fontSize: 14,
+    color: '#fff',
   },
-  cvActionBtn: {
-    flex: 1,
+  fieldInput: {
+    fontSize: 14,
+    color: '#fff',
+    padding: 0,
+    margin: 0,
+    backgroundColor: INPUT_BG,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  actionsSection: {
+    marginTop: 24,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+  },
+  passwordBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  cvViewBtn: {
-    backgroundColor: 'rgba(212,175,55,0.1)',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(212,175,55,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(212,175,55,0.3)',
   },
-  cvViewBtnText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: GOLD,
-  },
-  cvDeleteBtn: {
-    backgroundColor: 'rgba(255,68,68,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,68,68,0.3)',
-  },
-  cvDeleteBtnText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#ff4444',
-  },
-
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: CARD_BG,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
-  modalTitle: {
-    fontSize: 18,
+  passwordBtnText: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#fff',
-  },
-  modalOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
-  modalOptionDanger: {
-    borderBottomWidth: 0,
-  },
-  modalOptionText: {
-    fontSize: 16,
-    color: '#fff',
-  },
-  modalOptionTextDanger: {
-    color: '#ff4444',
-  },
-  uploadingContainer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-    gap: 12,
-  },
-  uploadingText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
+    color: GOLD,
   },
 });
