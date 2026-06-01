@@ -15,6 +15,7 @@ import Hiredtalents from './components/client/Hiredtalents';
 import ClientProfile from './components/client/ClientProfile';
 import Settings from './components/client/Settings';
 import Message from './components/client/Message';
+import ClientMessagesScreen from './components/client/Message';
 
 // Freelancer Screens
 import FreelancerScreen from './components/freelancer/FreelancerScreen';
@@ -23,15 +24,17 @@ import BrowseJobs from './components/freelancer/BrowseJobs';
 import MyJobs from './components/freelancer/MyJobs';
 import ReceivedOffers from './components/freelancer/ReceivedOffers';
 import Messages from './components/freelancer/Messages';
+import MyApplications from './components/freelancer/MyApplications';
 
-
+// Client Settings Screen
+import ClientSettingsScreen from './components/client/Settings';
 
 export default function AppNavigator() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const [route, setRoute] = useState('Home');
 
-  const handleNavigate = useCallback((screen) => {
-    console.log('==> Navigating to:', screen);
+  const handleNavigate = useCallback((screen, params) => {
+    console.log('==> Navigating to:', screen, params);
     setRoute(screen);
   }, []);
 
@@ -76,21 +79,14 @@ export default function AppNavigator() {
       return <Hiredtalents onNavigate={handleNavigate} />;
     case 'ClientProfile':
       return <ClientProfile onNavigate={handleNavigate} />; 
-    case 'Settings':
-      return <Settings onNavigate={handleNavigate} />;  
     case 'Message':
       return <Message onNavigate={handleNavigate} />;  
-
 
     // ── Shared screens — role-aware ────────────────────────
     case 'Messages':
       return isClient
         ? <ClientMessagesScreen onNavigate={handleNavigate} />
         : <Messages onNavigate={handleNavigate} />;
-    case 'Settings':
-      return isClient
-        ? <ClientSettingsScreen onNavigate={handleNavigate} />
-        : <Settings onNavigate={handleNavigate} />;
 
     // ── Freelancer  ─────────────────────────────────
     case 'Freelancer':
@@ -104,6 +100,8 @@ export default function AppNavigator() {
       return <MyJobs onNavigate={handleNavigate} />;
     case 'ReceivedOffers':
       return <ReceivedOffers onNavigate={handleNavigate} />;
+    case 'MyApplications':  // IMPORTANT: Capital M and Capital A
+      return <MyApplications onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
 
     // ── Home ───────────────────────────────────────────────
     case 'Home':

@@ -18,6 +18,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../Redux/slices/authSlice';
 import { getReceivedOffers, getOfferStats } from '../../Redux/slices/offerSlice';
 import { getFreelancerJobs } from '../../Redux/slices/jobSlice';
+import { getFreelancerApplications } from '../../Redux/slices/applicationSlice';
 
 const GOLD = '#D4AF37';
 const BG = '#0a0a0a';
@@ -27,11 +28,11 @@ const BORDER = 'rgba(255,255,255,0.07)';
 const SIDEBAR_WIDTH = 260;
 
 const MENU_ITEMS = [
-  { key: 'Overview',      label: 'Overview',       icon: 'grid-outline',        badge: null },
-  { key: 'BrowseJobs',    label: 'Browse Jobs',    icon: 'search-outline',      badge: null },
-  { key: 'MyJobs',        label: 'My Jobs',        icon: 'briefcase-outline',   badge: null },
-  { key: 'ReceivedOffers',label: 'Received Offers',icon: 'mail-open-outline',   badge: null },
-  { key: 'Portfolio',     label: 'Portfolio',      icon: 'images-outline',      badge: null },
+  { key: 'Overview',        label: 'Overview',         icon: 'grid-outline',        badge: null },
+  { key: 'BrowseJobs',      label: 'Browse Jobs',      icon: 'search-outline',      badge: null },
+  { key: 'MyJobs',          label: 'My Jobs',          icon: 'briefcase-outline',   badge: null },
+  { key: 'ReceivedOffers',  label: 'Received Offers',  icon: 'mail-open-outline',   badge: null },
+  { key: 'MyApplications',  label: 'My Applications',  icon: 'document-text-outline', badge: null },
 ];
 
 const COMM_ITEMS = [
@@ -45,6 +46,7 @@ export default function FreelancerScreen({ onNavigate }) {
   const { user } = useSelector((state) => state.auth);
   const { receivedOffers, stats: offerStats, isLoading: offersLoading } = useSelector((state) => state.offers);
   const { list: jobs, isLoading: jobsLoading } = useSelector((state) => state.jobs.jobs);
+  const { applications, isLoading: appsLoading } = useSelector((state) => state.applications);
   
   const [activeMenu, setActiveMenu] = useState('Overview');
   const [refreshing, setRefreshing] = useState(false);
@@ -62,9 +64,9 @@ export default function FreelancerScreen({ onNavigate }) {
       await Promise.all([
         dispatch(getReceivedOffers({})).unwrap(),
         dispatch(getFreelancerJobs({ limit: 10 })).unwrap(),
+        dispatch(getFreelancerApplications({})).unwrap(),
       ]);
       
-      // Try to get offer stats, but don't fail if not available
       try {
         await dispatch(getOfferStats()).unwrap();
       } catch (statsError) {
@@ -83,7 +85,6 @@ export default function FreelancerScreen({ onNavigate }) {
   useEffect(() => {
     const activities = [];
     
-    // Add recent offers received
     if (receivedOffers && receivedOffers.length > 0) {
       const recentOffers = receivedOffers.slice(0, 3);
       recentOffers.forEach(offer => {
@@ -102,40 +103,38 @@ export default function FreelancerScreen({ onNavigate }) {
       });
     }
     
-    // Add recent jobs (from freelancer jobs list - jobs they applied to)
-    if (jobs && jobs.length > 0) {
-      const recentJobs = jobs.slice(0, 3);
-      recentJobs.forEach(job => {
+    if (applications && applications.length > 0) {
+      const recentApps = applications.slice(0, 3);
+      recentApps.forEach(app => {
+        const statusColor = app.status === 'pending' ? GOLD : app.status === 'accepted' ? '#4ade80' : app.status === 'offered' ? '#4ade80' : '#f87171';
         activities.push({
-          id: `job_${job._id}`,
-          icon: 'briefcase-outline',
-          iconColor: GOLD,
+          id: `app_${app._id}`,
+          icon: 'document-text-outline',
+          iconColor: statusColor,
           iconBg: 'rgba(212,175,55,0.12)',
-          title: 'Applied for job',
-          sub: `${job.title} · ₱${job.budget_amount?.toLocaleString()}`,
-          time: formatDate(job.created_at),
-          type: 'job',
+          title: `Application ${app.status === 'pending' ? 'submitted' : app.status === 'offered' ? 'received offer' : app.status}`,
+          sub: `${app.job_id?.title || 'Job'} · Status: ${app.status}`,
+          time: formatDate(app.applied_at),
+          type: 'application',
+          status: app.status,
         });
       });
     }
     
-    // Sort by date (most recent first) and take first 6
     const sortedActivities = activities.sort((a, b) => {
       return b.time.localeCompare(a.time);
     }).slice(0, 6);
     
     setRecentActivities(sortedActivities);
-  }, [receivedOffers, jobs]);
+  }, [receivedOffers, applications]);
 
-  // Helper function to format date
   const formatDate = (dateString) => {
     if (!dateString) return 'Just now';
     const date = new Date(dateString);
     const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffMinutes = Math.floor(diffTime / (1000 * 60));
-    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffMinutes = Math.floor((now - date) / (1000 * 60));
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
     
     if (diffMinutes < 1) return 'Just now';
     if (diffMinutes < 60) return `${diffMinutes} min ago`;
@@ -146,12 +145,12 @@ export default function FreelancerScreen({ onNavigate }) {
     return `${Math.floor(diffDays / 30)} months ago`;
   };
 
-  // Calculate statistics from real data
   const activeJobs = jobs?.filter(job => job.status === 'open' || job.status === 'in_progress').length || 0;
   const pendingOffers = receivedOffers?.filter(offer => offer.status === 'pending').length || 0;
   const acceptedOffers = receivedOffers?.filter(offer => offer.status === 'accepted').length || 0;
   const completedCount = acceptedOffers;
   const totalEarned = offerStats?.totalEarnings || 0;
+  const totalApplications = applications?.length || 0;
 
   const openSidebar = () => {
     setSidebarVisible(true);
@@ -217,6 +216,7 @@ export default function FreelancerScreen({ onNavigate }) {
   const handleMenuPress = (key) => {
     setActiveMenu(key);
     closeSidebar();
+    console.log('Menu pressed:', key); // Debug log
     setTimeout(() => {
       switch(key) {
         case 'BrowseJobs':
@@ -228,8 +228,9 @@ export default function FreelancerScreen({ onNavigate }) {
         case 'ReceivedOffers':
           onNavigate('ReceivedOffers');
           break;
-        case 'Portfolio':
-          onNavigate('Portfolio');
+        case 'MyApplications':
+          console.log('Navigating to MyApplications'); // Debug log
+          onNavigate('MyApplications');
           break;
         case 'Messages':
           onNavigate('Messages');
@@ -241,7 +242,6 @@ export default function FreelancerScreen({ onNavigate }) {
           onNavigate('Settings');
           break;
         case 'Overview':
-          // stays on this screen
           break;
         default:
           break;
@@ -250,10 +250,12 @@ export default function FreelancerScreen({ onNavigate }) {
   };
 
   const SidebarItem = ({ item }) => {
-    // Update badge counts dynamically
     let badgeValue = null;
     if (item.key === 'ReceivedOffers' && pendingOffers > 0) {
       badgeValue = pendingOffers;
+    }
+    if (item.key === 'MyApplications' && totalApplications > 0) {
+      badgeValue = totalApplications;
     }
     
     const active = activeMenu === item.key;
@@ -283,7 +285,7 @@ export default function FreelancerScreen({ onNavigate }) {
     );
   };
 
-  const isLoading = jobsLoading || offersLoading;
+  const isLoading = jobsLoading || offersLoading || appsLoading;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -344,17 +346,17 @@ export default function FreelancerScreen({ onNavigate }) {
                 <View style={styles.statsGrid}>
                   <TouchableOpacity 
                     style={styles.statCard}
-                    onPress={() => onNavigate('BrowseJobs')}
+                    onPress={() => onNavigate('MyApplications')}
                     activeOpacity={0.7}
                   >
                     <View style={styles.statTop}>
-                      <Text style={styles.statLabel}>ACTIVE JOBS</Text>
-                      <Ionicons name="briefcase-outline" size={14} color="rgba(255,255,255,0.3)" />
+                      <Text style={styles.statLabel}>APPLICATIONS</Text>
+                      <Ionicons name="document-text-outline" size={14} color="rgba(255,255,255,0.3)" />
                     </View>
                     <Text style={styles.statNumber}>
-                      {activeJobs}
+                      {totalApplications}
                     </Text>
-                    <Text style={styles.statSub}>Active applications</Text>
+                    <Text style={styles.statSub}>Total applications sent</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
@@ -374,15 +376,15 @@ export default function FreelancerScreen({ onNavigate }) {
 
                   <TouchableOpacity 
                     style={styles.statCard}
-                    onPress={() => onNavigate('BrowseJobs')}
+                    onPress={() => onNavigate('MyJobs')}
                     activeOpacity={0.7}
                   >
                     <View style={styles.statTop}>
-                      <Text style={styles.statLabel}>COMPLETED</Text>
-                      <Ionicons name="checkmark-circle-outline" size={14} color="rgba(255,255,255,0.3)" />
+                      <Text style={styles.statLabel}>ACTIVE JOBS</Text>
+                      <Ionicons name="briefcase-outline" size={14} color="rgba(255,255,255,0.3)" />
                     </View>
-                    <Text style={styles.statNumber}>{completedCount}</Text>
-                    <Text style={styles.statSub}>Completed projects</Text>
+                    <Text style={styles.statNumber}>{activeJobs}</Text>
+                    <Text style={styles.statSub}>Active applications</Text>
                   </TouchableOpacity>
 
                   <View style={styles.statCard}>
@@ -415,6 +417,8 @@ export default function FreelancerScreen({ onNavigate }) {
                       onPress={() => {
                         if (item.type === 'offer') {
                           onNavigate('ReceivedOffers');
+                        } else if (item.type === 'application') {
+                          onNavigate('MyApplications');
                         } else if (item.type === 'job') {
                           onNavigate('BrowseJobs');
                         }

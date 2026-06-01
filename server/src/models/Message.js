@@ -4,8 +4,8 @@ import mongoose from 'mongoose';
 const messageSchema = new mongoose.Schema({
   sender_id: {
     type: mongoose.Schema.Types.ObjectId,
-    refPath: 'sender_model',
     required: true,
+    refPath: 'sender_model',
   },
   sender_model: {
     type: String,
@@ -14,8 +14,8 @@ const messageSchema = new mongoose.Schema({
   },
   receiver_id: {
     type: mongoose.Schema.Types.ObjectId,
-    refPath: 'receiver_model',
     required: true,
+    refPath: 'receiver_model',
   },
   receiver_model: {
     type: String,

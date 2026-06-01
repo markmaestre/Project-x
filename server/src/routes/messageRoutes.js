@@ -15,29 +15,14 @@ const getUserModel = (role) => {
 
 // Helper function to get user info
 const getUserInfo = async (userId, role) => {
-  const Model = getUserModel(role);
-  const user = await Model.findById(userId).select('first_name last_name profile_picture email_address');
-  return user;
-};
-
-// Helper function to get conversation partner info
-const getConversationPartner = async (currentUserId, currentUserRole, message) => {
-  const isSender = message.sender_id.toString() === currentUserId.toString();
-  
-  const partnerId = isSender ? message.receiver_id : message.sender_id;
-  const partnerModel = isSender ? message.receiver_model : message.sender_model;
-  const partnerRole = partnerModel.toLowerCase();
-  
-  const partner = await getUserInfo(partnerId, partnerRole);
-  
-  return {
-    user_id: partnerId,
-    name: `${partner?.first_name || ''} ${partner?.last_name || ''}`.trim(),
-    first_name: partner?.first_name,
-    last_name: partner?.last_name,
-    profile_picture: partner?.profile_picture,
-    role: partnerRole,
-  };
+  try {
+    const Model = getUserModel(role);
+    const user = await Model.findById(userId).select('first_name last_name profile_picture email_address');
+    return user;
+  } catch (error) {
+    console.error('Error getting user info:', error);
+    return null;
+  }
 };
 
 // ==================== MESSAGING ROUTES ====================
@@ -52,6 +37,10 @@ router.post("/messages", authMiddleware, async (req, res) => {
     }
     if (!message || !message.trim()) {
       return res.status(400).json({ message: "Message content is required" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(receiverId)) {
+      return res.status(400).json({ message: "Invalid receiver ID" });
     }
 
     // Determine receiver's role
@@ -73,9 +62,9 @@ router.post("/messages", authMiddleware, async (req, res) => {
     const senderRole = req.user.role;
 
     const newMessage = new Message({
-      sender_id: req.user.id,
+      sender_id: new mongoose.Types.ObjectId(req.user.id),
       sender_model: senderRole === 'client' ? 'Client' : 'Freelancer',
-      receiver_id: receiverId,
+      receiver_id: new mongoose.Types.ObjectId(receiverId),
       receiver_model: receiverRole === 'client' ? 'Client' : 'Freelancer',
       message: message.trim(),
       is_read: false,
@@ -140,8 +129,18 @@ router.get("/messages/:userId", authMiddleware, async (req, res) => {
     // Build query
     const query = {
       $or: [
-        { sender_id: req.user.id, sender_model: currentUserModel, receiver_id: userId, receiver_model: otherUserModel },
-        { sender_id: userId, sender_model: otherUserModel, receiver_id: req.user.id, receiver_model: currentUserModel }
+        { 
+          sender_id: new mongoose.Types.ObjectId(req.user.id), 
+          sender_model: currentUserModel, 
+          receiver_id: new mongoose.Types.ObjectId(userId), 
+          receiver_model: otherUserModel 
+        },
+        { 
+          sender_id: new mongoose.Types.ObjectId(userId), 
+          sender_model: otherUserModel, 
+          receiver_id: new mongoose.Types.ObjectId(req.user.id), 
+          receiver_model: currentUserModel 
+        }
       ]
     };
 
@@ -156,8 +155,8 @@ router.get("/messages/:userId", authMiddleware, async (req, res) => {
     // Mark messages as read
     await Message.updateMany(
       {
-        sender_id: userId,
-        receiver_id: req.user.id,
+        sender_id: new mongoose.Types.ObjectId(userId),
+        receiver_id: new mongoose.Types.ObjectId(req.user.id),
         is_read: false
       },
       { is_read: true, read_at: new Date() }
@@ -195,11 +194,11 @@ router.get("/messages/:userId", authMiddleware, async (req, res) => {
 // Get all conversations for the current user
 router.get("/messages/conversations", authMiddleware, async (req, res) => {
   try {
-    const currentUserId = req.user.id;
+    const currentUserId = new mongoose.Types.ObjectId(req.user.id);
     const currentUserRole = req.user.role;
     const currentUserModel = currentUserRole === 'client' ? 'Client' : 'Freelancer';
 
-    // Get all unique conversation partners
+    // Get all unique conversation partners using aggregation
     const conversations = await Message.aggregate([
       {
         $match: {
@@ -210,26 +209,40 @@ router.get("/messages/conversations", authMiddleware, async (req, res) => {
         }
       },
       {
+        $addFields: {
+          other_user_id: {
+            $cond: [
+              { $eq: ["$sender_id", currentUserId] },
+              "$receiver_id",
+              "$sender_id"
+            ]
+          },
+          other_user_model: {
+            $cond: [
+              { $eq: ["$sender_id", currentUserId] },
+              "$receiver_model",
+              "$sender_model"
+            ]
+          }
+        }
+      },
+      {
         $sort: { created_at: -1 }
       },
       {
         $group: {
-          _id: {
-            $cond: [
-              { $eq: ["$sender_id", currentUserId] },
-              { id: "$receiver_id", model: "$receiver_model" },
-              { id: "$sender_id", model: "$sender_model" }
-            ]
-          },
+          _id: { user_id: "$other_user_id", user_model: "$other_user_model" },
           last_message: { $first: "$message" },
           last_message_time: { $first: "$created_at" },
           unread_count: {
             $sum: {
               $cond: [
-                { $and: [
-                  { $eq: ["$receiver_id", currentUserId] },
-                  { $eq: ["$is_read", false] }
-                ]},
+                { 
+                  $and: [
+                    { $eq: ["$receiver_id", currentUserId] },
+                    { $eq: ["$is_read", false] }
+                  ]
+                },
                 1,
                 0
               ]
@@ -243,19 +256,23 @@ router.get("/messages/conversations", authMiddleware, async (req, res) => {
     // Get user details for each conversation
     const conversationsWithDetails = await Promise.all(
       conversations.map(async (conv) => {
-        const partnerId = conv._id.id;
-        const partnerModel = conv._id.model;
+        const partnerId = conv._id.user_id;
+        const partnerModel = conv._id.user_model;
         const partnerRole = partnerModel.toLowerCase();
         
         const partner = await getUserInfo(partnerId, partnerRole);
         
+        if (!partner) {
+          return null;
+        }
+        
         return {
           _id: `${partnerId}_${partnerRole}`,
           other_user_id: partnerId,
-          other_user_name: `${partner?.first_name || ''} ${partner?.last_name || ''}`.trim(),
-          other_user_first_name: partner?.first_name,
-          other_user_last_name: partner?.last_name,
-          other_user_profile_picture: partner?.profile_picture,
+          other_user_name: `${partner.first_name || ''} ${partner.last_name || ''}`.trim(),
+          other_user_first_name: partner.first_name,
+          other_user_last_name: partner.last_name,
+          other_user_profile_picture: partner.profile_picture,
           other_user_role: partnerRole,
           last_message: conv.last_message,
           last_message_time: conv.last_message_time,
@@ -265,10 +282,13 @@ router.get("/messages/conversations", authMiddleware, async (req, res) => {
       })
     );
 
-    const totalUnread = conversationsWithDetails.reduce((sum, conv) => sum + (conv.unread_count || 0), 0);
+    // Filter out null values
+    const validConversations = conversationsWithDetails.filter(conv => conv !== null);
+    
+    const totalUnread = validConversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0);
 
     res.json({
-      conversations: conversationsWithDetails,
+      conversations: validConversations,
       totalUnread,
     });
   } catch (error) {
@@ -291,8 +311,8 @@ router.patch("/messages/:userId/read", authMiddleware, async (req, res) => {
 
     const result = await Message.updateMany(
       {
-        sender_id: userId,
-        receiver_id: req.user.id,
+        sender_id: new mongoose.Types.ObjectId(userId),
+        receiver_id: new mongoose.Types.ObjectId(req.user.id),
         is_read: false
       },
       { is_read: true, read_at: new Date() }
@@ -314,7 +334,7 @@ router.patch("/messages/:userId/read", authMiddleware, async (req, res) => {
 // Get unread message count
 router.get("/messages/unread/count", authMiddleware, async (req, res) => {
   try {
-    const currentUserId = req.user.id;
+    const currentUserId = new mongoose.Types.ObjectId(req.user.id);
     const currentUserRole = req.user.role;
     const currentUserModel = currentUserRole === 'client' ? 'Client' : 'Freelancer';
 

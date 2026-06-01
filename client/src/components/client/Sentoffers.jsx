@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Image,
-  Alert, ActivityIndicator, RefreshControl,
+  Alert, ActivityIndicator, RefreshControl, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,17 +12,20 @@ const GOLD = '#D4AF37';
 const BG = '#0a0a0a';
 const CARD_BG = '#141414';
 const BORDER = 'rgba(255,255,255,0.07)';
+const INPUT_BG = '#1c1c1c';
 
-const TABS = ['All', 'pending', 'accepted', 'declined'];
+const TABS = ['All', 'pending', 'accepted', 'declined', 'expired'];
 
 const statusStyle = {
-  pending:  { bg: 'rgba(212,175,55,0.08)',   border: 'rgba(212,175,55,0.3)',   text: GOLD,       dot: GOLD, label: 'Pending' },
-  accepted: { bg: 'rgba(74,222,128,0.08)',   border: 'rgba(74,222,128,0.3)',   text: '#4ade80',  dot: '#4ade80', label: 'Accepted' },
-  declined: { bg: 'rgba(248,113,113,0.08)',  border: 'rgba(248,113,113,0.3)',  text: '#f87171',  dot: '#f87171', label: 'Declined' },
+  pending:  { bg: 'rgba(212,175,55,0.08)',   border: 'rgba(212,175,55,0.3)',   text: GOLD,       dot: GOLD, label: 'Pending', icon: 'time-outline' },
+  accepted: { bg: 'rgba(74,222,128,0.08)',   border: 'rgba(74,222,128,0.3)',   text: '#4ade80',  dot: '#4ade80', label: 'Accepted', icon: 'checkmark-circle-outline' },
+  declined: { bg: 'rgba(248,113,113,0.08)',  border: 'rgba(248,113,113,0.3)',  text: '#f87171',  dot: '#f87171', label: 'Declined', icon: 'close-circle-outline' },
+  expired:  { bg: 'rgba(156,163,175,0.08)',  border: 'rgba(156,163,175,0.3)',  text: '#9ca3af',  dot: '#9ca3af', label: 'Expired', icon: 'alert-circle-outline' },
 };
 
 // Helper function to format date
 const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
   const date = new Date(dateString);
   const now = new Date();
   const diffTime = Math.abs(now - date);
@@ -34,6 +37,19 @@ const formatDate = (dateString) => {
   if (diffHours < 48) return 'Yesterday';
   const diffDays = Math.ceil(diffHours / 24);
   return `${diffDays} days ago`;
+};
+
+// Format full date
+const formatFullDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 // Get initials from name
@@ -50,10 +66,13 @@ const getAvatarColor = (name) => {
 
 export default function SentOffersScreen({ onNavigate }) {
   const dispatch = useDispatch();
-  const { sentOffers, isLoading, error } = useSelector((state) => state.offers);
+  const { sentOffers, isLoading } = useSelector((state) => state.offers);
   const { token } = useSelector((state) => state.auth);
   const [activeTab, setActiveTab] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedOffer, setSelectedOffer] = useState(null);
+  const [showOfferModal, setShowOfferModal] = useState(false);
+  const [showFreelancerModal, setShowFreelancerModal] = useState(false);
 
   // Fetch sent offers when screen loads
   useEffect(() => {
@@ -90,27 +109,299 @@ export default function SentOffersScreen({ onNavigate }) {
     return sentOffers.filter((offer) => offer.status === status).length;
   };
 
-  // Handle offer status update (for future use)
-  const handleOfferAction = (offerId, action) => {
+  // Cancel/Withdraw offer
+  const handleCancelOffer = (offerId) => {
     Alert.alert(
-      'Confirm Action',
-      `Are you sure you want to ${action} this offer?`,
+      'Withdraw Offer',
+      'Are you sure you want to withdraw this offer? The freelancer will be notified.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'No, Keep It', style: 'cancel' },
         {
-          text: action.toUpperCase(),
+          text: 'Yes, Withdraw',
+          style: 'destructive',
           onPress: async () => {
             try {
-              const newStatus = action === 'accept' ? 'accepted' : 'declined';
-              await dispatch(updateOfferStatus({ offerId, status: newStatus })).unwrap();
-              Alert.alert('Success', `Offer ${newStatus} successfully`);
+              await dispatch(updateOfferStatus({ offerId, status: 'declined' })).unwrap();
+              Alert.alert('Success', 'Offer has been withdrawn');
               fetchSentOffers();
+              setShowOfferModal(false);
             } catch (error) {
-              Alert.alert('Error', 'Failed to update offer status');
+              Alert.alert('Error', 'Failed to withdraw offer');
             }
           }
         }
       ]
+    );
+  };
+
+  // Resend offer (create new offer)
+  const handleResendOffer = (offer) => {
+    Alert.alert(
+      'Resend Offer',
+      `Would you like to send a new offer to ${offer.freelancer_name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Resend',
+          onPress: () => {
+            onNavigate('SendOffer', { freelancerId: offer.freelancer_id, jobId: offer.job_id });
+          }
+        }
+      ]
+    );
+  };
+
+  // View freelancer profile
+  const handleViewFreelancer = (offer) => {
+    setSelectedOffer(offer);
+    setShowFreelancerModal(true);
+  };
+
+  // Message freelancer
+  const handleMessageFreelancer = (freelancerId) => {
+    onNavigate('Messages', { userId: freelancerId, userRole: 'freelancer' });
+  };
+
+  // View job details
+  const handleViewJob = (jobId) => {
+    setShowOfferModal(false);
+    onNavigate('JobDetails', { jobId });
+  };
+
+  // Offer Details Modal
+  const OfferDetailsModal = () => {
+    if (!selectedOffer) return null;
+    const st = statusStyle[selectedOffer.status] || statusStyle.pending;
+    
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showOfferModal}
+        onRequestClose={() => setShowOfferModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Offer Details</Text>
+              <TouchableOpacity onPress={() => setShowOfferModal(false)}>
+                <Ionicons name="close" size={24} color="rgba(255,255,255,0.7)" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Status Banner */}
+              <View style={[styles.statusBanner, { backgroundColor: st.bg, borderColor: st.border }]}>
+                <Ionicons name={st.icon} size={24} color={st.text} />
+                <Text style={[styles.statusBannerText, { color: st.text }]}>{st.label}</Text>
+              </View>
+
+              {/* Offer Amount */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Offer Amount</Text>
+                <Text style={styles.amountLarge}>₱{selectedOffer.amount?.toLocaleString()}</Text>
+              </View>
+
+              {/* Job Info */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Job Title</Text>
+                <Text style={styles.detailValue}>{selectedOffer.job_title}</Text>
+              </View>
+
+              {/* Message */}
+              {selectedOffer.message && (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailLabel}>Your Message</Text>
+                  <View style={styles.messageCard}>
+                    <Text style={styles.messageValue}>{selectedOffer.message}</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Dates */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Sent Date</Text>
+                <Text style={styles.detailValue}>{formatFullDate(selectedOffer.created_at)}</Text>
+              </View>
+
+              {selectedOffer.expiry_date && (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailLabel}>Expiry Date</Text>
+                  <Text style={[styles.detailValue, { color: selectedOffer.status === 'expired' ? '#f87171' : GOLD }]}>
+                    {formatFullDate(selectedOffer.expiry_date)}
+                    {selectedOffer.status === 'expired' && ' (Expired)'}
+                  </Text>
+                </View>
+              )}
+
+              {selectedOffer.responded_at && (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailLabel}>Response Date</Text>
+                  <Text style={styles.detailValue}>{formatFullDate(selectedOffer.responded_at)}</Text>
+                </View>
+              )}
+
+              {/* Action Buttons */}
+              <View style={styles.modalActions}>
+                {selectedOffer.status === 'pending' && (
+                  <>
+                    <TouchableOpacity 
+                      style={[styles.modalActionBtn, styles.viewFreelancerBtn]}
+                      onPress={() => handleViewFreelancer(selectedOffer)}
+                    >
+                      <Ionicons name="person-outline" size={18} color={GOLD} />
+                      <Text style={styles.viewFreelancerBtnText}>View Freelancer</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.modalActionBtn, styles.viewJobBtn]}
+                      onPress={() => handleViewJob(selectedOffer.job_id)}
+                    >
+                      <Ionicons name="briefcase-outline" size={18} color="#60a5fa" />
+                      <Text style={styles.viewJobBtnText}>View Job</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.modalActionBtn, styles.cancelOfferBtn]}
+                      onPress={() => handleCancelOffer(selectedOffer._id)}
+                    >
+                      <Ionicons name="close-circle-outline" size={18} color="#f87171" />
+                      <Text style={styles.cancelOfferBtnText}>Withdraw Offer</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                
+                {selectedOffer.status === 'expired' && (
+                  <TouchableOpacity 
+                    style={[styles.modalActionBtn, styles.resendOfferBtn]}
+                    onPress={() => handleResendOffer(selectedOffer)}
+                  >
+                    <Ionicons name="refresh-outline" size={18} color={GOLD} />
+                    <Text style={styles.resendOfferBtnText}>Send New Offer</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {(selectedOffer.status === 'accepted' || selectedOffer.status === 'declined') && (
+                  <>
+                    <TouchableOpacity 
+                      style={[styles.modalActionBtn, styles.viewFreelancerBtn]}
+                      onPress={() => handleViewFreelancer(selectedOffer)}
+                    >
+                      <Ionicons name="person-outline" size={18} color={GOLD} />
+                      <Text style={styles.viewFreelancerBtnText}>View Freelancer</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.modalActionBtn, styles.messageFreelancerBtn]}
+                      onPress={() => handleMessageFreelancer(selectedOffer.freelancer_id)}
+                    >
+                      <Ionicons name="chatbubble-outline" size={18} color="#60a5fa" />
+                      <Text style={styles.messageFreelancerBtnText}>Message Freelancer</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Freelancer Profile Modal
+  const FreelancerProfileModal = () => {
+    if (!selectedOffer) return null;
+    const freelancer = selectedOffer;
+    
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showFreelancerModal}
+        onRequestClose={() => setShowFreelancerModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Freelancer Profile</Text>
+              <TouchableOpacity onPress={() => setShowFreelancerModal(false)}>
+                <Ionicons name="close" size={24} color="rgba(255,255,255,0.7)" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Profile Header */}
+              <View style={styles.profileHeader}>
+                <View style={styles.profileAvatar}>
+                  {freelancer.freelancer_profile_picture ? (
+                    <Image source={{ uri: freelancer.freelancer_profile_picture }} style={styles.profileAvatarImage} />
+                  ) : (
+                    <Text style={styles.profileInitials}>
+                      {getInitials(freelancer.freelancer_first_name, freelancer.freelancer_last_name)}
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.profileName}>{freelancer.freelancer_name}</Text>
+                <Text style={styles.profileUsername}>@{freelancer.freelancer_username || 'freelancer'}</Text>
+              </View>
+
+              {/* Skills */}
+              {freelancer.freelancer_skills && freelancer.freelancer_skills.length > 0 && (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailLabel}>Skills</Text>
+                  <View style={styles.skillsContainer}>
+                    {freelancer.freelancer_skills.map((skill, idx) => (
+                      <View key={idx} style={styles.skillChip}>
+                        <Text style={styles.skillChipText}>{skill}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Offer Info */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Offer Details</Text>
+                <View style={styles.offerInfoCard}>
+                  <Text style={styles.offerInfoText}>💰 Amount: ₱{freelancer.amount?.toLocaleString()}</Text>
+                  <Text style={styles.offerInfoText}>📋 Job: {freelancer.job_title}</Text>
+                  <Text style={styles.offerInfoText}>📅 Sent: {formatFullDate(freelancer.created_at)}</Text>
+                  {freelancer.status === 'accepted' && (
+                    <Text style={[styles.offerInfoText, { color: '#4ade80' }]}>✅ Accepted on {formatFullDate(freelancer.responded_at)}</Text>
+                  )}
+                  {freelancer.status === 'declined' && (
+                    <Text style={[styles.offerInfoText, { color: '#f87171' }]}>❌ Declined on {formatFullDate(freelancer.responded_at)}</Text>
+                  )}
+                </View>
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.profileActions}>
+                <TouchableOpacity 
+                  style={[styles.profileActionBtn, styles.messageProfileBtn]}
+                  onPress={() => {
+                    setShowFreelancerModal(false);
+                    handleMessageFreelancer(freelancer.freelancer_id);
+                  }}
+                >
+                  <Ionicons name="chatbubble-outline" size={18} color="#60a5fa" />
+                  <Text style={styles.messageProfileBtnText}>Message Freelancer</Text>
+                </TouchableOpacity>
+                
+                {freelancer.status === 'pending' && (
+                  <TouchableOpacity 
+                    style={[styles.profileActionBtn, styles.withdrawProfileBtn]}
+                    onPress={() => {
+                      setShowFreelancerModal(false);
+                      handleCancelOffer(freelancer._id);
+                    }}
+                  >
+                    <Ionicons name="close-circle-outline" size={18} color="#f87171" />
+                    <Text style={styles.withdrawProfileBtnText}>Withdraw Offer</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     );
   };
 
@@ -151,7 +442,7 @@ export default function SentOffersScreen({ onNavigate }) {
 
       {/* Summary Row */}
       <View style={styles.summaryRow}>
-        {['pending', 'accepted', 'declined'].map((status) => {
+        {['pending', 'accepted', 'declined', 'expired'].map((status) => {
           const count = getCountByStatus(status);
           const st = statusStyle[status];
           return (
@@ -206,7 +497,7 @@ export default function SentOffersScreen({ onNavigate }) {
           </View>
         ) : (
           filteredOffers.map((item) => {
-            const st = statusStyle[item.status];
+            const st = statusStyle[item.status] || statusStyle.pending;
             const avatarColor = getAvatarColor(item.freelancer_name);
             const initials = getInitials(item.freelancer_first_name, item.freelancer_last_name);
             
@@ -216,16 +507,8 @@ export default function SentOffersScreen({ onNavigate }) {
                 style={styles.card} 
                 activeOpacity={0.75}
                 onPress={() => {
-                  // Navigate to offer details or conversation
-                  Alert.alert(
-                    'Offer Details',
-                    `Offer sent to ${item.freelancer_name}\nAmount: ₱${item.amount?.toLocaleString()}\nStatus: ${st.label}`,
-                    [
-                      { text: 'Close', style: 'cancel' },
-                      { text: 'View Job', onPress: () => onNavigate('JobDetails', { jobId: item.job_id }) },
-                      { text: 'Message', onPress: () => onNavigate('Messages', { userId: item.freelancer_id }) }
-                    ]
-                  );
+                  setSelectedOffer(item);
+                  setShowOfferModal(true);
                 }}
               >
                 {/* Avatar */}
@@ -277,13 +560,49 @@ export default function SentOffersScreen({ onNavigate }) {
                     <View style={styles.actionButtons}>
                       <TouchableOpacity 
                         style={[styles.actionBtn, styles.cancelBtn]}
-                        onPress={() => handleOfferAction(item._id, 'decline')}
+                        onPress={() => handleCancelOffer(item._id)}
                       >
-                        <Text style={styles.cancelBtnText}>Cancel</Text>
+                        <Text style={styles.cancelBtnText}>Withdraw</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={[styles.actionBtn, styles.messageBtn]}
-                        onPress={() => onNavigate('Messages', { userId: item.freelancer_id, offerId: item._id })}
+                        onPress={() => handleMessageFreelancer(item.freelancer_id)}
+                      >
+                        <Ionicons name="chatbubble-outline" size={14} color="#fff" />
+                        <Text style={styles.messageBtnText}>Message</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  
+                  {/* Action buttons for expired offers */}
+                  {item.status === 'expired' && (
+                    <View style={styles.actionButtons}>
+                      <TouchableOpacity 
+                        style={[styles.actionBtn, styles.resendActionBtn]}
+                        onPress={() => handleResendOffer(item)}
+                      >
+                        <Ionicons name="refresh-outline" size={14} color={GOLD} />
+                        <Text style={styles.resendActionBtnText}>Send New Offer</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  
+                  {/* Action buttons for accepted/declined offers */}
+                  {(item.status === 'accepted' || item.status === 'declined') && (
+                    <View style={styles.actionButtons}>
+                      <TouchableOpacity 
+                        style={[styles.actionBtn, styles.viewProfileActionBtn]}
+                        onPress={() => {
+                          setSelectedOffer(item);
+                          setShowFreelancerModal(true);
+                        }}
+                      >
+                        <Ionicons name="person-outline" size={14} color={GOLD} />
+                        <Text style={styles.viewProfileActionBtnText}>View Profile</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.actionBtn, styles.messageBtn]}
+                        onPress={() => handleMessageFreelancer(item.freelancer_id)}
                       >
                         <Ionicons name="chatbubble-outline" size={14} color="#fff" />
                         <Text style={styles.messageBtnText}>Message</Text>
@@ -296,6 +615,10 @@ export default function SentOffersScreen({ onNavigate }) {
           })
         )}
       </ScrollView>
+
+      {/* Modals */}
+      <OfferDetailsModal />
+      <FreelancerProfileModal />
     </SafeAreaView>
   );
 }
@@ -457,5 +780,264 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
     color: '#60a5fa',
+  },
+  resendActionBtn: {
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(212,175,55,0.3)',
+  },
+  resendActionBtnText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: GOLD,
+  },
+  viewProfileActionBtn: {
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(212,175,55,0.3)',
+  },
+  viewProfileActionBtnText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: GOLD,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: CARD_BG,
+    borderRadius: 16,
+    width: '100%',
+    maxHeight: '85%',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    margin: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  statusBannerText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  detailSection: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  detailLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.5)',
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#fff',
+  },
+  amountLarge: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: GOLD,
+  },
+  messageCard: {
+    backgroundColor: INPUT_BG,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  messageValue: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    lineHeight: 18,
+  },
+  modalActions: {
+    flexDirection: 'column',
+    gap: 10,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    marginTop: 8,
+  },
+  modalActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  viewFreelancerBtn: {
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.3)',
+  },
+  viewFreelancerBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: GOLD,
+  },
+  viewJobBtn: {
+    backgroundColor: 'rgba(96,165,250,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(96,165,250,0.3)',
+  },
+  viewJobBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#60a5fa',
+  },
+  cancelOfferBtn: {
+    backgroundColor: 'rgba(248,113,113,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.3)',
+  },
+  cancelOfferBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#f87171',
+  },
+  resendOfferBtn: {
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.3)',
+  },
+  resendOfferBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: GOLD,
+  },
+  messageFreelancerBtn: {
+    backgroundColor: 'rgba(96,165,250,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(96,165,250,0.3)',
+  },
+  messageFreelancerBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#60a5fa',
+  },
+  // Freelancer Profile Modal Styles
+  profileHeader: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  profileAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  profileAvatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  profileInitials: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#0a0a0a',
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  profileUsername: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
+  },
+  skillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  skillChip: {
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: 'rgba(212,175,55,0.3)',
+  },
+  skillChipText: {
+    fontSize: 12,
+    color: GOLD,
+  },
+  offerInfoCard: {
+    backgroundColor: INPUT_BG,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    gap: 6,
+  },
+  offerInfoText: {
+    fontSize: 13,
+    color: '#fff',
+  },
+  profileActions: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+  },
+  profileActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  messageProfileBtn: {
+    backgroundColor: 'rgba(96,165,250,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(96,165,250,0.3)',
+  },
+  messageProfileBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#60a5fa',
+  },
+  withdrawProfileBtn: {
+    backgroundColor: 'rgba(248,113,113,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.3)',
+  },
+  withdrawProfileBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#f87171',
   },
 });
