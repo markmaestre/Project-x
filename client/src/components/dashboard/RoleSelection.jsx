@@ -9,159 +9,212 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+const GREEN       = '#4ADE80';
+const GREEN_DARK  = '#22C55E';
+const GREEN_SOFT  = '#DCFCE7';
+const GREEN_MID   = '#86EFAC';
+const WHITE       = '#FFFFFF';
+const OFF_WHITE   = '#F0FDF4';
+const BORDER      = 'rgba(74,222,128,0.25)';
+const TEXT_MAIN   = '#0F2417';
+const TEXT_MUTED  = '#6B7280';
+const TEXT_LIGHT  = '#9CA3AF';
+
 export default function RoleSelection({ onNavigate }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
       <View style={styles.container}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => onNavigate('Home')}
-        >
-          <Ionicons name="arrow-back" size={24} color="#D4AF37" />
+
+        {/* Back */}
+        <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('Login')}>
+          <View style={styles.backIconWrap}>
+            <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+          </View>
         </TouchableOpacity>
 
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoBox}>
-            <Text style={styles.logoLetter}>X</Text>
+            <Text style={styles.logoLetter}>T</Text>
           </View>
-          <Text style={styles.title}>Join Project X</Text>
+          <Text style={styles.title}>Join Taskra</Text>
           <Text style={styles.subtitle}>Choose how you want to use the platform</Text>
         </View>
 
+        {/* Freelancer Card */}
         <TouchableOpacity
           style={styles.roleCard}
           onPress={() => onNavigate('FreelancerRegistration')}
           activeOpacity={0.85}
         >
-          <View style={styles.roleIconContainer}>
-            <Ionicons name="briefcase-outline" size={40} color="#D4AF37" />
+          <View style={styles.roleCardInner}>
+            <View style={styles.roleIconContainer}>
+              <Ionicons name="briefcase-outline" size={28} color={GREEN_DARK} />
+            </View>
+            <View style={styles.roleInfo}>
+              <Text style={styles.roleTitle}>I'm a Freelancer</Text>
+              <Text style={styles.roleDescription}>
+                Find work, submit proposals, and get paid for your skills
+              </Text>
+            </View>
+            <View style={styles.chevronWrap}>
+              <Ionicons name="arrow-forward" size={16} color={GREEN_DARK} />
+            </View>
           </View>
-          <View style={styles.roleInfo}>
-            <Text style={styles.roleTitle}>I'm a Freelancer</Text>
-            <Text style={styles.roleDescription}>
-              Find work, submit proposals, and get paid for your skills
-            </Text>
+
+          {/* Tags */}
+          <View style={styles.tagRow}>
+            {['Find Jobs', 'Get Paid', 'Build Portfolio'].map((t) => (
+              <View key={t} style={styles.tag}>
+                <Text style={styles.tagText}>{t}</Text>
+              </View>
+            ))}
           </View>
-          <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.3)" />
         </TouchableOpacity>
 
+        {/* Client Card */}
         <TouchableOpacity
           style={styles.roleCard}
           onPress={() => onNavigate('ClientRegistration')}
           activeOpacity={0.85}
         >
-          <View style={styles.roleIconContainer}>
-            <Ionicons name="people-outline" size={40} color="#D4AF37" />
+          <View style={styles.roleCardInner}>
+            <View style={styles.roleIconContainer}>
+              <Ionicons name="people-outline" size={28} color={GREEN_DARK} />
+            </View>
+            <View style={styles.roleInfo}>
+              <Text style={styles.roleTitle}>I'm a Client</Text>
+              <Text style={styles.roleDescription}>
+                Post projects, hire talent, and manage your team
+              </Text>
+            </View>
+            <View style={styles.chevronWrap}>
+              <Ionicons name="arrow-forward" size={16} color={GREEN_DARK} />
+            </View>
           </View>
-          <View style={styles.roleInfo}>
-            <Text style={styles.roleTitle}>I'm a Client</Text>
-            <Text style={styles.roleDescription}>
-              Post projects, hire talent, and manage your team
-            </Text>
+
+          {/* Tags */}
+          <View style={styles.tagRow}>
+            {['Post Jobs', 'Hire Talent', 'Manage Team'].map((t) => (
+              <View key={t} style={styles.tag}>
+                <Text style={styles.tagText}>{t}</Text>
+              </View>
+            ))}
           </View>
-          <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.3)" />
         </TouchableOpacity>
 
+        {/* Info strip */}
+        <View style={styles.infoStrip}>
+          <Ionicons name="shield-checkmark-outline" size={14} color={GREEN_DARK} />
+          <Text style={styles.infoText}>Free to join · No hidden fees · Secure payments</Text>
+        </View>
+
+        {/* Login prompt */}
         <View style={styles.loginPrompt}>
           <Text style={styles.loginPromptText}>Already have an account?</Text>
           <TouchableOpacity onPress={() => onNavigate('Login')}>
             <Text style={styles.loginPromptLink}> Sign In</Text>
           </TouchableOpacity>
         </View>
+
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
+  safe: { flex: 1, backgroundColor: OFF_WHITE },
+  container: { flex: 1, padding: 24 },
+
+  // Back
+  backButton: { marginBottom: 24, alignSelf: 'flex-start' },
+  backIconWrap: {
+    width: 38, height: 38,
+    backgroundColor: WHITE,
+    borderRadius: 11,
+    borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
-  container: {
-    flex: 1,
-    padding: 24,
-  },
-  backButton: {
-    marginBottom: 32,
-    width: 40,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 48,
-  },
+
+  // Header
+  header: { alignItems: 'center', marginBottom: 36 },
   logoBox: {
-    width: 60,
-    height: 60,
-    backgroundColor: '#D4AF37',
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
+    width: 68, height: 68,
+    backgroundColor: GREEN,
+    borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 18,
+    shadowColor: GREEN_DARK,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
   },
-  logoLetter: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0a0a0a',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
-    textAlign: 'center',
-  },
+  logoLetter: { fontSize: 32, fontWeight: '800', color: WHITE },
+  title: { fontSize: 26, fontWeight: '700', color: TEXT_MAIN, marginBottom: 6, letterSpacing: -0.3 },
+  subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center' },
+
+  // Role cards
   roleCard: {
+    backgroundColor: WHITE,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  },
+  roleCardInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111111',
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.2)',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   roleIconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(212,175,55,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
+    width: 52, height: 52,
+    borderRadius: 14,
+    backgroundColor: GREEN_SOFT,
+    borderWidth: 1, borderColor: GREEN_MID,
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 14,
   },
-  roleInfo: {
-    flex: 1,
+  roleInfo: { flex: 1 },
+  roleTitle: { fontSize: 16, fontWeight: '700', color: TEXT_MAIN, marginBottom: 3 },
+  roleDescription: { fontSize: 12, color: TEXT_MUTED, lineHeight: 18 },
+  chevronWrap: {
+    width: 30, height: 30,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
   },
-  roleTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
-    marginBottom: 4,
+
+  // Tags
+  tagRow: { flexDirection: 'row', gap: 8 },
+  tag: {
+    paddingVertical: 4, paddingHorizontal: 10,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 999,
+    borderWidth: 1, borderColor: GREEN_MID,
   },
-  roleDescription: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
-    lineHeight: 18,
+  tagText: { fontSize: 10, color: GREEN_DARK, fontWeight: '600' },
+
+  // Info strip
+  infoStrip: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, marginTop: 8, marginBottom: 4,
+    paddingVertical: 10, paddingHorizontal: 16,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 12, borderWidth: 1, borderColor: GREEN_MID,
   },
+  infoText: { fontSize: 12, color: GREEN_DARK, fontWeight: '500' },
+
+  // Login prompt
   loginPrompt: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 32,
-    paddingVertical: 16,
+    flexDirection: 'row', justifyContent: 'center',
+    marginTop: 24, paddingVertical: 8,
   },
-  loginPromptText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
-  },
-  loginPromptLink: {
-    fontSize: 14,
-    color: '#D4AF37',
-    fontWeight: '600',
-  },
+  loginPromptText: { fontSize: 14, color: TEXT_MUTED },
+  loginPromptLink: { fontSize: 14, color: GREEN_DARK, fontWeight: '700' },
 });

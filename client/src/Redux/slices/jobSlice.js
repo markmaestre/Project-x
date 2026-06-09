@@ -1,16 +1,13 @@
-// store/slices/jobSlice.js
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../services/api';
 
-// Helper function to create FormData for job posting with arrays
+
 const createJobFormData = (jobData) => {
   const formData = new FormData();
   
   Object.keys(jobData).forEach(key => {
     if (jobData[key] !== null && jobData[key] !== undefined && jobData[key] !== '') {
-      if (key === 'required_skills' && Array.isArray(jobData[key]) && jobData[key].length > 0) {
-        formData.append(key, JSON.stringify(jobData[key]));
-      } else if (typeof jobData[key] === 'object' && !(jobData[key] instanceof File)) {
+      if (typeof jobData[key] === 'object' && !(jobData[key] instanceof File)) {
         formData.append(key, JSON.stringify(jobData[key]));
       } else {
         formData.append(key, String(jobData[key]));
@@ -33,27 +30,13 @@ export const createJob = createAsyncThunk(
         return rejectWithValue({ message: 'No token found' });
       }
 
-      let response;
-      
-      // Use '/jobs' because baseURL already includes '/api'
-      const endpoint = '/jobs';
-      
-      if (jobData.required_skills && Array.isArray(jobData.required_skills) && jobData.required_skills.length > 0) {
-        const formData = createJobFormData(jobData);
-        response = await api.post(endpoint, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            Authorization: `Bearer ${token}`
-          },
-        });
-      } else {
-        response = await api.post(endpoint, jobData, {
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-      }
+      const formData = createJobFormData(jobData);
+      const response = await api.post('/jobs', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${token}`
+        },
+      });
       
       return response.data;
     } catch (error) {
@@ -134,6 +117,28 @@ export const getJobById = createAsyncThunk(
   }
 );
 
+// Get job insights (NEW)
+export const getJobInsights = createAsyncThunk(
+  'jobs/getJobInsights',
+  async (jobId, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.get(`/jobs/${jobId}/insights`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Get job insights error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
 // Update job (Client only)
 export const updateJob = createAsyncThunk(
   'jobs/updateJob',
@@ -144,24 +149,13 @@ export const updateJob = createAsyncThunk(
         return rejectWithValue({ message: 'No token found' });
       }
 
-      let response;
-      
-      if (jobData.required_skills && Array.isArray(jobData.required_skills)) {
-        const formData = createJobFormData(jobData);
-        response = await api.put(`/jobs/${jobId}`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            Authorization: `Bearer ${token}`
-          },
-        });
-      } else {
-        response = await api.put(`/jobs/${jobId}`, jobData, {
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-      }
+      const formData = createJobFormData(jobData);
+      const response = await api.put(`/jobs/${jobId}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${token}`
+        },
+      });
       
       return response.data;
     } catch (error) {
@@ -221,7 +215,7 @@ export const deleteJob = createAsyncThunk(
   }
 );
 
-// Increment applicants count (when freelancer applies)
+// Increment applicants count
 export const incrementApplicants = createAsyncThunk(
   'jobs/incrementApplicants',
   async (jobId, { getState, rejectWithValue }) => {
@@ -265,7 +259,7 @@ export const getJobStats = createAsyncThunk(
   }
 );
 
-// Search jobs (for freelancers)
+// Search jobs
 export const searchJobs = createAsyncThunk(
   'jobs/searchJobs',
   async ({ searchTerm, filters = {} }, { getState, rejectWithValue }) => {
@@ -301,6 +295,11 @@ const initialState = {
     totalPages: 1,
     currentPage: 1,
   },
+  insights: {
+    data: null,
+    isLoading: false,
+    error: null,
+  },
   stats: {
     totalJobs: 0,
     openJobs: 0,
@@ -308,6 +307,7 @@ const initialState = {
     completedJobs: 0,
     cancelledJobs: 0,
     totalApplicants: 0,
+    jobsByType: {},
     isLoading: false,
     error: null,
   },
@@ -320,6 +320,10 @@ const initialState = {
     max_budget: null,
     skills: null,
     urgency_level: null,
+    city: null,
+    specific_area: null,
+    min_experience: null,
+    degree_required: null,
   },
   createJobSuccess: false,
   updateJobSuccess: false,
@@ -334,6 +338,7 @@ const jobSlice = createSlice({
     clearJobError: (state) => {
       state.jobs.error = null;
       state.stats.error = null;
+      state.insights.error = null;
     },
     clearJobSuccess: (state) => {
       state.createJobSuccess = false;
@@ -345,6 +350,7 @@ const jobSlice = createSlice({
     },
     clearSelectedJob: (state) => {
       state.jobs.selectedJob = null;
+      state.insights.data = null;
     },
     setJobFilters: (state, action) => {
       state.filters = { ...state.filters, ...action.payload };
@@ -359,6 +365,10 @@ const jobSlice = createSlice({
       state.jobs.totalCount = 0;
       state.jobs.totalPages = 1;
       state.jobs.currentPage = 1;
+    },
+    clearInsights: (state) => {
+      state.insights.data = null;
+      state.insights.error = null;
     },
   },
   extraReducers: (builder) => {
@@ -430,6 +440,20 @@ const jobSlice = createSlice({
       .addCase(getJobById.rejected, (state, action) => {
         state.jobs.isLoading = false;
         state.jobs.error = action.payload;
+      })
+      
+      // Get Job Insights (NEW)
+      .addCase(getJobInsights.pending, (state) => {
+        state.insights.isLoading = true;
+        state.insights.error = null;
+      })
+      .addCase(getJobInsights.fulfilled, (state, action) => {
+        state.insights.isLoading = false;
+        state.insights.data = action.payload.insights;
+      })
+      .addCase(getJobInsights.rejected, (state, action) => {
+        state.insights.isLoading = false;
+        state.insights.error = action.payload;
       })
       
       // Update Job
@@ -538,6 +562,7 @@ const jobSlice = createSlice({
         state.stats.completedJobs = action.payload.completedJobs || 0;
         state.stats.cancelledJobs = action.payload.cancelledJobs || 0;
         state.stats.totalApplicants = action.payload.totalApplicants || 0;
+        state.stats.jobsByType = action.payload.jobsByType || {};
       })
       .addCase(getJobStats.rejected, (state, action) => {
         state.stats.isLoading = false;
@@ -572,6 +597,7 @@ export const {
   setJobFilters,
   clearJobFilters,
   clearJobs,
+  clearInsights,
 } = jobSlice.actions;
 
 // Export selectors
@@ -583,5 +609,6 @@ export const selectJobsError = (state) => state.jobs.jobs.error;
 export const selectJobsTotalCount = (state) => state.jobs.jobs.totalCount;
 export const selectJobStats = (state) => state.jobs.stats;
 export const selectJobFilters = (state) => state.jobs.filters;
+export const selectJobInsights = (state) => state.jobs.insights;
 
 export default jobSlice.reducer;

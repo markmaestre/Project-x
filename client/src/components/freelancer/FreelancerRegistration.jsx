@@ -12,12 +12,28 @@ import {
   Platform,
   ScrollView,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import * as ImagePicker from 'react-native-image-picker';
 import { registerFreelancer, clearError } from '../../Redux/slices/authSlice';
+
+// ── Design tokens (matches ClientRegistration) ──────────────────────────────────
+const GREEN      = '#4ADE80';
+const GREEN_DARK = '#22C55E';
+const GREEN_SOFT = '#DCFCE7';
+const GREEN_MID  = '#86EFAC';
+const WHITE      = '#FFFFFF';
+const OFF_WHITE  = '#F0FDF4';
+const BORDER     = 'rgba(74,222,128,0.25)';
+const TEXT_MAIN  = '#0F2417';
+const TEXT_MUTED = '#6B7280';
+const TEXT_LIGHT = '#9CA3AF';
+const ERROR      = '#EF4444';
+const ERROR_BG   = 'rgba(239,68,68,0.08)';
+const ERROR_BORDER = 'rgba(239,68,68,0.3)';
 
 export default function FreelancerRegistration({ onNavigate }) {
   const dispatch = useDispatch();
@@ -26,6 +42,7 @@ export default function FreelancerRegistration({ onNavigate }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [profilePicture, setProfilePicture] = useState(null);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -116,26 +133,23 @@ export default function FreelancerRegistration({ onNavigate }) {
   };
 
   const handleRegister = async () => {
-    // Clear previous server error
     setServerError(null);
     
-    // Validate form first
     if (!validateForm()) {
       if (scrollViewRef.current) {
         scrollViewRef.current.scrollTo({ y: 0, animated: true });
       }
-      Alert.alert('Validation Error', 'Please check all required fields and fix the errors.', [{ text: 'OK' }]);
+      Alert.alert('Check your details', 'Please fix the highlighted fields before continuing.', [{ text: 'OK' }]);
       return;
     }
     
-    // IMPORTANT: Keep confirm_password for backend validation
     const userData = {
       first_name: formData.first_name,
       last_name: formData.last_name,
       username: formData.username,
       email_address: formData.email_address,
       password: formData.password,
-      confirm_password: formData.confirm_password, // INCLUDE THIS!
+      confirm_password: formData.confirm_password,
       phone_number: formData.phone_number || null,
       country: formData.country || null,
       city: formData.city || null,
@@ -152,7 +166,6 @@ export default function FreelancerRegistration({ onNavigate }) {
       terms_accepted: true,
     };
     
-    // Add profile picture if selected
     if (profilePicture) {
       userData.profile_picture = {
         uri: profilePicture.uri,
@@ -161,38 +174,18 @@ export default function FreelancerRegistration({ onNavigate }) {
       };
     }
     
-    console.log('Sending freelancer data with confirm_password:', {
-      ...userData,
-      password: '***',
-      confirm_password: '***'
-    });
-    
     const result = await dispatch(registerFreelancer(userData));
     
     if (registerFreelancer.fulfilled.match(result)) {
-      // Success - Ask if user wants to continue to login
       Alert.alert(
-        'Registration Successful! 🎉',
-        `${result.payload.message || 'Your freelancer account has been created successfully!'}\n\nWould you like to continue to login?`,
+        'Account Created! 🎉',
+        result.payload.message || 'Your freelancer account is ready.',
         [
-          { 
-            text: 'No, Stay Here', 
-            onPress: () => {
-              Alert.alert('Stay on Registration', 'You can review your information or create another account.', [{ text: 'OK' }]);
-            },
-            style: 'cancel'
-          },
-          { 
-            text: 'Yes, Continue to Login', 
-            onPress: () => {
-              resetForm();
-              onNavigate('Login');
-            }
-          }
+          { text: 'Stay Here', style: 'cancel' },
+          { text: 'Sign In', onPress: () => { resetForm(); onNavigate('Login'); } },
         ]
       );
     } else if (registerFreelancer.rejected.match(result)) {
-      // Show error but stay on page - DO NOT NAVIGATE AWAY
       const errorMessage = result.payload?.message || 'Something went wrong. Please try again.';
       setServerError(errorMessage);
       
@@ -200,20 +193,12 @@ export default function FreelancerRegistration({ onNavigate }) {
         scrollViewRef.current.scrollTo({ y: 0, animated: true });
       }
       
-      // Show specific error based on what went wrong
       if (errorMessage.toLowerCase().includes('email already exists')) {
         setErrors(prev => ({ ...prev, email_address: 'This email is already registered' }));
-        Alert.alert('Registration Failed', 'This email address is already registered. Please use a different email or login.', [{ text: 'OK' }]);
       } else if (errorMessage.toLowerCase().includes('username already taken')) {
         setErrors(prev => ({ ...prev, username: 'Username is already taken' }));
-        Alert.alert('Registration Failed', 'This username is already taken. Please choose a different username.', [{ text: 'OK' }]);
       } else if (errorMessage.toLowerCase().includes('confirm password') || errorMessage.toLowerCase().includes('passwords do not match')) {
         setErrors(prev => ({ ...prev, confirm_password: 'Passwords do not match' }));
-        Alert.alert('Registration Failed', 'Passwords do not match. Please make sure both passwords are the same.', [{ text: 'OK' }]);
-      } else if (errorMessage.toLowerCase().includes('password')) {
-        Alert.alert('Registration Failed', 'There was an issue with your password. Please check the requirements.', [{ text: 'OK' }]);
-      } else {
-        Alert.alert('Registration Failed', errorMessage, [{ text: 'OK' }]);
       }
     }
   };
@@ -246,352 +231,516 @@ export default function FreelancerRegistration({ onNavigate }) {
     setServerError(null);
   };
 
+  const handleAcceptTerms = () => {
+    setFormData(prev => ({ ...prev, terms_accepted: true }));
+    setShowTermsModal(false);
+  };
+
   React.useEffect(() => {
     return () => {
       dispatch(clearError());
     };
   }, []);
 
+  // Helper function to update form data
+  const updateField = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }));
+    if (serverError) setServerError(null);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
+
+      {/* Terms and Conditions Modal */}
+      <Modal
+        visible={showTermsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTermsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Terms and Conditions</Text>
+              <TouchableOpacity 
+                onPress={() => setShowTermsModal(false)}
+                style={styles.modalClose}
+              >
+                <Ionicons name="close" size={24} color={TEXT_MUTED} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent}>
+              <Text style={styles.termsText}>
+                <Text style={styles.termsHeading}>1. Acceptance of Terms{'\n\n'}</Text>
+                By registering as a Freelancer on Taskra, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our platform.
+
+                {'\n\n'}<Text style={styles.termsHeading}>2. Freelancer Responsibilities{'\n\n'}</Text>
+                • You agree to provide accurate and complete information when creating your account.
+                • You are responsible for maintaining the confidentiality of your account credentials.
+                • You agree to deliver quality work within agreed timelines.
+                • You will not submit false or misleading proposals.
+
+                {'\n\n'}<Text style={styles.termsHeading}>3. Payment Terms{'\n\n'}</Text>
+                • Taskra facilitates secure payments between clients and freelancers.
+                • A service fee may be deducted from each completed transaction.
+                • You must submit accurate invoices for work completed.
+                • Disputes will be reviewed by our team and resolved fairly.
+
+                {'\n\n'}<Text style={styles.termsHeading}>4. Work Guidelines{'\n\n'}</Text>
+                • All work must be original and not plagiarized.
+                • Deliverables must meet the agreed specifications.
+                • Communicate clearly and professionally with clients.
+                • Respect intellectual property rights and confidentiality.
+
+                {'\n\n'}<Text style={styles.termsHeading}>5. Code of Conduct{'\n\n'}</Text>
+                • Treat clients with respect and professionalism.
+                • Provide accurate time estimates and updates.
+                • Do not share client confidential information.
+                • Report any violations or suspicious activities.
+
+                {'\n\n'}<Text style={styles.termsHeading}>6. Account Termination{'\n\n'}</Text>
+                Taskra reserves the right to suspend or terminate accounts that violate these terms, deliver poor quality work, or harm the platform's integrity.
+
+                {'\n\n'}<Text style={styles.termsHeading}>7. Privacy Policy{'\n\n'}</Text>
+                Your personal information is protected according to our Privacy Policy. Your profile information will be visible to potential clients.
+
+                {'\n\n'}<Text style={styles.termsHeading}>8. Limitation of Liability{'\n\n'}</Text>
+                Taskra acts as an intermediary and is not responsible for disputes between parties. We provide dispute resolution services but do not guarantee outcomes.
+
+                {'\n\n'}<Text style={styles.termsHeading}>9. Modifications{'\n\n'}</Text>
+                We may update these terms from time to time. Continued use of the platform constitutes acceptance of modified terms.
+
+                {'\n\n'}<Text style={styles.termsHeading}>10. Contact Information{'\n\n'}</Text>
+                For questions about these terms, contact us at: support@taskra.com
+
+                {'\n\n'}<Text style={styles.termsEffective}>Effective Date: January 1, 2024</Text>
+              </Text>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.modalButtonCancel}
+                onPress={() => setShowTermsModal(false)}
+              >
+                <Text style={styles.modalButtonCancelText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalButtonAccept}
+                onPress={handleAcceptTerms}
+              >
+                <Text style={styles.modalButtonAcceptText}>Accept Terms</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        style={styles.flex}
+      >
         <ScrollView 
           ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scroll}
         >
           <View style={styles.container}>
-            <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('RoleSelection')}>
-              <Ionicons name="arrow-back" size={24} color="#D4AF37" />
+            {/* Back Button */}
+            <TouchableOpacity 
+              style={styles.backButton} 
+              onPress={() => onNavigate('RoleSelection')}
+            >
+              <View style={styles.backIconWrap}>
+                <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+              </View>
             </TouchableOpacity>
 
+            {/* Header */}
             <View style={styles.header}>
               <View style={styles.roleBadge}>
-                <Ionicons name="briefcase-outline" size={20} color="#D4AF37" />
+                <Ionicons name="briefcase-outline" size={16} color={GREEN_DARK} />
                 <Text style={styles.roleBadgeText}>Freelancer Registration</Text>
               </View>
-              <Text style={styles.title}>Start Your Freelance Journey</Text>
-              <Text style={styles.subtitle}>Showcase your skills and find great opportunities</Text>
+              <Text style={styles.title}>Start Your{'\n'}Freelance Journey</Text>
+              <Text style={styles.subtitle}>
+                Showcase your skills and find great opportunities
+              </Text>
             </View>
 
             {/* Server Error Display */}
             {serverError && (
               <View style={styles.serverErrorContainer}>
-                <Ionicons name="alert-circle" size={20} color="#ff6b6b" />
+                <View style={styles.serverErrorIcon}>
+                  <Ionicons name="alert-circle" size={18} color={ERROR} />
+                </View>
                 <Text style={styles.serverErrorText}>{serverError}</Text>
               </View>
             )}
 
             <View style={styles.form}>
               {/* Profile Picture Section */}
-              <View style={styles.profileSection}>
-                <TouchableOpacity onPress={handleImagePick} style={styles.profileImageContainer}>
-                  {profilePicture ? (
-                    <Image source={{ uri: profilePicture.uri }} style={styles.profileImage} />
-                  ) : (
-                    <View style={styles.profilePlaceholder}>
-                      <Ionicons name="camera-outline" size={40} color="#D4AF37" />
-                      <Text style={styles.profilePlaceholderText}>Add Photo</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-                <Text style={styles.profileHint}>Tap to add profile picture (optional)</Text>
-              </View>
-
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.label}>First Name *</Text>
-                  <TextInput
-                    style={[styles.input, errors.first_name && styles.inputError]}
-                    placeholder="First name"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    value={formData.first_name}
-                    onChangeText={(text) => {
-                      setFormData({ ...formData, first_name: text });
-                      if (errors.first_name) setErrors({ ...errors, first_name: null });
-                      if (serverError) setServerError(null);
-                    }}
-                  />
-                  {errors.first_name && <Text style={styles.errorText}>{errors.first_name}</Text>}
-                </View>
-                <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                  <Text style={styles.label}>Last Name *</Text>
-                  <TextInput
-                    style={[styles.input, errors.last_name && styles.inputError]}
-                    placeholder="Last name"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    value={formData.last_name}
-                    onChangeText={(text) => {
-                      setFormData({ ...formData, last_name: text });
-                      if (errors.last_name) setErrors({ ...errors, last_name: null });
-                      if (serverError) setServerError(null);
-                    }}
-                  />
-                  {errors.last_name && <Text style={styles.errorText}>{errors.last_name}</Text>}
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Username *</Text>
-                <TextInput
-                  style={[styles.input, errors.username && styles.inputError]}
-                  placeholder="Choose a username"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  autoCapitalize="none"
-                  value={formData.username}
-                  onChangeText={(text) => {
-                    setFormData({ ...formData, username: text.toLowerCase().replace(/\s/g, '') });
-                    if (errors.username) setErrors({ ...errors, username: null });
-                    if (serverError) setServerError(null);
-                  }}
-                />
-                {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email Address *</Text>
-                <TextInput
-                  style={[styles.input, errors.email_address && styles.inputError]}
-                  placeholder="Email address"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={formData.email_address}
-                  onChangeText={(text) => {
-                    setFormData({ ...formData, email_address: text });
-                    if (errors.email_address) setErrors({ ...errors, email_address: null });
-                    if (serverError) setServerError(null);
-                  }}
-                />
-                {errors.email_address && <Text style={styles.errorText}>{errors.email_address}</Text>}
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Phone Number</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Phone number (optional)"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  keyboardType="phone-pad"
-                  value={formData.phone_number}
-                  onChangeText={(text) => setFormData({ ...formData, phone_number: text })}
-                />
-              </View>
-
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.label}>Country</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Country"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    value={formData.country}
-                    onChangeText={(text) => setFormData({ ...formData, country: text })}
-                  />
-                </View>
-                <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                  <Text style={styles.label}>City</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="City"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    value={formData.city}
-                    onChangeText={(text) => setFormData({ ...formData, city: text })}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Address</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Your street address (optional)"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  multiline
-                  numberOfLines={3}
-                  value={formData.address}
-                  onChangeText={(text) => setFormData({ ...formData, address: text })}
-                />
-                <Text style={styles.hintText}>Enter your complete address (optional)</Text>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Skills (comma-separated)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., React Native, Node.js, UI/UX Design"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  value={formData.skills}
-                  onChangeText={(text) => setFormData({ ...formData, skills: text })}
-                />
-                <Text style={styles.hintText}>Separate multiple skills with commas</Text>
-              </View>
-
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.label}>Experience Level</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g., Entry, Junior, Mid, Senior"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    value={formData.experience_level}
-                    onChangeText={(text) => setFormData({ ...formData, experience_level: text })}
-                  />
-                </View>
-                <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                  <Text style={styles.label}>Years of Experience</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Years"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    keyboardType="numeric"
-                    value={formData.years_of_experience}
-                    onChangeText={(text) => setFormData({ ...formData, years_of_experience: text })}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.label}>Hourly Rate (PHP)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Hourly rate"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    keyboardType="numeric"
-                    value={formData.hourly_rate}
-                    onChangeText={(text) => setFormData({ ...formData, hourly_rate: text })}
-                  />
-                </View>
-                <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                  <Text style={styles.label}>Fixed Rate (PHP)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Fixed rate"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    keyboardType="numeric"
-                    value={formData.fixed_rate}
-                    onChangeText={(text) => setFormData({ ...formData, fixed_rate: text })}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Portfolio URL</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="https://your-portfolio.com"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  autoCapitalize="none"
-                  value={formData.portfolio_link}
-                  onChangeText={(text) => setFormData({ ...formData, portfolio_link: text })}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Bio / About Me</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Tell us about yourself, your expertise, and what makes you unique..."
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  multiline
-                  numberOfLines={4}
-                  value={formData.bio_about_me}
-                  onChangeText={(text) => setFormData({ ...formData, bio_about_me: text })}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Languages (comma-separated)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., English, Filipino, Spanish"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  value={formData.languages}
-                  onChangeText={(text) => setFormData({ ...formData, languages: text })}
-                />
-                <Text style={styles.hintText}>Separate multiple languages with commas</Text>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Certifications (comma-separated)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., AWS Certified, Google UX Certificate"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  value={formData.certifications}
-                  onChangeText={(text) => setFormData({ ...formData, certifications: text })}
-                />
-                <Text style={styles.hintText}>Separate multiple certifications with commas</Text>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Password *</Text>
-                <View style={styles.passwordContainer}>
-                  <TextInput
-                    style={[styles.input, styles.passwordInput, errors.password && styles.inputError]}
-                    placeholder="Password (min. 6 characters)"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    secureTextEntry={!showPassword}
-                    value={formData.password}
-                    onChangeText={(text) => {
-                      setFormData({ ...formData, password: text });
-                      if (errors.password) setErrors({ ...errors, password: null });
-                      if (errors.confirm_password && formData.confirm_password === text) {
-                        setErrors({ ...errors, confirm_password: null });
-                      }
-                      if (serverError) setServerError(null);
-                    }}
-                  />
-                  <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
-                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="rgba(255,255,255,0.5)" />
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Profile Photo</Text>
+                <View style={styles.photoRow}>
+                  <TouchableOpacity onPress={handleImagePick} style={styles.photoButton} activeOpacity={0.8}>
+                    {profilePicture ? (
+                      <Image source={{ uri: profilePicture.uri }} style={styles.photoImage} />
+                    ) : (
+                      <View style={styles.photoPlaceholder}>
+                        <Ionicons name="camera-outline" size={26} color={GREEN_DARK} />
+                      </View>
+                    )}
                   </TouchableOpacity>
+                  <View style={styles.photoMeta}>
+                    <Text style={styles.photoTitle}>
+                      {profilePicture ? 'Photo selected' : 'Add a profile photo'}
+                    </Text>
+                    <Text style={styles.photoHint}>Optional · JPG or PNG</Text>
+                    {profilePicture && (
+                      <TouchableOpacity onPress={() => setProfilePicture(null)}>
+                        <Text style={styles.photoRemove}>Remove</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-                {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Confirm Password *</Text>
-                <View style={styles.passwordContainer}>
+              {/* Section: Personal Info */}
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Personal Info</Text>
+
+                <View style={styles.row}>
+                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                    <Text style={styles.label}>First Name <Text style={styles.required}>*</Text></Text>
+                    <TextInput
+                      style={[styles.input, errors.first_name && styles.inputError]}
+                      placeholder="First name"
+                      placeholderTextColor={TEXT_LIGHT}
+                      value={formData.first_name}
+                      onChangeText={(text) => updateField('first_name', text)}
+                    />
+                    {errors.first_name && <Text style={styles.fieldErrorText}>{errors.first_name}</Text>}
+                  </View>
+                  
+                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                    <Text style={styles.label}>Last Name <Text style={styles.required}>*</Text></Text>
+                    <TextInput
+                      style={[styles.input, errors.last_name && styles.inputError]}
+                      placeholder="Last name"
+                      placeholderTextColor={TEXT_LIGHT}
+                      value={formData.last_name}
+                      onChangeText={(text) => updateField('last_name', text)}
+                    />
+                    {errors.last_name && <Text style={styles.fieldErrorText}>{errors.last_name}</Text>}
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Username <Text style={styles.required}>*</Text></Text>
                   <TextInput
-                    style={[styles.input, styles.passwordInput, errors.confirm_password && styles.inputError]}
-                    placeholder="Confirm password"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    secureTextEntry={!showConfirmPassword}
-                    value={formData.confirm_password}
-                    onChangeText={(text) => {
-                      setFormData({ ...formData, confirm_password: text });
-                      if (errors.confirm_password) setErrors({ ...errors, confirm_password: null });
-                      if (serverError) setServerError(null);
-                    }}
+                    style={[styles.input, errors.username && styles.inputError]}
+                    placeholder="Choose a username"
+                    placeholderTextColor={TEXT_LIGHT}
+                    autoCapitalize="none"
+                    value={formData.username}
+                    onChangeText={(text) => updateField('username', text.toLowerCase().replace(/\s/g, ''))}
                   />
-                  <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                    <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="rgba(255,255,255,0.5)" />
-                  </TouchableOpacity>
+                  {errors.username && <Text style={styles.fieldErrorText}>{errors.username}</Text>}
                 </View>
-                {errors.confirm_password && <Text style={styles.errorText}>{errors.confirm_password}</Text>}
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Email Address <Text style={styles.required}>*</Text></Text>
+                  <TextInput
+                    style={[styles.input, errors.email_address && styles.inputError]}
+                    placeholder="you@example.com"
+                    placeholderTextColor={TEXT_LIGHT}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={formData.email_address}
+                    onChangeText={(text) => updateField('email_address', text)}
+                  />
+                  {errors.email_address && <Text style={styles.fieldErrorText}>{errors.email_address}</Text>}
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Phone Number</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="+63 (optional)"
+                    placeholderTextColor={TEXT_LIGHT}
+                    keyboardType="phone-pad"
+                    value={formData.phone_number}
+                    onChangeText={(text) => updateField('phone_number', text)}
+                  />
+                </View>
               </View>
 
-              <TouchableOpacity 
-                style={styles.checkboxContainer}
-                onPress={() => setFormData({ ...formData, terms_accepted: !formData.terms_accepted })}>
+              {/* Section: Location */}
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Location</Text>
+
+                <View style={styles.row}>
+                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                    <Text style={styles.label}>Country</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Country"
+                      placeholderTextColor={TEXT_LIGHT}
+                      value={formData.country}
+                      onChangeText={(text) => updateField('country', text)}
+                    />
+                  </View>
+                  
+                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                    <Text style={styles.label}>City</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="City"
+                      placeholderTextColor={TEXT_LIGHT}
+                      value={formData.city}
+                      onChangeText={(text) => updateField('city', text)}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Address</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="Your street address (optional)"
+                    placeholderTextColor={TEXT_LIGHT}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                    value={formData.address}
+                    onChangeText={(text) => updateField('address', text)}
+                  />
+                </View>
+              </View>
+
+              {/* Section: Professional Info */}
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Professional Info</Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Skills</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="React Native, Node.js, UI/UX Design"
+                    placeholderTextColor={TEXT_LIGHT}
+                    value={formData.skills}
+                    onChangeText={(text) => updateField('skills', text)}
+                  />
+                  <Text style={styles.hintText}>Separate multiple skills with commas</Text>
+                </View>
+
+                <View style={styles.row}>
+                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                    <Text style={styles.label}>Experience Level</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Entry, Junior, Mid, Senior"
+                      placeholderTextColor={TEXT_LIGHT}
+                      value={formData.experience_level}
+                      onChangeText={(text) => updateField('experience_level', text)}
+                    />
+                  </View>
+                  
+                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                    <Text style={styles.label}>Years of Experience</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Years"
+                      placeholderTextColor={TEXT_LIGHT}
+                      keyboardType="numeric"
+                      value={formData.years_of_experience}
+                      onChangeText={(text) => updateField('years_of_experience', text)}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.row}>
+                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                    <Text style={styles.label}>Hourly Rate (PHP)</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Hourly rate"
+                      placeholderTextColor={TEXT_LIGHT}
+                      keyboardType="numeric"
+                      value={formData.hourly_rate}
+                      onChangeText={(text) => updateField('hourly_rate', text)}
+                    />
+                  </View>
+                  
+                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                    <Text style={styles.label}>Fixed Rate (PHP)</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Fixed rate"
+                      placeholderTextColor={TEXT_LIGHT}
+                      keyboardType="numeric"
+                      value={formData.fixed_rate}
+                      onChangeText={(text) => updateField('fixed_rate', text)}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Portfolio URL</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="https://your-portfolio.com"
+                    placeholderTextColor={TEXT_LIGHT}
+                    autoCapitalize="none"
+                    value={formData.portfolio_link}
+                    onChangeText={(text) => updateField('portfolio_link', text)}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Bio / About Me</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="Tell us about yourself, your expertise, and what makes you unique..."
+                    placeholderTextColor={TEXT_LIGHT}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    value={formData.bio_about_me}
+                    onChangeText={(text) => updateField('bio_about_me', text)}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Languages</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="English, Filipino, Spanish"
+                    placeholderTextColor={TEXT_LIGHT}
+                    value={formData.languages}
+                    onChangeText={(text) => updateField('languages', text)}
+                  />
+                  <Text style={styles.hintText}>Separate multiple languages with commas</Text>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Certifications</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="AWS Certified, Google UX Certificate"
+                    placeholderTextColor={TEXT_LIGHT}
+                    value={formData.certifications}
+                    onChangeText={(text) => updateField('certifications', text)}
+                  />
+                  <Text style={styles.hintText}>Separate multiple certifications with commas</Text>
+                </View>
+              </View>
+
+              {/* Section: Security */}
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Security</Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Password <Text style={styles.required}>*</Text></Text>
+                  <View style={styles.passwordWrap}>
+                    <TextInput
+                      style={[styles.input, styles.passwordInput, errors.password && styles.inputError]}
+                      placeholder="Min. 6 characters"
+                      placeholderTextColor={TEXT_LIGHT}
+                      secureTextEntry={!showPassword}
+                      value={formData.password}
+                      onChangeText={(text) => updateField('password', text)}
+                    />
+                    <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
+                      <Ionicons
+                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={18}
+                        color={TEXT_LIGHT}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  {errors.password && <Text style={styles.fieldErrorText}>{errors.password}</Text>}
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Confirm Password <Text style={styles.required}>*</Text></Text>
+                  <View style={styles.passwordWrap}>
+                    <TextInput
+                      style={[styles.input, styles.passwordInput, errors.confirm_password && styles.inputError]}
+                      placeholder="Repeat password"
+                      placeholderTextColor={TEXT_LIGHT}
+                      secureTextEntry={!showConfirmPassword}
+                      value={formData.confirm_password}
+                      onChangeText={(text) => updateField('confirm_password', text)}
+                    />
+                    <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                      <Ionicons
+                        name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={18}
+                        color={TEXT_LIGHT}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  {errors.confirm_password && <Text style={styles.fieldErrorText}>{errors.confirm_password}</Text>}
+                </View>
+              </View>
+
+              {/* Terms */}
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => updateField('terms_accepted', !formData.terms_accepted)}
+                activeOpacity={0.7}
+              >
                 <View style={[styles.checkbox, formData.terms_accepted && styles.checkboxChecked]}>
-                  {formData.terms_accepted && <Ionicons name="checkmark" size={16} color="#0a0a0a" />}
+                  {formData.terms_accepted && (
+                    <Ionicons name="checkmark" size={14} color={WHITE} />
+                  )}
                 </View>
                 <Text style={styles.checkboxLabel}>
-                  I accept the <Text style={styles.checkboxLink}>Terms and Conditions</Text> *
+                  I accept the{' '}
+                  <Text 
+                    style={styles.checkboxLink}
+                    onPress={() => setShowTermsModal(true)}
+                  >
+                    Terms and Conditions
+                  </Text>
+                  <Text style={styles.required}> *</Text>
                 </Text>
               </TouchableOpacity>
-              {errors.terms_accepted && <Text style={styles.errorText}>{errors.terms_accepted}</Text>}
+              {errors.terms_accepted && (
+                <View style={styles.fieldErrorRow}>
+                  <Ionicons name="alert-circle-outline" size={12} color={ERROR} />
+                  <Text style={styles.fieldErrorText}>{errors.terms_accepted}</Text>
+                </View>
+              )}
 
+              {/* Submit Button */}
               <TouchableOpacity
-                style={styles.registerButton}
+                style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]}
                 onPress={handleRegister}
                 disabled={isLoading}
-                activeOpacity={0.85}>
-                {isLoading ? <ActivityIndicator color="#0a0a0a" /> : <Text style={styles.registerButtonText}>Create Freelancer Account</Text>}
+                activeOpacity={0.85}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={WHITE} />
+                ) : (
+                  <>
+                    <Ionicons name="person-add-outline" size={18} color={WHITE} style={{ marginRight: 8 }} />
+                    <Text style={styles.submitBtnText}>Create Freelancer Account</Text>
+                  </>
+                )}
               </TouchableOpacity>
 
+              {/* Info strip */}
+              <View style={styles.infoStrip}>
+                <Ionicons name="shield-checkmark-outline" size={14} color={GREEN_DARK} />
+                <Text style={styles.infoText}>Free to join · No hidden fees · Secure payments</Text>
+              </View>
+
+              {/* Sign in link */}
               <View style={styles.loginPrompt}>
                 <Text style={styles.loginPromptText}>Already have an account?</Text>
                 <TouchableOpacity onPress={() => onNavigate('Login')}>
@@ -607,44 +756,244 @@ export default function FreelancerRegistration({ onNavigate }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a0a0a' },
+  safe: { flex: 1, backgroundColor: OFF_WHITE },
   flex: { flex: 1 },
-  container: { flex: 1, padding: 24 },
-  backButton: { marginBottom: 16, width: 40 },
-  header: { alignItems: 'center', marginBottom: 32 },
-  roleBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(212,175,55,0.1)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginBottom: 16, gap: 8 },
-  roleBadgeText: { fontSize: 13, color: '#D4AF37', fontWeight: '500' },
-  title: { fontSize: 32, fontWeight: '700', color: '#ffffff', marginBottom: 8 },
-  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.5)', textAlign: 'center' },
-  serverErrorContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(220,53,69,0.15)', borderRadius: 8, padding: 12, marginBottom: 20, gap: 8, borderWidth: 1, borderColor: 'rgba(220,53,69,0.3)' },
-  errorContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(220,53,69,0.1)', borderRadius: 8, padding: 12, marginBottom: 20, gap: 8 },
-  errorText: { fontSize: 12, color: '#ff6b6b' },
-  serverErrorText: { fontSize: 13, color: '#ff6b6b', flex: 1 },
-  form: { gap: 20 },
-  profileSection: { alignItems: 'center', marginBottom: 16 },
-  profileImageContainer: { marginBottom: 8 },
-  profileImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: '#D4AF37' },
-  profilePlaceholder: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#111111', borderWidth: 2, borderColor: '#D4AF37', alignItems: 'center', justifyContent: 'center', borderStyle: 'dashed' },
-  profilePlaceholderText: { fontSize: 12, color: '#D4AF37', marginTop: 4 },
-  profileHint: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  inputGroup: { gap: 8 },
-  label: { fontSize: 14, fontWeight: '500', color: '#ffffff' },
-  input: { backgroundColor: '#111111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 14, fontSize: 16, color: '#ffffff' },
-  textArea: { minHeight: 100, textAlignVertical: 'top' },
-  inputError: { borderColor: '#ff6b6b' },
-  hintText: { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4 },
-  passwordContainer: { position: 'relative' },
-  passwordInput: { paddingRight: 48 },
-  eyeIcon: { position: 'absolute', right: 14, top: 14 },
-  checkboxContainer: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#D4AF37', alignItems: 'center', justifyContent: 'center' },
-  checkboxChecked: { backgroundColor: '#D4AF37' },
-  checkboxLabel: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
-  checkboxLink: { color: '#D4AF37', fontWeight: '500' },
-  registerButton: { backgroundColor: '#D4AF37', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
-  registerButtonText: { fontSize: 16, fontWeight: '600', color: '#0a0a0a' },
-  loginPrompt: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
-  loginPromptText: { fontSize: 14, color: 'rgba(255,255,255,0.5)' },
-  loginPromptLink: { fontSize: 14, color: '#D4AF37', fontWeight: '600' },
+  scroll: { padding: 24, paddingBottom: 48 },
+  container: { flex: 1 },
+
+  // Back
+  backButton: { marginBottom: 24, alignSelf: 'flex-start' },
+  backIconWrap: {
+    width: 38, height: 38,
+    backgroundColor: WHITE,
+    borderRadius: 11,
+    borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+
+  // Header
+  header: { alignItems: 'center', marginBottom: 28 },
+  roleBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: GREEN_SOFT,
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1, borderColor: GREEN_MID,
+    marginBottom: 16,
+  },
+  roleBadgeText: { fontSize: 13, color: GREEN_DARK, fontWeight: '600' },
+  title: { fontSize: 28, fontWeight: '800', color: TEXT_MAIN, textAlign: 'center', letterSpacing: -0.5, lineHeight: 34, marginBottom: 8 },
+  subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center' },
+
+  // Server error
+  serverErrorContainer: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: ERROR_BG,
+    borderRadius: 12, padding: 14,
+    marginBottom: 20, gap: 10,
+    borderWidth: 1, borderColor: ERROR_BORDER,
+  },
+  serverErrorIcon: {
+    width: 32, height: 32,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  serverErrorText: { fontSize: 13, color: ERROR, flex: 1, lineHeight: 18 },
+
+  // Form layout
+  form: { gap: 0 },
+  section: {
+    backgroundColor: WHITE,
+    borderRadius: 18,
+    borderWidth: 1.5, borderColor: BORDER,
+    padding: 18,
+    marginBottom: 14,
+    gap: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04, shadowRadius: 8, elevation: 1,
+  },
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', color: GREEN_DARK,
+    textTransform: 'uppercase', letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  row: { flexDirection: 'row' },
+
+  // Photo picker
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  photoButton: {},
+  photoImage: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: GREEN },
+  photoPlaceholder: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: GREEN_SOFT,
+    borderWidth: 2, borderColor: GREEN_MID,
+    borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  photoMeta: { flex: 1 },
+  photoTitle: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN, marginBottom: 2 },
+  photoHint: { fontSize: 12, color: TEXT_MUTED },
+  photoRemove: { fontSize: 12, color: ERROR, marginTop: 4, fontWeight: '500' },
+
+  // Inputs
+  inputGroup: { gap: 6 },
+  label: { fontSize: 13, fontWeight: '600', color: TEXT_MAIN },
+  required: { color: ERROR },
+  input: {
+    backgroundColor: OFF_WHITE,
+    borderWidth: 1.5, borderColor: BORDER,
+    borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 13,
+    fontSize: 15, color: TEXT_MAIN,
+  },
+  textArea: { minHeight: 90 },
+  inputError: { borderColor: ERROR },
+  hintText: { fontSize: 11, color: TEXT_LIGHT, marginTop: 4 },
+
+  // Field error
+  fieldErrorRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  fieldErrorText: { fontSize: 11, color: ERROR },
+
+  // Password
+  passwordWrap: { position: 'relative' },
+  passwordInput: { paddingRight: 46 },
+  eyeBtn: { position: 'absolute', right: 14, top: 14 },
+
+  // Checkbox
+  checkboxRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: WHITE,
+    borderRadius: 14, borderWidth: 1.5, borderColor: BORDER,
+    padding: 14, marginBottom: 6,
+  },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 7,
+    borderWidth: 2, borderColor: GREEN_MID,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: OFF_WHITE,
+  },
+  checkboxChecked: { backgroundColor: GREEN_DARK, borderColor: GREEN_DARK },
+  checkboxLabel: { fontSize: 14, color: TEXT_MUTED, flex: 1 },
+  checkboxLink: { color: GREEN_DARK, fontWeight: '700' },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: WHITE,
+    borderRadius: 20,
+    width: '90%',
+    maxHeight: '85%',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+    backgroundColor: WHITE,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  modalClose: {
+    padding: 4,
+  },
+  modalContent: {
+    padding: 20,
+    maxHeight: '70%',
+  },
+  termsText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: TEXT_MUTED,
+  },
+  termsHeading: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  termsEffective: {
+    fontSize: 12,
+    color: GREEN_DARK,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    gap: 12,
+  },
+  modalButtonCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    alignItems: 'center',
+  },
+  modalButtonCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+  },
+  modalButtonAccept: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: GREEN_DARK,
+    alignItems: 'center',
+  },
+  modalButtonAcceptText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: WHITE,
+  },
+
+  // Submit button
+  submitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: GREEN_DARK,
+    borderRadius: 14, paddingVertical: 16,
+    marginTop: 8, marginBottom: 14,
+    shadowColor: GREEN_DARK,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 4,
+  },
+  submitBtnDisabled: { opacity: 0.6 },
+  submitBtnText: { fontSize: 16, fontWeight: '700', color: WHITE, letterSpacing: 0.2 },
+
+  // Info strip
+  infoStrip: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, marginBottom: 4,
+    paddingVertical: 10, paddingHorizontal: 16,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 12, borderWidth: 1, borderColor: GREEN_MID,
+  },
+  infoText: { fontSize: 12, color: GREEN_DARK, fontWeight: '500' },
+
+  // Login prompt
+  loginPrompt: { flexDirection: 'row', justifyContent: 'center', marginTop: 16, paddingBottom: 8 },
+  loginPromptText: { fontSize: 14, color: TEXT_MUTED },
+  loginPromptLink: { fontSize: 14, color: GREEN_DARK, fontWeight: '700' },
 });

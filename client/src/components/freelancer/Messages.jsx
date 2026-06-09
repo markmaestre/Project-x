@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, Text, TouchableOpacity, StyleSheet, 
   FlatList, TextInput, Image, ActivityIndicator, 
-  RefreshControl, Alert 
+  RefreshControl, Alert, StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,12 +15,19 @@ import {
   clearMessages 
 } from '../../Redux/slices/messageSlice';
 
-const BG = '#0a0a0a';
-const GOLD = '#D4AF37';
-const CARD_BG = '#141414';
-const BORDER = 'rgba(255,255,255,0.07)';
-const SENT_MSG_BG = '#D4AF37';
-const RECEIVED_MSG_BG = '#1e1e1e';
+const GREEN       = '#4ADE80';
+const GREEN_DARK  = '#22C55E';
+const GREEN_SOFT  = '#DCFCE7';
+const GREEN_MID   = '#86EFAC';
+const WHITE       = '#FFFFFF';
+const OFF_WHITE   = '#F0FDF4';
+const BORDER      = 'rgba(74,222,128,0.25)';
+const TEXT_MAIN   = '#0F2417';
+const TEXT_MUTED  = '#6B7280';
+const TEXT_LIGHT  = '#9CA3AF';
+
+const SENT_MSG_BG = GREEN_DARK;
+const RECEIVED_MSG_BG = '#F3F4F6';
 
 export default function Messages({ onNavigate, route }) {
   const dispatch = useDispatch();
@@ -165,7 +172,7 @@ export default function Messages({ onNavigate, route }) {
         {item.other_user_profile_picture ? (
           <Image source={{ uri: item.other_user_profile_picture }} style={styles.avatar} />
         ) : (
-          <View style={[styles.avatarPlaceholder, { backgroundColor: item.isClient ? GOLD : '#4a4a4a' }]}>
+          <View style={[styles.avatarPlaceholder, { backgroundColor: GREEN_DARK }]}>
             <Text style={styles.avatarInitials}>
               {getInitials(item.other_user_first_name, item.other_user_last_name)}
             </Text>
@@ -212,14 +219,16 @@ export default function Messages({ onNavigate, route }) {
         setSelectedChat(null);
         dispatch(clearMessages());
       }} style={styles.backButton}>
-        <Ionicons name="arrow-back" size={24} color="#fff" />
+        <View style={styles.backIconWrap}>
+          <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+        </View>
       </TouchableOpacity>
       <View style={styles.chatHeaderInfo}>
         <View style={styles.chatAvatarContainer}>
           {selectedChat?.other_user_profile_picture ? (
             <Image source={{ uri: selectedChat.other_user_profile_picture }} style={styles.chatAvatar} />
           ) : (
-            <View style={[styles.chatAvatarPlaceholder, { backgroundColor: selectedChat?.isClient ? GOLD : '#4a4a4a' }]}>
+            <View style={[styles.chatAvatarPlaceholder, { backgroundColor: GREEN_DARK }]}>
               <Text style={styles.chatAvatarInitials}>
                 {getInitials(selectedChat?.other_user_first_name, selectedChat?.other_user_last_name)}
               </Text>
@@ -235,7 +244,9 @@ export default function Messages({ onNavigate, route }) {
         </View>
       </View>
       <TouchableOpacity style={styles.chatMenuBtn}>
-        <Ionicons name="ellipsis-vertical" size={20} color="rgba(255,255,255,0.7)" />
+        <View style={styles.menuIconWrap}>
+          <Ionicons name="ellipsis-vertical" size={18} color={GREEN_DARK} />
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -243,6 +254,7 @@ export default function Messages({ onNavigate, route }) {
   if (selectedChat) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
+        <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
         <ChatHeader />
         
         <FlatList
@@ -254,11 +266,13 @@ export default function Messages({ onNavigate, route }) {
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GREEN_DARK} />
           }
           ListEmptyComponent={() => (
             <View style={styles.emptyMessagesContainer}>
-              <Ionicons name="chatbubbles-outline" size={64} color="rgba(255,255,255,0.1)" />
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="chatbubbles-outline" size={48} color={GREEN_DARK} />
+              </View>
               <Text style={styles.emptyMessagesTitle}>No messages yet</Text>
               <Text style={styles.emptyMessagesText}>
                 Send a message to start the conversation
@@ -269,13 +283,15 @@ export default function Messages({ onNavigate, route }) {
         
         <View style={styles.inputContainer}>
           <TouchableOpacity style={styles.attachBtn}>
-            <Ionicons name="attach-outline" size={24} color={GOLD} />
+            <View style={styles.attachIconWrap}>
+              <Ionicons name="attach-outline" size={20} color={GREEN_DARK} />
+            </View>
           </TouchableOpacity>
           
           <TextInput
             style={styles.messageInput}
             placeholder="Type a message..."
-            placeholderTextColor="rgba(255,255,255,0.3)"
+            placeholderTextColor={TEXT_LIGHT}
             value={messageText}
             onChangeText={setMessageText}
             multiline
@@ -287,12 +303,12 @@ export default function Messages({ onNavigate, route }) {
             disabled={!messageText.trim() || sending}
           >
             {sending ? (
-              <ActivityIndicator size="small" color="#0a0a0a" />
+              <ActivityIndicator size="small" color={TEXT_MAIN} />
             ) : (
               <Ionicons 
                 name="send" 
-                size={20} 
-                color={messageText.trim() ? '#0a0a0a' : 'rgba(255,255,255,0.3)'} 
+                size={18} 
+                color={messageText.trim() ? WHITE : TEXT_LIGHT} 
               />
             )}
           </TouchableOpacity>
@@ -303,35 +319,40 @@ export default function Messages({ onNavigate, route }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+          <View style={styles.backIconWrap}>
+            <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+          </View>
         </TouchableOpacity>
         <Text style={styles.title}>Messages</Text>
         <TouchableOpacity style={styles.newMsgBtn}>
-          <Ionicons name="create-outline" size={22} color={GOLD} />
+          <View style={styles.newMsgIconWrap}>
+            <Ionicons name="create-outline" size={18} color={GREEN_DARK} />
+          </View>
         </TouchableOpacity>
       </View>
       
       <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color="rgba(255,255,255,0.3)" />
+        <Ionicons name="search-outline" size={18} color={TEXT_MUTED} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search conversations..."
-          placeholderTextColor="rgba(255,255,255,0.3)"
+          placeholderTextColor={TEXT_LIGHT}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
         {searchQuery !== '' && (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.3)" />
+            <Ionicons name="close-circle" size={16} color={TEXT_MUTED} />
           </TouchableOpacity>
         )}
       </View>
       
       {isLoading && !refreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={GOLD} />
+          <ActivityIndicator size="large" color={GREEN_DARK} />
           <Text style={styles.loadingText}>Loading conversations...</Text>
         </View>
       ) : (
@@ -342,11 +363,13 @@ export default function Messages({ onNavigate, route }) {
           contentContainerStyle={styles.conversationsList}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GREEN_DARK} />
           }
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Ionicons name="chatbubbles-outline" size={64} color="rgba(255,255,255,0.1)" />
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="chatbubbles-outline" size={48} color={GREEN_DARK} />
+              </View>
               <Text style={styles.emptyTitle}>No conversations yet</Text>
               <Text style={styles.emptyText}>
                 When you start chatting with clients, your conversations will appear here
@@ -366,7 +389,7 @@ export default function Messages({ onNavigate, route }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
+  safe: { flex: 1, backgroundColor: OFF_WHITE },
   
   // Header Styles
   header: { 
@@ -378,26 +401,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
-  backBtn: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 10, 
-    backgroundColor: CARD_BG, 
-    alignItems: 'center', 
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
+  backBtn: { alignSelf: 'flex-start' },
+  backIconWrap: {
+    width: 38, height: 38,
+    backgroundColor: WHITE,
+    borderRadius: 11,
+    borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
-  title: { fontSize: 18, fontWeight: '600', color: '#fff' },
-  newMsgBtn: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 10, 
-    backgroundColor: CARD_BG, 
-    alignItems: 'center', 
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
+  title: { fontSize: 16, fontWeight: '600', color: TEXT_MAIN },
+  newMsgBtn: { alignSelf: 'flex-start' },
+  newMsgIconWrap: {
+    width: 38, height: 38,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 11,
+    borderWidth: 1, borderColor: GREEN_MID,
+    alignItems: 'center', justifyContent: 'center',
   },
   
   // Search Styles
@@ -405,17 +426,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     margin: 16,
-    paddingHorizontal: 12,
-    backgroundColor: CARD_BG,
-    borderRadius: 10,
+    paddingHorizontal: 14,
+    backgroundColor: WHITE,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: BORDER,
     height: 44,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
   searchInput: {
     flex: 1,
     marginLeft: 10,
-    color: '#fff',
+    color: TEXT_MAIN,
     fontSize: 14,
   },
   
@@ -428,7 +451,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
+    color: TEXT_MUTED,
   },
   
   // Conversation List Styles
@@ -437,13 +460,13 @@ const styles = StyleSheet.create({
   },
   conversationItem: {
     flexDirection: 'row',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
   conversationActive: {
-    backgroundColor: 'rgba(212,175,55,0.05)',
-    borderRadius: 10,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 12,
     paddingHorizontal: 8,
     marginHorizontal: -8,
   },
@@ -466,7 +489,7 @@ const styles = StyleSheet.create({
   avatarInitials: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#0a0a0a',
+    color: WHITE,
   },
   onlineDot: {
     position: 'absolute',
@@ -477,7 +500,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#4ade80',
     borderWidth: 2,
-    borderColor: BG,
+    borderColor: WHITE,
   },
   conversationInfo: {
     flex: 1,
@@ -491,11 +514,11 @@ const styles = StyleSheet.create({
   conversationName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: TEXT_MAIN,
   },
   conversationTime: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.3)',
+    color: TEXT_LIGHT,
   },
   conversationPreview: {
     flexDirection: 'row',
@@ -505,14 +528,14 @@ const styles = StyleSheet.create({
   lastMessage: {
     flex: 1,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
+    color: TEXT_MUTED,
     marginRight: 8,
   },
   unreadBadge: {
     minWidth: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: GOLD,
+    backgroundColor: GREEN_DARK,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 5,
@@ -520,7 +543,7 @@ const styles = StyleSheet.create({
   unreadText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#0a0a0a',
+    color: WHITE,
   },
   
   // Empty State
@@ -529,21 +552,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 60,
   },
+  emptyIconWrap: {
+    width: 80, height: 80,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
+  },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#fff',
+    color: TEXT_MAIN,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
+    color: TEXT_MUTED,
     textAlign: 'center',
     marginBottom: 20,
   },
   browseJobsBtn: {
-    backgroundColor: GOLD,
+    backgroundColor: GREEN_DARK,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
@@ -551,7 +581,7 @@ const styles = StyleSheet.create({
   browseJobsText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#0a0a0a',
+    color: WHITE,
   },
   
   // Chat View Styles
@@ -563,20 +593,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
-    backgroundColor: BG,
+    backgroundColor: WHITE,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: CARD_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'flex-start',
   },
   chatHeaderInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   chatAvatarContainer: {
     position: 'relative',
@@ -596,7 +622,7 @@ const styles = StyleSheet.create({
   chatAvatarInitials: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#0a0a0a',
+    color: WHITE,
   },
   chatOnlineDot: {
     position: 'absolute',
@@ -607,24 +633,26 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#4ade80',
     borderWidth: 2,
-    borderColor: BG,
+    borderColor: WHITE,
   },
   chatName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: TEXT_MAIN,
   },
   chatStatus: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.3)',
+    color: TEXT_MUTED,
   },
   chatMenuBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: CARD_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
+  menuIconWrap: {
+    width: 38, height: 38,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 11,
+    borderWidth: 1, borderColor: GREEN_MID,
+    alignItems: 'center', justifyContent: 'center',
   },
   
   // Messages Styles
@@ -654,22 +682,24 @@ const styles = StyleSheet.create({
   receivedBubble: {
     backgroundColor: RECEIVED_MSG_BG,
     borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: BORDER,
   },
   messageText: {
     fontSize: 14,
-    color: '#fff',
+    color: WHITE,
     marginBottom: 4,
   },
   sentMessageText: {
-    color: '#0a0a0a',
+    color: WHITE,
   },
   messageTime: {
     fontSize: 10,
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.7)',
     textAlign: 'right',
   },
   sentMessageTime: {
-    color: 'rgba(0,0,0,0.5)',
+    color: 'rgba(255,255,255,0.7)',
   },
   
   // Empty Messages
@@ -681,13 +711,13 @@ const styles = StyleSheet.create({
   emptyMessagesTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#fff',
+    color: TEXT_MAIN,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyMessagesText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
+    color: TEXT_MUTED,
     textAlign: 'center',
   },
   
@@ -699,40 +729,40 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: BORDER,
-    backgroundColor: BG,
+    backgroundColor: WHITE,
     gap: 8,
   },
   attachBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: CARD_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
+    alignSelf: 'flex-start',
+  },
+  attachIconWrap: {
+    width: 38, height: 38,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 19,
+    borderWidth: 1, borderColor: GREEN_MID,
+    alignItems: 'center', justifyContent: 'center',
   },
   messageInput: {
     flex: 1,
-    backgroundColor: CARD_BG,
+    backgroundColor: OFF_WHITE,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    color: '#fff',
+    color: TEXT_MAIN,
     fontSize: 14,
     maxHeight: 100,
     borderWidth: 1,
     borderColor: BORDER,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: GOLD,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: GREEN_DARK,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendBtnDisabled: {
-    backgroundColor: CARD_BG,
+    backgroundColor: BORDER,
   },
 });

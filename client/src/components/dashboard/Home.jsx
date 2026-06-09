@@ -10,6 +10,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+const GREEN = '#4ADE80';
+const GREEN_DARK = '#22C55E';
+const GREEN_SOFT = '#DCFCE7';
+const GREEN_MID = '#86EFAC';
+const WHITE = '#FFFFFF';
+const OFF_WHITE = '#F0FDF4';
+const SURFACE = '#F7FEF9';
+const BORDER = 'rgba(74,222,128,0.2)';
+const TEXT_MAIN = '#0F2417';
+const TEXT_MUTED = '#6B7280';
+const TEXT_LIGHT = '#9CA3AF';
+
 const FEATURED_JOBS = [
   {
     id: '1',
@@ -67,10 +79,19 @@ const FIND_TALENT = [
   },
 ];
 
-export default function Home({ onNavigate }) {
+export default function Home({ onNavigate, isLoggedIn = false }) {
+  // If user is not logged in, redirect to Login instead of the target screen
+  const guardedNavigate = (targetScreen) => {
+    if (!isLoggedIn) {
+      onNavigate('Login');
+    } else {
+      onNavigate(targetScreen);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
@@ -81,9 +102,9 @@ export default function Home({ onNavigate }) {
           <View style={styles.nav}>
             <View style={styles.logoRow}>
               <View style={styles.logoBox}>
-                <Text style={styles.logoLetter}>X</Text>
+                <Text style={styles.logoLetter}>T</Text>
               </View>
-              <Text style={styles.logoText}>PROJECT X</Text>
+              <Text style={styles.logoText}>TASKRA</Text>
             </View>
             <TouchableOpacity
               style={styles.btnLogin}
@@ -97,23 +118,52 @@ export default function Home({ onNavigate }) {
           {/* Badge */}
           <View style={styles.badge}>
             <View style={styles.badgeDot} />
-            <View style={styles.badgeDot} />
-            <Text style={styles.badgeText}>Shesh — project x</Text>
+            <Text style={styles.badgeText}>Now live in the Philippines</Text>
           </View>
 
           {/* Hero */}
           <View style={styles.hero}>
             <Text style={styles.headline}>
-              Your Work,{'\n'}
-              <Text style={styles.headlineGold}>Your Rules{'\n'}</Text>
-              Await
+              Find Work{'\n'}
+              <Text style={styles.headlineGreen}>You Love,{'\n'}</Text>
+              Get Paid.
             </Text>
             <Text style={styles.subtitle}>
-              Find premium clients, manage gigs, and get paid on time, all in one place.
+              Connect with premium clients, manage your gigs, and receive payments on time — all in one place.
             </Text>
           </View>
 
-         
+          {/* CTA Row */}
+          <View style={styles.ctaRow}>
+            <TouchableOpacity
+              style={styles.btnGreen}
+              onPress={() => onNavigate('Register')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.btnGreenText}>Get Started</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.btnOutline}
+              activeOpacity={0.8}
+              onPress={() => guardedNavigate('Freelancer')}
+            >
+              <Text style={styles.btnOutlineText}>Browse Jobs</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Stats Strip */}
+          <View style={styles.statsRow}>
+            {[
+              { value: '12K+', label: 'Freelancers' },
+              { value: '3K+', label: 'Clients' },
+              { value: '98%', label: 'Paid on Time' },
+            ].map((s, i) => (
+              <View key={i} style={[styles.statItem, i < 2 && styles.statBorder]}>
+                <Text style={styles.statValue}>{s.value}</Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
 
           {/* Divider */}
           <View style={styles.divider}>
@@ -128,8 +178,8 @@ export default function Home({ onNavigate }) {
               <Text style={styles.sectionLabel}>FIND WORK</Text>
               <Text style={styles.sectionTitle}>Featured Jobs</Text>
             </View>
-            <TouchableOpacity activeOpacity={0.7}>
-              <Text style={styles.seeAll}>See all </Text>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => guardedNavigate('Freelancer')}>
+              <Text style={styles.seeAll}>See all →</Text>
             </TouchableOpacity>
           </View>
 
@@ -138,11 +188,11 @@ export default function Home({ onNavigate }) {
               key={job.id}
               style={styles.jobCard}
               activeOpacity={0.8}
-              onPress={() => onNavigate('Freelancer')}
+              onPress={() => guardedNavigate('Freelancer')}
             >
               <View style={styles.jobCardTop}>
                 <View style={styles.jobIconWrap}>
-                  <Ionicons name={job.icon} size={20} color={GOLD} />
+                  <Ionicons name={job.icon} size={20} color={GREEN_DARK} />
                 </View>
                 <View style={styles.jobMeta}>
                   <Text style={styles.jobType}>{job.type}</Text>
@@ -167,7 +217,7 @@ export default function Home({ onNavigate }) {
               <Text style={styles.sectionLabel}>POST A TASK</Text>
               <Text style={styles.sectionTitle}>Find Talent</Text>
             </View>
-            <TouchableOpacity activeOpacity={0.7}>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => guardedNavigate('Client')}>
               <Text style={styles.seeAll}>See all →</Text>
             </TouchableOpacity>
           </View>
@@ -177,11 +227,11 @@ export default function Home({ onNavigate }) {
               key={task.id}
               style={styles.taskCard}
               activeOpacity={0.8}
-              onPress={() => onNavigate('Client')}
+              onPress={() => guardedNavigate('Client')}
             >
               <View style={styles.taskLeft}>
                 <View style={styles.taskIconWrap}>
-                  <Ionicons name={task.icon} size={18} color="rgba(255,255,255,0.5)" />
+                  <Ionicons name={task.icon} size={18} color={GREEN_DARK} />
                 </View>
                 <View style={styles.taskInfo}>
                   <View style={styles.taskTitleRow}>
@@ -207,16 +257,24 @@ export default function Home({ onNavigate }) {
 
           {/* Bottom CTA */}
           <View style={styles.bottomCta}>
-            <Text style={styles.bottomCtaText}>
-              Ready to start earning?
-            </Text>
-            <TouchableOpacity
-              style={styles.btnGoldFull}
-              onPress={() => onNavigate('Register')}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.btnGoldText}>Create Free Account </Text>
-            </TouchableOpacity>
+            <View style={styles.bottomCtaCard}>
+              <View style={styles.bottomCtaIcon}>
+                <Ionicons name="flash" size={22} color={GREEN_DARK} />
+              </View>
+              <Text style={styles.bottomCtaText}>
+                Ready to start earning?
+              </Text>
+              <Text style={styles.bottomCtaSub}>
+                Join thousands of Filipino freelancers already on Taskra.
+              </Text>
+              <TouchableOpacity
+                style={styles.btnGreenFull}
+                onPress={() => onNavigate('Register')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.btnGreenText}>Create Free Account →</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
         </View>
@@ -225,199 +283,273 @@ export default function Home({ onNavigate }) {
   );
 }
 
-const GOLD = '#D4AF37';
-
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: OFF_WHITE,
   },
   scroll: {
     flexGrow: 1,
   },
   container: {
-    paddingHorizontal: 28,
-    paddingTop: 24,
+    paddingHorizontal: 24,
+    paddingTop: 20,
     paddingBottom: 60,
   },
 
+  // Nav
   nav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 52,
+    marginBottom: 40,
   },
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
+    gap: 8,
   },
   logoBox: {
-    width: 30,
-    height: 30,
-    backgroundColor: GOLD,
-    borderRadius: 7,
+    width: 32,
+    height: 32,
+    backgroundColor: GREEN,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: GREEN_DARK,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
   },
   logoLetter: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0a0a0a',
+    fontSize: 16,
+    fontWeight: '800',
+    color: WHITE,
   },
   logoText: {
-    fontSize: 11,
-    fontWeight: '500',
-    letterSpacing: 2.5,
-    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 3,
+    color: TEXT_MAIN,
   },
   btnLogin: {
     paddingVertical: 8,
-    paddingHorizontal: 18,
-    backgroundColor: GOLD,
-    borderRadius: 8,
+    paddingHorizontal: 20,
+    backgroundColor: WHITE,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    shadowColor: GREEN,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   btnLoginText: {
     fontSize: 12,
-    fontWeight: '500',
-    color: '#0a0a0a',
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    color: GREEN_DARK,
+    letterSpacing: 0.3,
   },
 
+  // Badge
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    gap: 6,
-    paddingVertical: 5,
+    gap: 7,
+    paddingVertical: 6,
     paddingHorizontal: 14,
-    borderWidth: 0.5,
-    borderColor: 'rgba(212,175,55,0.3)',
+    backgroundColor: GREEN_SOFT,
+    borderWidth: 1,
+    borderColor: GREEN_MID,
     borderRadius: 999,
-    marginBottom: 28,
+    marginBottom: 24,
   },
   badgeDot: {
-    width: 5,
-    height: 5,
+    width: 6,
+    height: 6,
     borderRadius: 999,
-    backgroundColor: GOLD,
+    backgroundColor: GREEN_DARK,
   },
   badgeText: {
-    fontSize: 10,
-    letterSpacing: 1,
-    color: 'rgba(255,255,255,0.5)',
+    fontSize: 11,
+    letterSpacing: 0.5,
+    color: GREEN_DARK,
+    fontWeight: '500',
   },
 
+  // Hero
   hero: {
-    marginBottom: 8,
+    marginBottom: 28,
   },
   headline: {
-    fontSize: 48,
+    fontSize: 44,
     fontWeight: '300',
-    color: '#ffffff',
-    lineHeight: 52,
-    marginBottom: 18,
+    color: TEXT_MAIN,
+    lineHeight: 50,
+    marginBottom: 16,
+    letterSpacing: -0.5,
   },
-  headlineGold: {
-    color: GOLD,
-    fontStyle: 'italic',
-    fontWeight: '400',
+  headlineGreen: {
+    color: GREEN_DARK,
+    fontWeight: '700',
   },
   subtitle: {
-    fontSize: 13,
-    fontWeight: '300',
-    color: 'rgba(255,255,255,0.38)',
-    lineHeight: 21,
-    marginBottom: 36,
+    fontSize: 14,
+    fontWeight: '400',
+    color: TEXT_MUTED,
+    lineHeight: 22,
   },
 
+  // CTA Row
   ctaRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 48,
+    marginBottom: 28,
   },
-  btnGold: {
+  btnGreen: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 14,
-    backgroundColor: GOLD,
-    borderRadius: 10,
+    backgroundColor: GREEN,
+    borderRadius: 12,
+    shadowColor: GREEN_DARK,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  btnGoldFull: {
+  btnGreenFull: {
     alignItems: 'center',
     paddingVertical: 15,
-    backgroundColor: GOLD,
-    borderRadius: 10,
+    backgroundColor: GREEN,
+    borderRadius: 12,
+    shadowColor: GREEN_DARK,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  btnGoldText: {
+  btnGreenText: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#0a0a0a',
-    letterSpacing: 0.5,
+    fontWeight: '700',
+    color: WHITE,
+    letterSpacing: 0.3,
   },
   btnOutline: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 14,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 10,
+    backgroundColor: WHITE,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    borderRadius: 12,
   },
   btnOutlineText: {
     fontSize: 13,
-    fontWeight: '400',
-    color: 'rgba(255,255,255,0.6)',
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    color: GREEN_DARK,
+    letterSpacing: 0.3,
   },
 
+  // Stats
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: WHITE,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(74,222,128,0.15)',
+    marginBottom: 36,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  statBorder: {
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(74,222,128,0.15)',
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: GREEN_DARK,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: TEXT_LIGHT,
+    letterSpacing: 0.5,
+    fontWeight: '500',
+  },
+
+  // Divider
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 32,
+    marginBottom: 28,
   },
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(74,222,128,0.3)',
   },
   dividerText: {
     fontSize: 10,
-    letterSpacing: 2.5,
-    color: 'rgba(255,255,255,0.2)',
+    letterSpacing: 3,
+    color: GREEN_MID,
+    fontWeight: '600',
   },
 
+  // Section
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   sectionLabel: {
     fontSize: 10,
-    letterSpacing: 2,
-    color: GOLD,
-    marginBottom: 4,
+    letterSpacing: 2.5,
+    color: GREEN_DARK,
+    marginBottom: 3,
+    fontWeight: '700',
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: '300',
-    color: '#ffffff',
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    letterSpacing: -0.3,
   },
   seeAll: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.35)',
-    letterSpacing: 0.3,
+    color: GREEN_DARK,
+    fontWeight: '500',
+    letterSpacing: 0.2,
   },
 
   // Job Cards
   jobCard: {
-    backgroundColor: '#111111',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 14,
+    backgroundColor: WHITE,
+    borderWidth: 1,
+    borderColor: 'rgba(74,222,128,0.15)',
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   jobCardTop: {
     flexDirection: 'row',
@@ -426,10 +558,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   jobIconWrap: {
-    width: 40,
-    height: 40,
-    backgroundColor: 'rgba(212,175,55,0.1)',
-    borderRadius: 10,
+    width: 42,
+    height: 42,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -438,24 +570,25 @@ const styles = StyleSheet.create({
   },
   jobType: {
     fontSize: 10,
-    color: 'rgba(255,255,255,0.3)',
+    color: TEXT_LIGHT,
     letterSpacing: 0.5,
     marginBottom: 2,
+    fontWeight: '500',
   },
   jobBudget: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: GOLD,
+    fontSize: 15,
+    fontWeight: '700',
+    color: GREEN_DARK,
   },
   jobTitle: {
     fontSize: 15,
-    fontWeight: '500',
-    color: '#ffffff',
-    marginBottom: 4,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    marginBottom: 3,
   },
   jobCompany: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.35)',
+    color: TEXT_MUTED,
     marginBottom: 12,
   },
   tagRow: {
@@ -466,15 +599,16 @@ const styles = StyleSheet.create({
   tag: {
     paddingVertical: 4,
     paddingHorizontal: 10,
-    backgroundColor: 'rgba(212,175,55,0.08)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(212,175,55,0.2)',
+    backgroundColor: GREEN_SOFT,
+    borderWidth: 1,
+    borderColor: GREEN_MID,
     borderRadius: 999,
   },
   tagText: {
     fontSize: 10,
-    color: 'rgba(212,175,55,0.8)',
+    color: GREEN_DARK,
     letterSpacing: 0.3,
+    fontWeight: '500',
   },
 
   // Task Cards
@@ -482,12 +616,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#111111',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: WHITE,
+    borderWidth: 1,
+    borderColor: 'rgba(74,222,128,0.15)',
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
+    elevation: 1,
   },
   taskLeft: {
     flexDirection: 'row',
@@ -496,10 +635,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   taskIconWrap: {
-    width: 38,
-    height: 38,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -514,49 +653,83 @@ const styles = StyleSheet.create({
   },
   taskTitle: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#ffffff',
+    fontWeight: '600',
+    color: TEXT_MAIN,
   },
   urgentBadge: {
     paddingVertical: 2,
-    paddingHorizontal: 7,
-    backgroundColor: 'rgba(220,53,69,0.15)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(220,53,69,0.3)',
+    paddingHorizontal: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
     borderRadius: 999,
   },
   urgentText: {
     fontSize: 9,
-    color: '#ff6b6b',
+    color: '#EF4444',
     letterSpacing: 0.5,
+    fontWeight: '600',
   },
   tagDark: {
     paddingVertical: 3,
     paddingHorizontal: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: SURFACE,
     borderRadius: 999,
     marginRight: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(74,222,128,0.15)',
   },
   tagDarkText: {
     fontSize: 10,
-    color: 'rgba(255,255,255,0.3)',
+    color: TEXT_MUTED,
+    fontWeight: '500',
   },
   taskBudget: {
     fontSize: 13,
-    fontWeight: '500',
-    color: GOLD,
+    fontWeight: '700',
+    color: GREEN_DARK,
     marginLeft: 8,
   },
 
+  // Bottom CTA
   bottomCta: {
     marginTop: 40,
-    gap: 14,
+  },
+  bottomCtaCard: {
+    backgroundColor: WHITE,
+    borderWidth: 1.5,
+    borderColor: GREEN_MID,
+    borderRadius: 20,
+    padding: 28,
+    alignItems: 'center',
+    shadowColor: GREEN,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  bottomCtaIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   bottomCtaText: {
     fontSize: 22,
-    fontWeight: '300',
-    color: '#ffffff',
+    fontWeight: '700',
+    color: TEXT_MAIN,
     textAlign: 'center',
-    lineHeight: 30,
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  bottomCtaSub: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 22,
   },
 });

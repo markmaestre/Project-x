@@ -1,221 +1,108 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  TextInput,
   Image,
   Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Modal,
-  Linking,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useDispatch, useSelector } from 'react-redux';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
-import { updateProfile, deleteProfilePicture } from '../../Redux/slices/authSlice';
+import { useSelector } from 'react-redux';
+import { Directory, File, Paths } from 'expo-file-system';
 
-const GOLD = '#D4AF37';
-const BG = '#0a0a0a';
-const CARD_BG = '#141414';
-const BORDER = 'rgba(255,255,255,0.07)';
-const INPUT_BG = '#111111';
+const GREEN       = '#4ADE80';
+const GREEN_DARK  = '#22C55E';
+const GREEN_SOFT  = '#DCFCE7';
+const GREEN_MID   = '#86EFAC';
+const WHITE       = '#FFFFFF';
+const OFF_WHITE   = '#F0FDF4';
+const BORDER      = 'rgba(74,222,128,0.25)';
+const TEXT_MAIN   = '#0F2417';
+const TEXT_MUTED  = '#6B7280';
+const TEXT_LIGHT  = '#9CA3AF';
 
-const EXPERIENCE_LEVELS = ['Entry', 'Intermediate', 'Expert', 'Senior'];
+// IMPORTANT: Must match the same directory used in EditProfile
+const CV_DIRECTORY = new Directory(Paths.document, 'cvs');
 
-const SKILL_SUGGESTIONS = [
-  'React Native', 'React.js', 'Node.js', 'UI/UX Design', 'Figma',
-  'Python', 'Laravel', 'WordPress', 'SEO', 'Copywriting',
-  'Video Editing', 'Graphic Design', 'Social Media', 'Data Entry',
-];
+export default function Profile({ onNavigate }) {
+  const { user } = useSelector((state) => state.auth);
+  const [savedCV, setSavedCV] = useState(null);
 
-// Local CV storage directory
-const CV_DIRECTORY = `${FileSystem.documentDirectory}cvs/`;
+  const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`.toUpperCase();
 
-export default function FreelancerProfile({ onNavigate }) {
-  const dispatch = useDispatch();
-  const { user, isLoading } = useSelector((state) => state.auth);
-
-  const [skillInput, setSkillInput] = useState('');
-  const [imageModalVisible, setImageModalVisible] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [uploadingCV, setUploadingCV] = useState(false);
-  const [savedCV, setSavedCV] = useState(null); // Store local CV info
-
-  // Store all form fields in individual useState calls
-  const [firstName, setFirstName] = useState(user?.first_name ?? '');
-  const [lastName, setLastName] = useState(user?.last_name ?? '');
-  const [username, setUsername] = useState(user?.username ?? '');
-  const [phone, setPhone] = useState(user?.phone_number ?? '');
-  const [bio, setBio] = useState(user?.bio_about_me ?? '');
-  const [skills, setSkills] = useState(user?.skills ?? []);
-  const [experienceLevel, setExperienceLevel] = useState(user?.experience_level ?? '');
-  const [yearsExp, setYearsExp] = useState(user?.years_of_experience?.toString() ?? '');
-  const [hourlyRate, setHourlyRate] = useState(user?.hourly_rate?.toString() ?? '');
-  const [fixedRate, setFixedRate] = useState(user?.fixed_rate?.toString() ?? '');
-  const [city, setCity] = useState(user?.city ?? '');
-  const [country, setCountry] = useState(user?.country ?? '');
-  const [portfolioUrl, setPortfolioUrl] = useState(user?.portfolio_link ?? '');
-
-  const initials = `${firstName?.[0] ?? ''}${lastName?.[0] ?? ''}`.toUpperCase();
-
-  // Load locally stored CV on component mount
+  // Load locally stored CV
   useEffect(() => {
     loadLocalCV();
   }, []);
 
-  // Create CV directory if it doesn't exist
-  const ensureCVDirectory = async () => {
-    const dirInfo = await FileSystem.getInfoAsync(CV_DIRECTORY);
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(CV_DIRECTORY, { intermediates: true });
-    }
-  };
-
-  // Load saved CV from local storage
   const loadLocalCV = async () => {
     try {
-      await ensureCVDirectory();
+      // Check if directory exists
+      if (!CV_DIRECTORY.exists) {
+        console.log('CV directory does not exist');
+        setSavedCV(null);
+        return;
+      }
       
-      // Look for CV files in the directory
-      const files = await FileSystem.readDirectoryAsync(CV_DIRECTORY);
+      // List all files in the directory
+      const files = CV_DIRECTORY.list();
+      console.log('Files in CV directory:', files.map(f => f.name));
+      
+      // Filter for CV files
       const cvFiles = files.filter(file => 
-        file.endsWith('.pdf') || file.endsWith('.doc') || file.endsWith('.docx')
+        file.name.endsWith('.pdf') || 
+        file.name.endsWith('.doc') || 
+        file.name.endsWith('.docx')
       );
       
       if (cvFiles.length > 0) {
+        // Get the most recent CV (by modification time or just the first one)
         const latestCV = cvFiles[0];
-        const cvInfo = await FileSystem.getInfoAsync(`${CV_DIRECTORY}${latestCV}`);
+        console.log('Found CV:', latestCV.name);
         setSavedCV({
-          uri: cvInfo.uri,
-          name: latestCV,
-          size: cvInfo.size,
+          uri: latestCV.uri,
+          name: latestCV.name,
+          size: latestCV.size,
         });
       } else {
+        console.log('No CV files found');
         setSavedCV(null);
       }
     } catch (error) {
       console.error('Error loading local CV:', error);
+      setSavedCV(null);
     }
   };
 
-  // Upload CV to local storage
-  const uploadCV = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-        copyToCacheDirectory: true,
-      });
+  const formatFileSize = (bytes) => {
+    if (!bytes) return 'Unknown size';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
 
-      if (result.canceled) {
-        return;
-      }
-
-      const document = result.assets[0];
-      
-      // Validate file size (max 5MB)
-      if (document.size && document.size > 5 * 1024 * 1024) {
-        Alert.alert('Error', 'File size must be less than 5MB');
-        return;
-      }
-
-      // Validate file extension
-      const fileName = document.name;
-      const fileExtension = fileName.split('.').pop().toLowerCase();
-      const allowedExtensions = ['pdf', 'doc', 'docx'];
-      
-      if (!allowedExtensions.includes(fileExtension)) {
-        Alert.alert('Error', 'Please upload PDF, DOC, or DOCX files only');
-        return;
-      }
-
-      setUploadingCV(true);
-      
-      // Ensure directory exists
-      await ensureCVDirectory();
-      
-      // Create unique filename with timestamp
-      const timestamp = Date.now();
-      const savedFileName = `cv_${timestamp}_${fileName}`;
-      const localUri = `${CV_DIRECTORY}${savedFileName}`;
-      
-      // Copy the selected file to app's local storage
-      await FileSystem.copyAsync({
-        from: document.uri,
-        to: localUri,
-      });
-      
-      // Get file info to confirm save
-      const fileInfo = await FileSystem.getInfoAsync(localUri);
-      
-      // Delete old CV if exists
-      if (savedCV) {
-        await FileSystem.deleteAsync(savedCV.uri, { idempotent: true });
-      }
-      
-      setSavedCV({
-        uri: fileInfo.uri,
-        name: savedFileName,
-        size: fileInfo.size,
-      });
-      
-      Alert.alert('Success', 'CV saved locally on your device!');
-      
-    } catch (error) {
-      console.error('Error uploading CV:', error);
-      Alert.alert('Error', 'Failed to save CV. Please try again.');
-    } finally {
-      setUploadingCV(false);
+  const formatDate = (timestamp) => {
+    if (!timestamp) {
+      const date = new Date();
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  // Delete CV from local storage
-  const handleDeleteCV = async () => {
-    Alert.alert(
-      'Delete CV',
-      'Are you sure you want to delete your CV from this device?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setUploadingCV(true);
-            try {
-              if (savedCV) {
-                await FileSystem.deleteAsync(savedCV.uri, { idempotent: true });
-                setSavedCV(null);
-                Alert.alert('Success', 'CV deleted successfully');
-              }
-            } catch (error) {
-              console.error('Error deleting CV:', error);
-              Alert.alert('Error', 'Failed to delete CV');
-            } finally {
-              setUploadingCV(false);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  // View CV - opens with default app
   const viewCV = async () => {
     if (savedCV && savedCV.uri) {
       try {
-        // Check if file still exists
-        const fileInfo = await FileSystem.getInfoAsync(savedCV.uri);
-        if (fileInfo.exists) {
-          await Linking.openURL(savedCV.uri);
+        const file = new File(savedCV.uri);
+        if (file.exists) {
+          // Open the file with the device's default viewer
+          await file.open();
         } else {
-          Alert.alert('Error', 'CV file not found. Please upload again.');
+          Alert.alert('Error', 'CV file not found.');
           setSavedCV(null);
         }
       } catch (error) {
@@ -225,1044 +112,423 @@ export default function FreelancerProfile({ onNavigate }) {
     }
   };
 
-  // Format file size for display
-  const formatFileSize = (bytes) => {
-    if (!bytes) return 'Unknown size';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
+  // Menu Item Component with chevron on the right
+  const MenuItem = ({ icon, title, subtitle, onPress }) => (
+    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.menuItemLeft}>
+        <View style={styles.menuIconWrap}>
+          <Ionicons name={icon} size={20} color={GREEN_DARK} />
+        </View>
+        <View style={styles.menuItemContent}>
+          <Text style={styles.menuItemTitle}>{title}</Text>
+          {subtitle && <Text style={styles.menuItemSubtitle}>{subtitle}</Text>}
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={TEXT_LIGHT} />
+    </TouchableOpacity>
+  );
 
-  // Request permission for image picker
-  const requestPermission = async () => {
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Please grant permission to access your photos to change your profile picture.');
-        return false;
-      }
-      return true;
-    }
-    return true;
-  };
-
-  // Pick image from gallery
-  const pickImage = async () => {
-    const hasPermission = await requestPermission();
-    if (!hasPermission) return;
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], 
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-      base64: false,
-    });
-
-    if (!result.canceled) {
-      await uploadProfilePicture(result.assets[0]);
-    }
-  };
-
-  // Take photo with camera
-  const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Needed', 'Please grant permission to access your camera.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      await uploadProfilePicture(result.assets[0]);
-    }
-  };
-
-  // Upload profile picture (this still goes to server)
-  const uploadProfilePicture = async (imageAsset) => {
-    setUploadingImage(true);
-    try {
-      const imageFile = {
-        uri: imageAsset.uri,
-        type: 'image/jpeg',
-        name: `profile_${Date.now()}.jpg`,
-      };
-
-      const result = await dispatch(updateProfile({ 
-        profileData: {}, 
-        profilePicture: imageFile 
-      }));
-
-      if (updateProfile.fulfilled.match(result)) {
-        Alert.alert('Success', 'Profile picture updated successfully!');
-        setImageModalVisible(false);
-      } else {
-        Alert.alert('Error', result.payload?.message || 'Failed to update profile picture');
-      }
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      Alert.alert('Error', 'Failed to upload profile picture');
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  // Delete profile picture
-  const handleDeleteProfilePicture = async () => {
-    Alert.alert(
-      'Delete Profile Picture',
-      'Are you sure you want to delete your profile picture?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setUploadingImage(true);
-            try {
-              const result = await dispatch(deleteProfilePicture());
-              if (deleteProfilePicture.fulfilled.match(result)) {
-                Alert.alert('Success', 'Profile picture deleted successfully');
-                setImageModalVisible(false);
-              } else {
-                Alert.alert('Error', result.payload?.message || 'Failed to delete profile picture');
-              }
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete profile picture');
-            } finally {
-              setUploadingImage(false);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const addSkill = useCallback((skill) => {
-    const trimmed = skill.trim();
-    if (!trimmed) return;
-    setSkills((prev) => {
-      if (prev.includes(trimmed)) return prev;
-      return [...prev, trimmed];
-    });
-    setSkillInput('');
-  }, []);
-
-  const removeSkill = useCallback((skill) => {
-    setSkills((prev) => prev.filter((s) => s !== skill));
-  }, []);
-
-  const handleSave = async () => {
-    // Validation
-    if (!firstName.trim() || !lastName.trim()) {
-      Alert.alert('Validation Error', 'First and last name are required.');
-      return;
-    }
-
-    if (!experienceLevel) {
-      Alert.alert('Validation Error', 'Please select your experience level.');
-      return;
-    }
-
-    // Map fields to match backend expectations
-    const profileData = {
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      username: username.trim() || undefined,
-      phone_number: phone.trim() || undefined,
-      bio_about_me: bio.trim() || undefined,
-      skills: skills.length > 0 ? skills : undefined,
-      experience_level: experienceLevel,
-      years_of_experience: yearsExp ? parseInt(yearsExp, 10) : null,
-      hourly_rate: hourlyRate ? parseFloat(hourlyRate) : null,
-      fixed_rate: fixedRate ? parseFloat(fixedRate) : null,
-      city: city.trim() || undefined,
-      country: country.trim() || undefined,
-      portfolio_link: portfolioUrl.trim() || undefined,
-    };
-
-    // Remove undefined values
-    Object.keys(profileData).forEach(key => {
-      if (profileData[key] === undefined) {
-        delete profileData[key];
-      }
-    });
-
-    console.log('Updating profile with data:', profileData);
-
-    try {
-      const result = await dispatch(updateProfile({ profileData, profilePicture: null, cv: null }));
-      
-      if (updateProfile.fulfilled.match(result)) {
-        Alert.alert('Success', 'Your profile has been updated!', [
-          { text: 'OK', onPress: () => onNavigate('Freelancer') },
-        ]);
-      } else {
-        const errMsg = result.payload?.message || result.payload?.error || 'Failed to update profile. Please try again.';
-        Alert.alert('Error', errMsg);
-      }
-    } catch (error) {
-      console.error('Update error:', error);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
-    }
-  };
-
-  const Label = ({ text, required }) => (
-    <Text style={styles.label}>
-      {text}
-      {required && <Text style={styles.labelRequired}> *</Text>}
-    </Text>
+  // CV Item Component with chevron on the right
+  const CVItem = ({ name, date, onPress }) => (
+    <TouchableOpacity style={styles.cvItem} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.cvItemLeft}>
+        <View style={styles.cvIconWrap}>
+          <Ionicons name="document-text-outline" size={20} color={GREEN_DARK} />
+        </View>
+        <View style={styles.cvItemContent}>
+          <Text style={styles.cvItemName}>{name}</Text>
+          <Text style={styles.cvItemDate}>Added {date}</Text>
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={TEXT_LIGHT} />
+    </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
+      
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
       >
+        {/* Header - No back button as per design */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => onNavigate('Freelancer')}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={20} color={GOLD} />
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>My Profile</Text>
-            <Text style={styles.headerSub}>Edit your information</Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.saveBtn, isLoading && styles.saveBtnDisabled]}
-            onPress={handleSave}
-            disabled={isLoading}
-            activeOpacity={0.8}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#0a0a0a" />
-            ) : (
-              <Text style={styles.saveBtnText}>Save</Text>
-            )}
-          </TouchableOpacity>
+          <View style={{ width: 38 }} />
+          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={{ width: 38 }} />
         </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="none"
-        >
-          {/* Avatar Section */}
-          <TouchableOpacity 
-            style={styles.avatarSection}
-            onPress={() => setImageModalVisible(true)}
-            activeOpacity={0.9}
-          >
-            <View style={styles.avatarWrap}>
-              {user?.profile_picture ? (
-                <Image source={{ uri: user.profile_picture }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarInitials}>{initials || '?'}</Text>
-                </View>
-              )}
-              <View style={styles.avatarEditBtn}>
-                <Ionicons name="camera-outline" size={16} color="#0a0a0a" />
-              </View>
-            </View>
-            <Text style={styles.avatarName}>{firstName} {lastName}</Text>
-            <Text style={styles.avatarUsername}>@{username}</Text>
-            <Text style={styles.changePhotoText}>Tap to change photo</Text>
-          </TouchableOpacity>
-
-          {/* BASIC INFO */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="person-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Basic Information</Text>
-            </View>
-
-            <View style={styles.row}>
-              <View style={styles.halfField}>
-                <Label text="First Name" required />
-                <TextInput
-                  style={styles.input}
-                  placeholder="First name"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                />
-              </View>
-              <View style={styles.halfField}>
-                <Label text="Last Name" required />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Last name"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={lastName}
-                  onChangeText={setLastName}
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                />
-              </View>
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Label text="Username" />
-              <TextInput
-                style={styles.input}
-                placeholder="@username"
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
-                blurOnSubmit={false}
-              />
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Label text="Email Address" />
-              <TextInput
-                style={[styles.input, styles.inputDisabled]}
-                value={user?.email_address ?? ''}
-                editable={false}
-                placeholderTextColor="rgba(255,255,255,0.2)"
-              />
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Label text="Phone Number" />
-              <TextInput
-                style={styles.input}
-                placeholder="+63 9XX XXX XXXX"
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                blurOnSubmit={false}
-              />
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Label text="About Me" />
-              <TextInput
-                style={[styles.input, styles.inputMultiline]}
-                placeholder="Tell clients about yourself..."
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={bio}
-                onChangeText={setBio}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-                blurOnSubmit={false}
-                autoCorrect={false}
-              />
-            </View>
-          </View>
-
-          {/* SKILLS */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="code-slash-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Skills</Text>
-            </View>
-
-            <View style={styles.skillInputRow}>
-              <TextInput
-                style={styles.skillInput}
-                placeholder="Add a skill..."
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={skillInput}
-                onChangeText={setSkillInput}
-                onSubmitEditing={() => addSkill(skillInput)}
-                returnKeyType="done"
-                blurOnSubmit={false}
-                autoCorrect={false}
-              />
-              <TouchableOpacity
-                style={styles.skillAddBtn}
-                onPress={() => addSkill(skillInput)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="add" size={20} color="#0a0a0a" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.suggestionRow}
-              keyboardShouldPersistTaps="handled"
-            >
-              {SKILL_SUGGESTIONS.filter((s) => !skills.includes(s)).map((s) => (
-                <TouchableOpacity
-                  key={s}
-                  style={styles.suggestionChip}
-                  onPress={() => addSkill(s)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="add" size={12} color="rgba(255,255,255,0.4)" />
-                  <Text style={styles.suggestionText}>{s}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {skills.length > 0 && (
-              <View style={styles.skillsWrap}>
-                {skills.map((skill) => (
-                  <View key={skill} style={styles.skillChip}>
-                    <Text style={styles.skillChipText}>{skill}</Text>
-                    <TouchableOpacity
-                      onPress={() => removeSkill(skill)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="close" size={14} color={GOLD} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* CV UPLOAD SECTION - Local Storage Only */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="document-text-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Resume / CV</Text>
-            </View>
-
-            <View style={styles.cvContainer}>
-              {savedCV ? (
-                <View style={styles.cvInfoContainer}>
-                  <View style={styles.cvFileInfo}>
-                    <Ionicons name="document-text" size={32} color={GOLD} />
-                    <View style={styles.cvFileDetails}>
-                      <Text style={styles.cvFileName} numberOfLines={1}>
-                        {savedCV.name}
-                      </Text>
-                      <Text style={styles.cvFileStatus}>
-                        Saved locally • {formatFileSize(savedCV.size)}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.cvActions}>
-                    <TouchableOpacity 
-                      style={[styles.cvActionBtn, styles.cvViewBtn]} 
-                      onPress={viewCV}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="eye-outline" size={18} color={GOLD} />
-                      <Text style={styles.cvViewBtnText}>Open</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.cvActionBtn, styles.cvDeleteBtn]} 
-                      onPress={handleDeleteCV}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="trash-outline" size={18} color="#ff4444" />
-                      <Text style={styles.cvDeleteBtnText}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.cvUploadArea}>
-                  <Ionicons name="cloud-upload-outline" size={48} color={GOLD} />
-                  <Text style={styles.cvUploadTitle}>Upload your CV/Resume</Text>
-                  <Text style={styles.cvUploadSubtitle}>
-                    PDF, DOC, or DOCX (Max 5MB)
-                  </Text>
-                  <Text style={styles.cvLocalNote}>
-                    * File will be stored locally on your device only
-                  </Text>
-                  <TouchableOpacity 
-                    style={styles.cvUploadBtn}
-                    onPress={uploadCV}
-                    disabled={uploadingCV}
-                    activeOpacity={0.8}
-                  >
-                    {uploadingCV ? (
-                      <ActivityIndicator size="small" color="#0a0a0a" />
-                    ) : (
-                      <>
-                        <Ionicons name="add" size={18} color="#0a0a0a" />
-                        <Text style={styles.cvUploadBtnText}>Choose File</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* EXPERIENCE */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="briefcase-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Experience</Text>
-            </View>
-
-            <Label text="Experience Level" required />
-            <View style={styles.pillRow}>
-              {EXPERIENCE_LEVELS.map((level) => (
-                <TouchableOpacity
-                  key={level}
-                  style={[styles.pill, experienceLevel === level && styles.pillActive]}
-                  onPress={() => setExperienceLevel(level)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.pillText, experienceLevel === level && styles.pillTextActive]}>
-                    {level}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {!experienceLevel && (
-              <Text style={styles.errorText}>Please select your experience level</Text>
-            )}
-
-            <View style={styles.fieldGroup}>
-              <Label text="Years of Experience" />
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. 3"
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={yearsExp}
-                onChangeText={setYearsExp}
-                keyboardType="numeric"
-                blurOnSubmit={false}
-              />
-            </View>
-          </View>
-
-          {/* RATES */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="cash-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Rates</Text>
-            </View>
-            <View style={styles.row}>
-              <View style={styles.halfField}>
-                <Label text="Hourly Rate (₱)" />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. 500"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={hourlyRate}
-                  onChangeText={setHourlyRate}
-                  keyboardType="numeric"
-                  blurOnSubmit={false}
-                />
-              </View>
-              <View style={styles.halfField}>
-                <Label text="Fixed Rate (₱)" />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. 15000"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={fixedRate}
-                  onChangeText={setFixedRate}
-                  keyboardType="numeric"
-                  blurOnSubmit={false}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* LOCATION */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="location-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Location</Text>
-            </View>
-            <View style={styles.row}>
-              <View style={styles.halfField}>
-                <Label text="City" />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Manila"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={city}
-                  onChangeText={setCity}
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                />
-              </View>
-              <View style={styles.halfField}>
-                <Label text="Country" />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Philippines"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={country}
-                  onChangeText={setCountry}
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* PORTFOLIO LINK */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="link-outline" size={16} color={GOLD} />
-              <Text style={styles.sectionTitle}>Portfolio</Text>
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Label text="Portfolio URL" />
-              <View style={styles.linkInputWrap}>
-                <Ionicons name="globe-outline" size={16} color="rgba(255,255,255,0.3)" style={styles.linkIcon} />
-                <TextInput
-                  style={styles.linkInput}
-                  placeholder="https://yourportfolio.com"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  value={portfolioUrl}
-                  onChangeText={setPortfolioUrl}
-                  keyboardType="url"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* BOTTOM SAVE BUTTON */}
-          <TouchableOpacity
-            style={[styles.bottomSaveBtn, isLoading && styles.saveBtnDisabled]}
-            onPress={handleSave}
-            disabled={isLoading}
-            activeOpacity={0.85}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#0a0a0a" />
+        {/* Profile Info Section */}
+        <View style={styles.profileSection}>
+          <View style={styles.avatarWrap}>
+            {user?.profile_picture ? (
+              <Image source={{ uri: user.profile_picture }} style={styles.avatar} />
             ) : (
-              <>
-                <Ionicons name="checkmark-circle-outline" size={18} color="#0a0a0a" />
-                <Text style={styles.bottomSaveBtnText}>Save Profile</Text>
-              </>
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarInitials}>{initials || '?'}</Text>
+              </View>
             )}
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Image Picker Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={imageModalVisible}
-        onRequestClose={() => setImageModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Profile Picture</Text>
-              <TouchableOpacity onPress={() => setImageModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
+          </View>
+          
+          <Text style={styles.profileName}>
+            {user?.first_name} {user?.last_name}
+          </Text>
+          <Text style={styles.profileUsername}>@{user?.username}</Text>
+          
+          <View style={styles.contactInfo}>
+            <View style={styles.contactRow}>
+              <Ionicons name="mail-outline" size={16} color={TEXT_MUTED} />
+              <Text style={styles.contactText}>{user?.email_address}</Text>
             </View>
-
-            <TouchableOpacity style={styles.modalOption} onPress={pickImage}>
-              <Ionicons name="images-outline" size={24} color={GOLD} />
-              <Text style={styles.modalOptionText}>Choose from Gallery</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.modalOption} onPress={takePhoto}>
-              <Ionicons name="camera-outline" size={24} color={GOLD} />
-              <Text style={styles.modalOptionText}>Take Photo</Text>
-            </TouchableOpacity>
-
-            {user?.profile_picture && (
-              <TouchableOpacity 
-                style={[styles.modalOption, styles.modalOptionDanger]} 
-                onPress={handleDeleteProfilePicture}
-              >
-                <Ionicons name="trash-outline" size={24} color="#ff4444" />
-                <Text style={[styles.modalOptionText, styles.modalOptionTextDanger]}>Delete Picture</Text>
-              </TouchableOpacity>
+            {user?.phone_number && (
+              <View style={styles.contactRow}>
+                <Ionicons name="call-outline" size={16} color={TEXT_MUTED} />
+                <Text style={styles.contactText}>{user?.phone_number}</Text>
+              </View>
             )}
-
-            {uploadingImage && (
-              <View style={styles.uploadingContainer}>
-                <ActivityIndicator size="large" color={GOLD} />
-                <Text style={styles.uploadingText}>Updating profile picture...</Text>
+            {(user?.city || user?.country) && (
+              <View style={styles.contactRow}>
+                <Ionicons name="location-outline" size={16} color={TEXT_MUTED} />
+                <Text style={styles.contactText}>
+                  {[user?.city, user?.country].filter(Boolean).join(', ')}
+                </Text>
               </View>
             )}
           </View>
         </View>
-      </Modal>
+
+        {/* Resumes Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="document-text-outline" size={18} color={GREEN_DARK} />
+            <Text style={styles.sectionTitle}>Resumes</Text>
+          </View>
+          
+          {savedCV ? (
+            <CVItem 
+              name={savedCV.name.replace(/^cv_\d+_/, '')} // Clean up filename by removing timestamp prefix
+              date={formatDate()}
+              onPress={viewCV}
+            />
+          ) : (
+            <View style={styles.noResumeContainer}>
+              <Text style={styles.noResumeText}>No resume uploaded yet</Text>
+              <TouchableOpacity onPress={() => onNavigate('EditProfile')}>
+                <Text style={styles.addResumeText}>Add Resume</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* Improve your job matches Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="trending-up-outline" size={18} color={GREEN_DARK} />
+            <Text style={styles.sectionTitle}>Improve your job matches</Text>
+          </View>
+
+          <MenuItem 
+            icon="star-outline"
+            title="Qualifications"
+            subtitle="Highlight your skills and experience"
+            onPress={() => onNavigate('EditProfile')}
+          />
+
+          <MenuItem 
+            icon="options-outline"
+            title="Job preferences"
+            subtitle="Save specific details like minimum desired pay and schedule"
+            onPress={() => onNavigate('EditProfile')}
+          />
+
+          <MenuItem 
+            icon="eye-off-outline"
+            title="Hide jobs with these details"
+            subtitle="Manage the qualifications or preferences used to hide jobs from your search"
+            onPress={() => onNavigate('EditProfile')}
+          />
+
+          <MenuItem 
+            icon="checkmark-circle-outline"
+            title="Ready to work"
+            subtitle="Let employers know that you're available to start working as soon as possible"
+            onPress={() => onNavigate('EditProfile')}
+          />
+        </View>
+
+        {/* Footer Text */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            ©2026 Taskra - Cookies, Privacy and Terms
+          </Text>
+        </View>
+      </ScrollView>
+
+      {/* Bottom Tab Bar */}
+      <View style={styles.bottomTabBar}>
+        <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate('FreelancerDashboard')}>
+          <Ionicons name="home-outline" size={22} color={TEXT_MUTED} />
+          <Text style={styles.tabLabel}>Home</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate('MyJobs')}>
+          <Ionicons name="briefcase-outline" size={22} color={TEXT_MUTED} />
+          <Text style={styles.tabLabel}>My jobs</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate('Messages')}>
+          <Ionicons name="chatbubble-outline" size={22} color={TEXT_MUTED} />
+          <Text style={styles.tabLabel}>Messages</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.tabItem} onPress={() => onNavigate('Profile')}>
+          <Ionicons name="person-outline" size={22} color={GREEN_DARK} />
+          <Text style={[styles.tabLabel, styles.tabLabelActive]}>Profile</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
-  flex: { flex: 1 },
+  safe: { flex: 1, backgroundColor: OFF_WHITE },
+  scroll: { paddingBottom: 80 },
 
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
-    gap: 12,
+    backgroundColor: WHITE,
   },
-  backBtn: {
-    width: 36, height: 36,
-    borderRadius: 10,
-    backgroundColor: CARD_BG,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: BORDER,
+  headerTitle: { 
+    fontSize: 18, 
+    fontWeight: '600', 
+    color: TEXT_MAIN 
   },
-  headerCenter: { flex: 1 },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
-  headerSub: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 1 },
-  saveBtn: {
-    paddingHorizontal: 18, paddingVertical: 8,
-    backgroundColor: GOLD,
-    borderRadius: 10,
-    minWidth: 60,
-    alignItems: 'center',
-  },
-  saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { fontSize: 13, fontWeight: '600', color: '#0a0a0a' },
 
-  scroll: { paddingBottom: 60 },
-
-  avatarSection: {
+  // Profile Section
+  profileSection: {
+    backgroundColor: WHITE,
     alignItems: 'center',
-    paddingVertical: 28,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
-    marginBottom: 8,
   },
-  avatarWrap: { position: 'relative', marginBottom: 12 },
+  avatarWrap: {
+    marginBottom: 12,
+  },
   avatar: {
-    width: 90, height: 90,
-    borderRadius: 45,
-    borderWidth: 2, borderColor: GOLD,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: GREEN_DARK,
   },
   avatarPlaceholder: {
-    width: 90, height: 90,
-    borderRadius: 45,
-    backgroundColor: GOLD,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: GOLD,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: GREEN_DARK,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: GREEN_DARK,
   },
-  avatarInitials: { fontSize: 32, fontWeight: '700', color: '#0a0a0a' },
-  avatarEditBtn: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 28, height: 28,
-    borderRadius: 14,
-    backgroundColor: GOLD,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: BG,
+  avatarInitials: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: WHITE,
   },
-  avatarName: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 2 },
-  avatarUsername: { fontSize: 13, color: 'rgba(255,255,255,0.4)' },
-  changePhotoText: {
-    fontSize: 12,
-    color: GOLD,
-    marginTop: 8,
-    opacity: 0.7,
+  profileName: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    marginBottom: 4,
+  },
+  profileUsername: {
+    fontSize: 14,
+    color: TEXT_MUTED,
+    marginBottom: 16,
+  },
+  contactInfo: {
+    alignItems: 'flex-start',
+    backgroundColor: OFF_WHITE,
+    borderRadius: 12,
+    padding: 12,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  contactText: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    flex: 1,
   },
 
+  // Section
   section: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    backgroundColor: CARD_BG,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1, borderColor: BORDER,
+    backgroundColor: WHITE,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: BORDER,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 16,
-    paddingBottom: 12,
+    marginBottom: 12,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#fff' },
-
-  fieldGroup: { marginBottom: 14 },
-  label: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,0.5)', marginBottom: 6 },
-  labelRequired: { color: GOLD },
-  input: {
-    backgroundColor: INPUT_BG,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 11,
-    fontSize: 14, color: '#fff',
-  },
-  inputMultiline: { height: 100, paddingTop: 11 },
-  inputDisabled: { opacity: 0.45 },
-  row: { flexDirection: 'row', gap: 12, marginBottom: 14 },
-  halfField: { flex: 1 },
-
-  skillInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  skillInput: {
-    flex: 1,
-    backgroundColor: INPUT_BG,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 10,
-    fontSize: 14, color: '#fff',
-  },
-  skillAddBtn: {
-    width: 42, height: 42,
-    borderRadius: 10,
-    backgroundColor: GOLD,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  suggestionRow: { paddingBottom: 10, gap: 6 },
-  suggestionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10, paddingVertical: 6,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 999,
-    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.1)',
-  },
-  suggestionText: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
-  skillsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  skillChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12, paddingVertical: 7,
-    backgroundColor: 'rgba(212,175,55,0.1)',
-    borderRadius: 999,
-    borderWidth: 1, borderColor: 'rgba(212,175,55,0.3)',
-  },
-  skillChipText: { fontSize: 12, color: GOLD, fontWeight: '500' },
-
-  pillRow: { flexDirection: 'row', gap: 8, marginBottom: 14, marginTop: 6 },
-  pill: {
-    flex: 1, paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: INPUT_BG,
-    alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-  },
-  pillActive: {
-    backgroundColor: 'rgba(212,175,55,0.12)',
-    borderColor: 'rgba(212,175,55,0.4)',
-  },
-  pillText: { fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: '500' },
-  pillTextActive: { color: GOLD },
-
-  linkInputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: INPUT_BG,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-  },
-  linkIcon: { marginRight: 8 },
-  linkInput: { flex: 1, paddingVertical: 11, fontSize: 14, color: '#fff' },
-
-  bottomSaveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 24,
-    marginBottom: 20,
-    paddingVertical: 15,
-    backgroundColor: GOLD,
-    borderRadius: 14,
-  },
-  bottomSaveBtnText: { fontSize: 15, fontWeight: '600', color: '#0a0a0a' },
-  
-  errorText: {
-    fontSize: 11,
-    color: '#ff4444',
-    marginTop: -8,
-    marginBottom: 12,
-    marginLeft: 4,
-  },
-
-  // CV Styles
-  cvContainer: {
-    marginTop: 4,
-  },
-  cvUploadArea: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderStyle: 'dashed',
-  },
-  cvUploadTitle: {
+  sectionTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fff',
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  cvUploadSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    marginBottom: 8,
-  },
-  cvLocalNote: {
-    fontSize: 10,
-    color: GOLD,
-    marginBottom: 16,
-    fontStyle: 'italic',
-  },
-  cvUploadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: GOLD,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  cvUploadBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#0a0a0a',
-  },
-  cvInfoContainer: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  cvFileInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  cvFileDetails: {
-    flex: 1,
-  },
-  cvFileName: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#fff',
-    marginBottom: 2,
-  },
-  cvFileStatus: {
-    fontSize: 10,
-    color: '#4ade80',
-  },
-  cvActions: {
-    flexDirection: 'row',
-    gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-    paddingTop: 12,
-  },
-  cvActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  cvViewBtn: {
-    backgroundColor: 'rgba(212,175,55,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.3)',
-  },
-  cvViewBtnText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: GOLD,
-  },
-  cvDeleteBtn: {
-    backgroundColor: 'rgba(255,68,68,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,68,68,0.3)',
-  },
-  cvDeleteBtnText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#ff4444',
+    color: TEXT_MAIN,
   },
 
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: CARD_BG,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  modalHeader: {
+  // Menu Item
+  menuItem: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 15,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  modalOption: {
+  menuItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 15,
     gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+    flex: 1,
   },
-  modalOptionDanger: {
-    borderBottomWidth: 0,
+  menuIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: GREEN_SOFT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: GREEN_MID,
   },
-  modalOptionText: {
-    fontSize: 16,
-    color: '#fff',
+  menuItemContent: {
+    flex: 1,
   },
-  modalOptionTextDanger: {
-    color: '#ff4444',
+  menuItemTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: TEXT_MAIN,
+    marginBottom: 2,
   },
-  uploadingContainer: {
+  menuItemSubtitle: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+
+  // CV Item
+  cvItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  cvItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  cvIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: GREEN_SOFT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: GREEN_MID,
+  },
+  cvItemContent: {
+    flex: 1,
+  },
+  cvItemName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: TEXT_MAIN,
+    marginBottom: 2,
+  },
+  cvItemDate: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+  noResumeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  noResumeText: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+  },
+  addResumeText: {
+    fontSize: 13,
+    color: GREEN_DARK,
+    fontWeight: '600',
+  },
+
+  // Footer
+  footer: {
     alignItems: 'center',
     paddingVertical: 20,
-    gap: 12,
+    paddingHorizontal: 16,
   },
-  uploadingText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
+  footerText: {
+    fontSize: 11,
+    color: TEXT_LIGHT,
+    textAlign: 'center',
+  },
+
+  // Bottom Tab Bar
+  bottomTabBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    backgroundColor: WHITE,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    paddingVertical: 10,
+    paddingBottom: 12,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  tabLabel: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+  tabLabelActive: {
+    color: GREEN_DARK,
   },
 });

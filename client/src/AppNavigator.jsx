@@ -25,6 +25,7 @@ import MyJobs from './components/freelancer/MyJobs';
 import ReceivedOffers from './components/freelancer/ReceivedOffers';
 import Messages from './components/freelancer/Messages';
 import MyApplications from './components/freelancer/MyApplications';
+import EditProfile from './components/freelancer/EditProfile';
 
 // Client Settings Screen
 import ClientSettingsScreen from './components/client/Settings';
@@ -102,6 +103,8 @@ export default function AppNavigator() {
       return <ReceivedOffers onNavigate={handleNavigate} />;
     case 'MyApplications':  // IMPORTANT: Capital M and Capital A
       return <MyApplications onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
+    case 'EditProfile':
+      return <EditProfile onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
 
     // ── Home ───────────────────────────────────────────────
     case 'Home':

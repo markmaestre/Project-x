@@ -1,20 +1,32 @@
 import express from "express";
 import mongoose from "mongoose";
+import multer from "multer";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import Job from "../models/Job.js";
 import Client from "../models/Client.js";
 import Freelancer from "../models/Freelancer.js";
+import Application from "../models/Application.js";
+import SavedJob from "../models/SavedJob.js";
 
 const router = express.Router();
 
-// Helper function to check if client owns the job
-const checkJobOwnership = async (jobId, clientId) => {
-  const job = await Job.findById(jobId);
-  if (!job) return { error: "Job not found", status: 404 };
-  if (job.client_id.toString() !== clientId.toString()) {
-    return { error: "Unauthorized: You do not own this job", status: 403 };
+// Configure multer for FormData parsing
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
   }
-  return { job };
+});
+
+// Helper function to safely parse JSON fields
+const parseJSONField = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    return value;
+  }
 };
 
 // Helper function to parse array fields
@@ -32,40 +44,214 @@ const parseArrayField = (field) => {
   return [];
 };
 
+// Helper function to check if client owns the job
+const checkJobOwnership = async (jobId, clientId) => {
+  const job = await Job.findById(jobId);
+  if (!job) return { error: "Job not found", status: 404 };
+  if (job.client_id.toString() !== clientId.toString()) {
+    return { error: "Unauthorized: You do not own this job", status: 403 };
+  }
+  return { job };
+};
+
+// Helper function to calculate profile insights
+const calculateProfileInsights = async (job, freelancerId) => {
+  const freelancer = await Freelancer.findById(freelancerId);
+  if (!freelancer) return null;
+
+  // 1. Skill Match Calculation
+  const freelancerSkills = freelancer.skills || [];
+  const jobSkills = job.required_skills || [];
+  
+  const matchingSkills = freelancerSkills.filter(skill => 
+    jobSkills.some(jobSkill => jobSkill.toLowerCase() === skill.toLowerCase())
+  );
+  
+  const missingSkills = jobSkills.filter(jobSkill =>
+    !freelancerSkills.some(skill => skill.toLowerCase() === jobSkill.toLowerCase())
+  );
+  
+  const skillMatchPercentage = jobSkills.length > 0 
+    ? (matchingSkills.length / jobSkills.length) * 100 
+    : 100;
+
+  // 2. Experience Match
+  const freelancerYears = freelancer.years_of_experience || 0;
+  const requiredYears = job.requirements?.min_years_experience || 0;
+  const experienceMatchPercentage = requiredYears > 0 
+    ? Math.min((freelancerYears / requiredYears) * 100, 100)
+    : 100;
+  const isExperienceSufficient = freelancerYears >= requiredYears;
+
+  // 3. Education Match
+  const freelancerEducation = freelancer.education || [];
+  const requiredDegree = job.education_requirements?.minimum_degree || 'none';
+  const preferredField = job.education_requirements?.preferred_field;
+  
+  const degreeLevels = {
+    'none': 0,
+    'high_school': 1,
+    'associate': 2,
+    'bachelor': 3,
+    'master': 4,
+    'doctorate': 5
+  };
+  
+  const hasRequiredDegree = freelancerEducation.some(edu => 
+    degreeLevels[edu.degree?.toLowerCase()] >= degreeLevels[requiredDegree]
+  );
+  
+  const hasPreferredField = preferredField 
+    ? freelancerEducation.some(edu => 
+        edu.field?.toLowerCase().includes(preferredField.toLowerCase())
+      )
+    : true;
+  
+  const relevantCertifications = (freelancer.certifications || []).filter(cert =>
+    (job.education_requirements?.required_certifications || []).some(reqCert =>
+      cert.name?.toLowerCase().includes(reqCert.toLowerCase())
+    )
+  );
+  
+  let educationMatchPercentage = 0;
+  if (requiredDegree === 'none') {
+    educationMatchPercentage = 100;
+  } else if (hasRequiredDegree) {
+    educationMatchPercentage = hasPreferredField ? 100 : 80;
+  } else {
+    educationMatchPercentage = 0;
+  }
+
+  // 4. Location Match
+  let locationMatchPercentage = 100;
+  let locationMessage = "";
+  
+  if (job.work_setup === 'onsite') {
+    const freelancerLocation = freelancer.location || {};
+    const jobLocation = job.location || {};
+    
+    if (jobLocation.specific_area && freelancerLocation.city) {
+      if (freelancerLocation.city.toLowerCase().includes(jobLocation.specific_area.toLowerCase()) ||
+          jobLocation.specific_area.toLowerCase().includes(freelancerLocation.city.toLowerCase())) {
+        locationMatchPercentage = 100;
+        locationMessage = `You are located in/near ${jobLocation.specific_area}`;
+      } else {
+        locationMatchPercentage = 30;
+        locationMessage = `This job requires working in ${jobLocation.specific_area}. Consider relocation or discuss remote options.`;
+      }
+    } else {
+      locationMatchPercentage = 50;
+      locationMessage = "Onsite position - please confirm your location during application";
+    }
+  } else if (job.work_setup === 'hybrid') {
+    locationMatchPercentage = 80;
+    locationMessage = "Hybrid position - some onsite days required";
+  } else {
+    locationMessage = "Remote position - work from anywhere";
+  }
+
+  // 5. Overall Match Percentage
+  const overallMatchPercentage = Math.round(
+    (skillMatchPercentage * 0.4) +
+    (experienceMatchPercentage * 0.25) +
+    (educationMatchPercentage * 0.2) +
+    (locationMatchPercentage * 0.15)
+  );
+
+  return {
+    overall_match_percentage: overallMatchPercentage,
+    skill_match: {
+      match_percentage: Math.round(skillMatchPercentage),
+      matching_skills: matchingSkills,
+      missing_skills: missingSkills,
+      extra_skills: extraSkills,
+      total_required_skills: jobSkills.length,
+      total_matching: matchingSkills.length
+    },
+    experience_match: {
+      match_percentage: Math.round(experienceMatchPercentage),
+      freelancer_years: freelancerYears,
+      required_years: requiredYears,
+      is_sufficient: isExperienceSufficient,
+      recommendation: isExperienceSufficient 
+        ? "Your experience meets the requirements"
+        : `You need ${requiredYears - freelancerYears} more years of experience`
+    },
+    education_match: {
+      match_percentage: Math.round(educationMatchPercentage),
+      freelancer_education: freelancerEducation,
+      required_degree: requiredDegree,
+      preferred_field: preferredField,
+      has_required_degree: hasRequiredDegree,
+      has_preferred_field: hasPreferredField,
+      relevant_certifications: relevantCertifications,
+      recommendation: hasRequiredDegree 
+        ? "Your education meets the requirements"
+        : `This job requires a ${requiredDegree} degree`
+    },
+    location_match: {
+      match_percentage: Math.round(locationMatchPercentage),
+      job_location: {
+        city: job.location?.city,
+        specific_area: job.location?.specific_area,
+        work_setup: job.work_setup,
+        work_address: job.location?.work_address
+      },
+      message: locationMessage,
+      recommendation: locationMatchPercentage >= 80 
+        ? "Location requirements are compatible"
+        : "Consider discussing location flexibility with the client"
+    },
+    overall_recommendation: overallMatchPercentage >= 80 
+      ? "Strong match! You are highly qualified for this position."
+      : overallMatchPercentage >= 60
+      ? "Good match! You meet most requirements."
+      : overallMatchPercentage >= 40
+      ? "Partial match - Consider highlighting your relevant skills in the application."
+      : "Low match - You may want to focus on other opportunities."
+  };
+};
+
 // ==================== CLIENT ROUTES ====================
 
 // Create a new job posting (Client only)
-router.post("/jobs", authMiddleware, async (req, res) => {
+router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
   try {
+    console.log("=== CREATE JOB REQUEST ===");
+    console.log("Content-Type:", req.headers['content-type']);
     console.log("Request body:", req.body);
     console.log("User from auth:", req.user);
 
-    // Check if user is a client
     if (req.user.role !== "client") {
       return res.status(403).json({ 
         message: "Only clients can create job postings" 
       });
     }
 
-    // Verify client exists
     const client = await Client.findById(req.user.id);
     if (!client) {
       return res.status(404).json({ message: "Client not found" });
     }
 
-    const {
-      title,
-      description,
-      required_skills,
-      job_type,
-      work_setup,
-      urgency_level,
-      experience_level,
-      budget_type,
-      budget_amount,
-      estimated_duration,
-      contact_preference
-    } = req.body;
+    // Parse JSON string fields if they come as strings from FormData
+    const title = req.body.title;
+    const description = req.body.description;
+    const required_skills = parseArrayField(req.body.required_skills);
+    const job_type = req.body.job_type;
+    const work_setup = req.body.work_setup;
+    const urgency_level = req.body.urgency_level;
+    const experience_level = req.body.experience_level;
+    const budget_type = req.body.budget_type;
+    const budget_amount = req.body.budget_amount;
+    const estimated_duration = req.body.estimated_duration;
+    const contact_preference = req.body.contact_preference;
+    
+    // Parse nested objects if they come as JSON strings
+    const pay_information = parseJSONField(req.body.pay_information);
+    const location = parseJSONField(req.body.location);
+    const education_requirements = parseJSONField(req.body.education_requirements);
+    const requirements = parseJSONField(req.body.requirements);
+    const application_settings = parseJSONField(req.body.application_settings);
 
     // Validate required fields
     if (!title || !title.trim()) {
@@ -78,14 +264,11 @@ router.post("/jobs", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Valid budget amount is required" });
     }
 
-    // Parse required_skills
-    const parsedSkills = parseArrayField(required_skills);
-
     const jobData = {
       client_id: req.user.id,
       title: title.trim(),
       description: description.trim(),
-      required_skills: parsedSkills,
+      required_skills: required_skills,
       job_type: job_type || "one_time",
       work_setup: work_setup || "remote",
       urgency_level: urgency_level || "normal",
@@ -97,6 +280,13 @@ router.post("/jobs", authMiddleware, async (req, res) => {
       total_applicants: 0,
       status: "open"
     };
+
+    // Add optional fields if provided
+    if (pay_information && typeof pay_information === 'object') jobData.pay_information = pay_information;
+    if (location && typeof location === 'object') jobData.location = location;
+    if (education_requirements && typeof education_requirements === 'object') jobData.education_requirements = education_requirements;
+    if (requirements && typeof requirements === 'object') jobData.requirements = requirements;
+    if (application_settings && typeof application_settings === 'object') jobData.application_settings = application_settings;
 
     console.log("Creating job with data:", jobData);
 
@@ -167,12 +357,10 @@ router.get("/jobs/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "Job not found" });
     }
 
-    // Check if user is authorized to view this job
     if (req.user.role === "client" && job.client_id._id.toString() !== req.user.id) {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    // For freelancers, only show open jobs
     if (req.user.role === "freelancer" && job.status !== "open") {
       return res.status(403).json({ message: "This job is not available" });
     }
@@ -187,8 +375,8 @@ router.get("/jobs/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// Update a job posting (Client only)
-router.put("/jobs/:id", authMiddleware, async (req, res) => {
+// Get job insights for freelancer
+router.get("/jobs/:id/insights", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -196,25 +384,57 @@ router.put("/jobs/:id", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Invalid job ID" });
     }
 
-    // Check ownership
+    const job = await Job.findById(id);
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    if (req.user.role !== "freelancer") {
+      return res.status(403).json({ message: "Access denied. Freelancers only." });
+    }
+
+    const insights = await calculateProfileInsights(job, req.user.id);
+    
+    if (!insights) {
+      return res.status(404).json({ message: "Freelancer profile not found" });
+    }
+
+    res.json({ insights });
+  } catch (error) {
+    console.error("Error fetching job insights:", error);
+    res.status(500).json({ 
+      message: "Error fetching insights", 
+      error: error.message 
+    });
+  }
+});
+
+// Update a job posting (Client only)
+router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid job ID" });
+    }
+
     const { error, job, status: errorStatus } = await checkJobOwnership(id, req.user.id);
     if (error) {
       return res.status(errorStatus).json({ message: error });
     }
 
-    // Don't allow updating if job is not open
     if (job.status !== "open") {
       return res.status(400).json({ 
         message: "Cannot update job that is already in progress, completed, or cancelled" 
       });
     }
 
-    // Allowed fields for update
     const allowedUpdates = [
       "title", "description", "required_skills", "job_type", 
       "work_setup", "urgency_level", "experience_level", 
       "budget_type", "budget_amount", "estimated_duration", 
-      "contact_preference"
+      "contact_preference", "pay_information", "location",
+      "education_requirements", "requirements", "application_settings"
     ];
 
     const updates = {};
@@ -224,6 +444,10 @@ router.put("/jobs/:id", authMiddleware, async (req, res) => {
           updates[field] = parseArrayField(req.body[field]);
         } else if (field === "budget_amount") {
           updates[field] = parseFloat(req.body[field]);
+        } else if (typeof req.body[field] === "object") {
+          updates[field] = req.body[field];
+        } else if (typeof req.body[field] === "string" && (field === "pay_information" || field === "location" || field === "education_requirements" || field === "requirements" || field === "application_settings")) {
+          updates[field] = parseJSONField(req.body[field]);
         } else if (typeof req.body[field] === "string") {
           updates[field] = req.body[field].trim();
         } else {
@@ -268,7 +492,6 @@ router.patch("/jobs/:id/status", authMiddleware, async (req, res) => {
       });
     }
 
-    // Check ownership
     const { error, job, status: errorStatus } = await checkJobOwnership(id, req.user.id);
     if (error) {
       return res.status(errorStatus).json({ message: error });
@@ -299,7 +522,6 @@ router.delete("/jobs/:id", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Invalid job ID" });
     }
 
-    // Check ownership
     const { error, status: errorStatus } = await checkJobOwnership(id, req.user.id);
     if (error) {
       return res.status(errorStatus).json({ message: error });
@@ -319,7 +541,7 @@ router.delete("/jobs/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// Increment total_applicants count (when freelancer applies)
+// Increment total_applicants count
 router.post("/jobs/:id/increment-applicants", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
@@ -333,7 +555,6 @@ router.post("/jobs/:id/increment-applicants", authMiddleware, async (req, res) =
       return res.status(404).json({ message: "Job not found" });
     }
 
-    // Only allow incrementing if job is open
     if (job.status !== "open") {
       return res.status(400).json({ message: "Cannot apply to this job as it is not open" });
     }
@@ -356,7 +577,7 @@ router.post("/jobs/:id/increment-applicants", authMiddleware, async (req, res) =
 
 // ==================== FREELANCER ROUTES ====================
 
-// Get all open jobs (for freelancers)
+// Get all open jobs with enhanced filters
 router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "freelancer") {
@@ -376,12 +597,15 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
       max_budget,
       skills,
       urgency_level,
-      search
+      search,
+      city,
+      specific_area,
+      min_experience,
+      degree_required
     } = req.query;
 
     const query = { status: "open" };
 
-    // Search functionality
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: "i" } },
@@ -390,7 +614,6 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
       ];
     }
 
-    // Apply filters
     if (job_type) query.job_type = job_type;
     if (work_setup) query.work_setup = work_setup;
     if (experience_level) query.experience_level = experience_level;
@@ -406,6 +629,22 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
     if (skills) {
       const skillsArray = skills.split(",");
       query.required_skills = { $in: skillsArray };
+    }
+
+    if (min_experience) {
+      query["requirements.min_years_experience"] = { $lte: parseInt(min_experience) };
+    }
+
+    if (degree_required === 'true') {
+      query["education_requirements.minimum_degree"] = { $ne: 'none' };
+    }
+
+    // Location filters
+    if (city) {
+      query["location.city"] = { $regex: city, $options: "i" };
+    }
+    if (specific_area) {
+      query["location.specific_area"] = { $regex: specific_area, $options: "i" };
     }
 
     const jobs = await Job.find(query)
@@ -431,20 +670,24 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
   }
 });
 
-// Get job statistics (for dashboard)
+// Get job statistics
 router.get("/jobs/stats/dashboard", authMiddleware, async (req, res) => {
   try {
     if (req.user.role === "client") {
-      // Client statistics
       const totalJobs = await Job.countDocuments({ client_id: req.user.id });
       const openJobs = await Job.countDocuments({ client_id: req.user.id, status: "open" });
       const inProgressJobs = await Job.countDocuments({ client_id: req.user.id, status: "in_progress" });
       const completedJobs = await Job.countDocuments({ client_id: req.user.id, status: "completed" });
       const cancelledJobs = await Job.countDocuments({ client_id: req.user.id, status: "cancelled" });
       
-      // Get total applicants across all jobs
       const jobs = await Job.find({ client_id: req.user.id });
       const totalApplicants = jobs.reduce((sum, job) => sum + (job.total_applicants || 0), 0);
+
+      // Additional stats
+      const jobsByType = {};
+      jobs.forEach(job => {
+        jobsByType[job.job_type] = (jobsByType[job.job_type] || 0) + 1;
+      });
 
       res.json({
         totalJobs,
@@ -452,11 +695,21 @@ router.get("/jobs/stats/dashboard", authMiddleware, async (req, res) => {
         inProgressJobs,
         completedJobs,
         cancelledJobs,
-        totalApplicants
+        totalApplicants,
+        jobsByType
+      });
+    } else if (req.user.role === "freelancer") {
+      const appliedJobs = await Application.countDocuments({ freelancer_id: req.user.id });
+      const savedJobs = await SavedJob.countDocuments({ freelancer_id: req.user.id });
+      
+      res.json({
+        appliedJobs,
+        savedJobs,
+        message: "Freelancer statistics"
       });
     } else {
       res.json({
-        message: "Freelancer statistics coming soon"
+        message: "Statistics not available"
       });
     }
   } catch (error) {

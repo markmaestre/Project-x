@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,11 +29,16 @@ import {
   getSavedJobs 
 } from '../../Redux/slices/applicationSlice';
 
-const GOLD = '#D4AF37';
-const BG = '#0a0a0a';
-const CARD_BG = '#141414';
-const BORDER = 'rgba(255,255,255,0.08)';
-const INPUT_BG = '#1c1c1c';
+const GREEN       = '#4ADE80';
+const GREEN_DARK  = '#22C55E';
+const GREEN_SOFT  = '#DCFCE7';
+const GREEN_MID   = '#86EFAC';
+const WHITE       = '#FFFFFF';
+const OFF_WHITE   = '#F0FDF4';
+const BORDER      = 'rgba(74,222,128,0.25)';
+const TEXT_MAIN   = '#0F2417';
+const TEXT_MUTED  = '#6B7280';
+const TEXT_LIGHT  = '#9CA3AF';
 
 const JOB_TYPES = ['All', 'full_time', 'part_time', 'contract', 'one_time'];
 const WORK_SETUPS = ['All', 'remote', 'onsite', 'hybrid'];
@@ -483,12 +489,12 @@ export default function BrowseJobs({ onNavigate, onBack }) {
       <Text style={styles.applyLabel}>Upload Resume/CV *</Text>
       {!resumeFile ? (
         <TouchableOpacity style={styles.uploadBtn} onPress={pickResume}>
-          <Ionicons name="cloud-upload-outline" size={24} color={GOLD} />
+          <Ionicons name="cloud-upload-outline" size={24} color={GREEN_DARK} />
           <Text style={styles.uploadBtnText}>Upload your resume (PDF, DOC, DOCX)</Text>
         </TouchableOpacity>
       ) : (
         <View style={styles.fileInfo}>
-          <Ionicons name="document-text-outline" size={20} color={GOLD} />
+          <Ionicons name="document-text-outline" size={20} color={GREEN_DARK} />
           <Text style={styles.fileName} numberOfLines={1}>{resumeFile.name}</Text>
           <TouchableOpacity onPress={removeResume}>
             <Ionicons name="close-circle" size={20} color="#f87171" />
@@ -515,7 +521,7 @@ export default function BrowseJobs({ onNavigate, onBack }) {
       <TextInput
         style={styles.applyInput}
         placeholder="e.g., Computer Science"
-        placeholderTextColor="rgba(255,255,255,0.3)"
+        placeholderTextColor={TEXT_LIGHT}
         value={fieldOfStudy}
         onChangeText={setFieldOfStudy}
       />
@@ -524,7 +530,7 @@ export default function BrowseJobs({ onNavigate, onBack }) {
       <TextInput
         style={styles.applyInput}
         placeholder="e.g., University of Technology"
-        placeholderTextColor="rgba(255,255,255,0.3)"
+        placeholderTextColor={TEXT_LIGHT}
         value={institutionName}
         onChangeText={setInstitutionName}
       />
@@ -533,7 +539,7 @@ export default function BrowseJobs({ onNavigate, onBack }) {
       <TextInput
         style={styles.applyInput}
         placeholder="e.g., 2020"
-        placeholderTextColor="rgba(255,255,255,0.3)"
+        placeholderTextColor={TEXT_LIGHT}
         value={graduationYear}
         onChangeText={setGraduationYear}
         keyboardType="numeric"
@@ -547,14 +553,14 @@ export default function BrowseJobs({ onNavigate, onBack }) {
       <View style={styles.experienceHeader}>
         <Text style={styles.applyLabel}>Work Experience (Optional)</Text>
         <TouchableOpacity style={styles.addExperienceBtn} onPress={() => setShowExperienceForm(true)}>
-          <Ionicons name="add-circle" size={20} color={GOLD} />
+          <Ionicons name="add-circle" size={20} color={GREEN_DARK} />
           <Text style={styles.addExperienceText}>Add Experience</Text>
         </TouchableOpacity>
       </View>
 
       {experiences.length === 0 ? (
         <View style={styles.noExperience}>
-          <Ionicons name="briefcase-outline" size={32} color="rgba(255,255,255,0.2)" />
+          <Ionicons name="briefcase-outline" size={32} color={TEXT_LIGHT} />
           <Text style={styles.noExperienceText}>No experience added yet</Text>
           <Text style={styles.noExperienceSub}>Tap "Add Experience" to showcase your work history</Text>
         </View>
@@ -563,12 +569,12 @@ export default function BrowseJobs({ onNavigate, onBack }) {
           <View key={exp.id || index} style={styles.experienceCard}>
             <View style={styles.experienceCardHeader}>
               <View style={styles.experienceCardTitle}>
-                <Ionicons name="briefcase-outline" size={16} color={GOLD} />
+                <Ionicons name="briefcase-outline" size={16} color={GREEN_DARK} />
                 <Text style={styles.experienceJobTitle}>{exp.jobTitle}</Text>
               </View>
               <View style={styles.experienceCardActions}>
                 <TouchableOpacity onPress={() => editExperience(index)}>
-                  <Ionicons name="pencil-outline" size={16} color="rgba(255,255,255,0.5)" />
+                  <Ionicons name="pencil-outline" size={16} color={TEXT_MUTED} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => removeExperience(index)}>
                   <Ionicons name="trash-outline" size={16} color="#f87171" />
@@ -597,30 +603,30 @@ export default function BrowseJobs({ onNavigate, onBack }) {
                   jobTitle: '', companyName: '', startDate: '', endDate: '', currentlyWorking: false, description: '',
                 });
               }}>
-                <Ionicons name="close" size={24} color="#fff" />
+                <Ionicons name="close" size={24} color={TEXT_MUTED} />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.expModalContent}>
               <Text style={styles.applyLabel}>Job Title *</Text>
-              <TextInput style={styles.applyInput} placeholder="e.g., Senior Developer" placeholderTextColor="rgba(255,255,255,0.3)" value={currentExperience.jobTitle} onChangeText={(text) => setCurrentExperience({...currentExperience, jobTitle: text})} />
+              <TextInput style={styles.applyInput} placeholder="e.g., Senior Developer" placeholderTextColor={TEXT_LIGHT} value={currentExperience.jobTitle} onChangeText={(text) => setCurrentExperience({...currentExperience, jobTitle: text})} />
               <Text style={styles.applyLabel}>Company Name *</Text>
-              <TextInput style={styles.applyInput} placeholder="e.g., Google" placeholderTextColor="rgba(255,255,255,0.3)" value={currentExperience.companyName} onChangeText={(text) => setCurrentExperience({...currentExperience, companyName: text})} />
+              <TextInput style={styles.applyInput} placeholder="e.g., Google" placeholderTextColor={TEXT_LIGHT} value={currentExperience.companyName} onChangeText={(text) => setCurrentExperience({...currentExperience, companyName: text})} />
               <Text style={styles.applyLabel}>Start Date</Text>
-              <TextInput style={styles.applyInput} placeholder="e.g., Jan 2020" placeholderTextColor="rgba(255,255,255,0.3)" value={currentExperience.startDate} onChangeText={(text) => setCurrentExperience({...currentExperience, startDate: text})} />
+              <TextInput style={styles.applyInput} placeholder="e.g., Jan 2020" placeholderTextColor={TEXT_LIGHT} value={currentExperience.startDate} onChangeText={(text) => setCurrentExperience({...currentExperience, startDate: text})} />
               <View style={styles.currentlyWorkingRow}>
                 <TouchableOpacity style={styles.checkbox} onPress={() => setCurrentExperience({...currentExperience, currentlyWorking: !currentExperience.currentlyWorking})}>
-                  {currentExperience.currentlyWorking && <Ionicons name="checkmark" size={14} color={GOLD} />}
+                  {currentExperience.currentlyWorking && <Ionicons name="checkmark" size={14} color={GREEN_DARK} />}
                 </TouchableOpacity>
                 <Text style={styles.checkboxLabel}>I currently work here</Text>
               </View>
               {!currentExperience.currentlyWorking && (
                 <>
                   <Text style={styles.applyLabel}>End Date</Text>
-                  <TextInput style={styles.applyInput} placeholder="e.g., Dec 2023" placeholderTextColor="rgba(255,255,255,0.3)" value={currentExperience.endDate} onChangeText={(text) => setCurrentExperience({...currentExperience, endDate: text})} />
+                  <TextInput style={styles.applyInput} placeholder="e.g., Dec 2023" placeholderTextColor={TEXT_LIGHT} value={currentExperience.endDate} onChangeText={(text) => setCurrentExperience({...currentExperience, endDate: text})} />
                 </>
               )}
               <Text style={styles.applyLabel}>Job Description (Optional)</Text>
-              <TextInput style={[styles.applyInput, styles.applyTextArea]} placeholder="Describe your responsibilities..." placeholderTextColor="rgba(255,255,255,0.3)" value={currentExperience.description} onChangeText={(text) => setCurrentExperience({...currentExperience, description: text})} multiline numberOfLines={4} />
+              <TextInput style={[styles.applyInput, styles.applyTextArea]} placeholder="Describe your responsibilities..." placeholderTextColor={TEXT_LIGHT} value={currentExperience.description} onChangeText={(text) => setCurrentExperience({...currentExperience, description: text})} multiline numberOfLines={4} />
             </ScrollView>
             <TouchableOpacity style={styles.expModalBtn} onPress={addExperience}>
               <Text style={styles.expModalBtnText}>{editingExperienceIndex !== null ? 'Update Experience' : 'Add Experience'}</Text>
@@ -645,23 +651,23 @@ export default function BrowseJobs({ onNavigate, onBack }) {
       <Text style={styles.reviewSectionTitle}>Resume & Education</Text>
       <View style={styles.reviewCard}>
         <View style={styles.reviewRow}>
-          <Ionicons name="document-text-outline" size={16} color={GOLD} />
+          <Ionicons name="document-text-outline" size={16} color={GREEN_DARK} />
           <Text style={styles.reviewLabel}>Resume:</Text>
           <Text style={styles.reviewValue}>{resumeFile?.name || 'Not uploaded'}</Text>
         </View>
         <View style={styles.reviewRow}>
-          <Ionicons name="school-outline" size={16} color={GOLD} />
+          <Ionicons name="school-outline" size={16} color={GREEN_DARK} />
           <Text style={styles.reviewLabel}>Education:</Text>
           <Text style={styles.reviewValue}>{educationLevel} in {fieldOfStudy}</Text>
         </View>
         <View style={styles.reviewRow}>
-          <Ionicons name="business-outline" size={16} color={GOLD} />
+          <Ionicons name="business-outline" size={16} color={GREEN_DARK} />
           <Text style={styles.reviewLabel}>Institution:</Text>
           <Text style={styles.reviewValue}>{institutionName}</Text>
         </View>
         {graduationYear && (
           <View style={styles.reviewRow}>
-            <Ionicons name="calendar-outline" size={16} color={GOLD} />
+            <Ionicons name="calendar-outline" size={16} color={GREEN_DARK} />
             <Text style={styles.reviewLabel}>Graduation Year:</Text>
             <Text style={styles.reviewValue}>{graduationYear}</Text>
           </View>
@@ -686,12 +692,12 @@ export default function BrowseJobs({ onNavigate, onBack }) {
       <View style={styles.reviewCard}>
         {proposedRate && (
           <View style={styles.reviewRow}>
-            <Ionicons name="cash-outline" size={16} color={GOLD} />
+            <Ionicons name="cash-outline" size={16} color={GREEN_DARK} />
             <Text style={styles.reviewLabel}>Proposed Rate:</Text>
             <Text style={styles.reviewValue}>₱{parseFloat(proposedRate).toLocaleString()}</Text>
           </View>
         )}
-        <TextInput style={[styles.reviewCoverLetter, styles.coverLetterInput]} placeholder="Write your cover letter here (optional)..." placeholderTextColor="rgba(255,255,255,0.3)" value={coverLetter} onChangeText={setCoverLetter} multiline numberOfLines={4} />
+        <TextInput style={[styles.reviewCoverLetter, styles.coverLetterInput]} placeholder="Write your cover letter here (optional)..." placeholderTextColor={TEXT_LIGHT} value={coverLetter} onChangeText={setCoverLetter} multiline numberOfLines={4} />
       </View>
       <View style={{ height: 20 }} />
     </ScrollView>
@@ -707,7 +713,8 @@ export default function BrowseJobs({ onNavigate, onBack }) {
         {isUrgent && (
           <View style={styles.badgeRow}>
             <View style={styles.urgentBadge}>
-              <Text style={styles.urgentText}>⚡ Urgent</Text>
+              <Ionicons name="flash" size={10} color="#ff6b6b" />
+              <Text style={styles.urgentText}>Urgent</Text>
             </View>
           </View>
         )}
@@ -720,13 +727,13 @@ export default function BrowseJobs({ onNavigate, onBack }) {
             <Text style={styles.companyName}>{job.client_id?.company_name || 'Client'}</Text>
           </View>
           <TouchableOpacity style={styles.saveIconBtn} onPress={() => handleSaveJob(job._id)}>
-            <Ionicons name={isSaved ? "bookmark" : "bookmark-outline"} size={20} color={isSaved ? GOLD : "rgba(255,255,255,0.4)"} />
+            <Ionicons name={isSaved ? "bookmark" : "bookmark-outline"} size={20} color={isSaved ? GREEN_DARK : TEXT_MUTED} />
           </TouchableOpacity>
         </View>
         <View style={styles.metaRow}>
-          <View style={styles.metaChip}><Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.4)" /><Text style={styles.metaText}>{getWorkSetupLabel(job.work_setup)}</Text></View>
-          <View style={styles.metaChip}><Ionicons name="briefcase-outline" size={12} color="rgba(255,255,255,0.4)" /><Text style={styles.metaText}>{getJobTypeLabel(job.job_type)}</Text></View>
-          <View style={styles.metaChip}><Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.4)" /><Text style={styles.metaText}>{formatDate(job.created_at)}</Text></View>
+          <View style={styles.metaChip}><Ionicons name="location-outline" size={12} color={TEXT_MUTED} /><Text style={styles.metaText}>{getWorkSetupLabel(job.work_setup)}</Text></View>
+          <View style={styles.metaChip}><Ionicons name="briefcase-outline" size={12} color={TEXT_MUTED} /><Text style={styles.metaText}>{getJobTypeLabel(job.job_type)}</Text></View>
+          <View style={styles.metaChip}><Ionicons name="time-outline" size={12} color={TEXT_MUTED} /><Text style={styles.metaText}>{formatDate(job.created_at)}</Text></View>
         </View>
         <Text style={styles.salary}>{job.budget_type === 'hourly' ? `₱${job.budget_amount}/hr` : `₱${job.budget_amount?.toLocaleString()}`}</Text>
         {job.required_skills && job.required_skills.length > 0 && (
@@ -747,43 +754,81 @@ export default function BrowseJobs({ onNavigate, onBack }) {
   if (jobsLoading && !refreshing) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
         <View style={styles.header}>
-          <TouchableOpacity style={styles.iconBtn} onPress={onBack}><Ionicons name="arrow-back" size={20} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} onPress={onBack}>
+            <View style={styles.iconWrap}>
+              <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+            </View>
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Browse Jobs</Text>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => onNavigate('MyApplications')}><Ionicons name="document-text-outline" size={20} color={GOLD} /></TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => onNavigate('MyApplications')}>
+            <View style={styles.iconWrap}>
+              <Ionicons name="document-text-outline" size={18} color={GREEN_DARK} />
+            </View>
+          </TouchableOpacity>
         </View>
-        <View style={styles.loadingContainer}><ActivityIndicator size="large" color={GOLD} /><Text style={styles.loadingText}>Loading jobs...</Text></View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={GREEN_DARK} />
+          <Text style={styles.loadingText}>Loading jobs...</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
       <View style={styles.root}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.iconBtn} onPress={onBack}><Ionicons name="arrow-back" size={20} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} onPress={onBack}>
+            <View style={styles.iconWrap}>
+              <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+            </View>
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Browse Jobs</Text>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => onNavigate('MyApplications')}><Ionicons name="document-text-outline" size={20} color={GOLD} /></TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => onNavigate('MyApplications')}>
+            <View style={styles.iconWrap}>
+              <Ionicons name="document-text-outline" size={18} color={GREEN_DARK} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.searchBox}>
-          <Ionicons name="search-outline" size={16} color="rgba(255,255,255,0.35)" />
-          <TextInput style={styles.searchInput} placeholder="Search jobs..." placeholderTextColor="rgba(255,255,255,0.28)" value={searchQuery} onChangeText={setSearchQuery} onSubmitEditing={handleSearch} />
-          {!!searchQuery && <TouchableOpacity onPress={() => { setSearchQuery(''); fetchJobs(); }}><Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.35)" /></TouchableOpacity>}
+          <Ionicons name="search-outline" size={16} color={TEXT_MUTED} />
+          <TextInput style={styles.searchInput} placeholder="Search jobs..." placeholderTextColor={TEXT_LIGHT} value={searchQuery} onChangeText={setSearchQuery} onSubmitEditing={handleSearch} />
+          {!!searchQuery && <TouchableOpacity onPress={() => { setSearchQuery(''); fetchJobs(); }}><Ionicons name="close-circle" size={16} color={TEXT_MUTED} /></TouchableOpacity>}
         </View>
 
-        <Text style={styles.resultsLabel}>{filtered.length} {filtered.length === 1 ? 'job' : 'jobs'} found</Text>
+        <View style={styles.filterRow}>
+          <Text style={styles.resultsLabel}>{filtered.length} {filtered.length === 1 ? 'job' : 'jobs'} found</Text>
+          <TouchableOpacity style={styles.filterBtn} onPress={openFilters}>
+            <Ionicons name="options-outline" size={16} color={GREEN_DARK} />
+            <Text style={styles.filterBtnText}>Filter</Text>
+          </TouchableOpacity>
+        </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GREEN_DARK} />}>
           {filtered.length > 0 ? filtered.map((job) => <JobCard key={job._id} job={job} />) : (
-            <View style={styles.emptyState}><Text style={styles.emptyIcon}>💼</Text><Text style={styles.emptyTitle}>No jobs found</Text><Text style={styles.emptySub}>Try adjusting your search or filters</Text></View>
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="briefcase-outline" size={48} color={GREEN_DARK} />
+              </View>
+              <Text style={styles.emptyTitle}>No jobs found</Text>
+              <Text style={styles.emptySub}>Try adjusting your search or filters</Text>
+            </View>
           )}
         </ScrollView>
 
         {/* Filter Drawer */}
         {showFilters && <TouchableWithoutFeedback onPress={closeFilters}><Animated.View style={[styles.overlay, { opacity: overlayAnim }]} /></TouchableWithoutFeedback>}
         <Animated.View style={[styles.drawer, { transform: [{ translateX: filterAnim }] }]}>
-          <View style={styles.drawerHeader}><Text style={styles.drawerTitle}>Filters</Text><TouchableOpacity onPress={closeFilters}><Ionicons name="close" size={22} color="#fff" /></TouchableOpacity></View>
+          <View style={styles.drawerHeader}>
+            <Text style={styles.drawerTitle}>Filters</Text>
+            <TouchableOpacity onPress={closeFilters}>
+              <Ionicons name="close" size={22} color={TEXT_MUTED} />
+            </TouchableOpacity>
+          </View>
           <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
             <Text style={styles.drawerSection}>Job Type</Text>
             <View style={styles.drawerChips}>{JOB_TYPES.map((type) => (<TouchableOpacity key={type} style={[styles.drawerChip, selectedJobType === type && styles.drawerChipActive]} onPress={() => setSelectedJobType(type)}><Text style={[styles.drawerChipText, selectedJobType === type && styles.drawerChipTextActive]}>{type === 'All' ? 'All' : getJobTypeLabel(type)}</Text></TouchableOpacity>))}</View>
@@ -792,7 +837,9 @@ export default function BrowseJobs({ onNavigate, onBack }) {
             <Text style={styles.drawerSection}>Experience Level</Text>
             <View style={styles.drawerChips}>{EXPERIENCE_LEVELS.map((level) => (<TouchableOpacity key={level} style={[styles.drawerChip, selectedExperience === level && styles.drawerChipActive]} onPress={() => setSelectedExperience(level)}><Text style={[styles.drawerChipText, selectedExperience === level && styles.drawerChipTextActive]}>{level}</Text></TouchableOpacity>))}</View>
           </ScrollView>
-          <TouchableOpacity style={styles.drawerApplyBtn} onPress={handleApplyFilters}><Text style={styles.drawerApplyText}>Apply Filters</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.drawerApplyBtn} onPress={handleApplyFilters}>
+            <Text style={styles.drawerApplyText}>Apply Filters</Text>
+          </TouchableOpacity>
         </Animated.View>
 
         {/* Job Detail Modal */}
@@ -800,22 +847,24 @@ export default function BrowseJobs({ onNavigate, onBack }) {
           <View style={styles.modalWrap}>
             <View style={styles.modalSheet}>
               <View style={styles.modalHandle} />
-              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowJobModal(false)}><Ionicons name="close" size={18} color="#fff" /></TouchableOpacity>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowJobModal(false)}>
+                <Ionicons name="close" size={18} color={TEXT_MUTED} />
+              </TouchableOpacity>
               {selectedJob && (
                 <ScrollView showsVerticalScrollIndicator={false}>
                   <View style={styles.modalHeader}>
                     <View style={styles.modalLogo}><Text style={styles.modalLogoText}>{getCategoryIcon(selectedJob)}</Text></View>
                     <View style={{ flex: 1 }}><Text style={styles.modalTitle}>{selectedJob.title}</Text><Text style={styles.modalCompany}>{selectedJob.client_id?.company_name || 'Client'}</Text></View>
-                    <TouchableOpacity style={styles.modalSaveBtn} onPress={() => handleSaveJob(selectedJob._id)}><Ionicons name={savedJobIds.includes(selectedJob._id) ? "bookmark" : "bookmark-outline"} size={22} color={savedJobIds.includes(selectedJob._id) ? GOLD : "rgba(255,255,255,0.6)"} /></TouchableOpacity>
+                    <TouchableOpacity style={styles.modalSaveBtn} onPress={() => handleSaveJob(selectedJob._id)}><Ionicons name={savedJobIds.includes(selectedJob._id) ? "bookmark" : "bookmark-outline"} size={22} color={savedJobIds.includes(selectedJob._id) ? GREEN_DARK : TEXT_MUTED} /></TouchableOpacity>
                   </View>
                   <View style={styles.modalMeta}>
-                    {[{ icon: 'location-outline', label: getWorkSetupLabel(selectedJob.work_setup) }, { icon: 'briefcase-outline', label: getJobTypeLabel(selectedJob.job_type) }, { icon: 'time-outline', label: formatDate(selectedJob.created_at) }, { icon: 'people-outline', label: `${selectedJob.total_applicants || 0} applicants` }].map(({ icon, label }) => (<View key={label} style={styles.modalMetaItem}><Ionicons name={icon} size={14} color="rgba(255,255,255,0.45)" /><Text style={styles.modalMetaText}>{label}</Text></View>))}
+                    {[{ icon: 'location-outline', label: getWorkSetupLabel(selectedJob.work_setup) }, { icon: 'briefcase-outline', label: getJobTypeLabel(selectedJob.job_type) }, { icon: 'time-outline', label: formatDate(selectedJob.created_at) }, { icon: 'people-outline', label: `${selectedJob.total_applicants || 0} applicants` }].map(({ icon, label }) => (<View key={label} style={styles.modalMetaItem}><Ionicons name={icon} size={14} color={TEXT_MUTED} /><Text style={styles.modalMetaText}>{label}</Text></View>))}
                   </View>
                   <Text style={styles.modalSalary}>{selectedJob.budget_type === 'hourly' ? `₱${selectedJob.budget_amount}/hr` : `₱${selectedJob.budget_amount?.toLocaleString()}`}</Text>
                   <Text style={styles.modalSection}>Description</Text>
                   <Text style={styles.modalDesc}>{selectedJob.description}</Text>
                   {selectedJob.required_skills && selectedJob.required_skills.length > 0 && (<><Text style={styles.modalSection}>Required Skills</Text><View style={styles.modalSkills}>{selectedJob.required_skills.map((s, i) => (<View key={i} style={styles.modalSkillBadge}><Text style={styles.modalSkillText}>{s}</Text></View>))}</View></>)}
-                  <TouchableOpacity style={[styles.modalApplyBtn, appliedJobIds.includes(selectedJob._id) && styles.modalAppliedBtn]} onPress={() => { setShowJobModal(false); handleApplyJob(selectedJob); }} disabled={appliedJobIds.includes(selectedJob._id)}><Text style={[styles.modalApplyText, appliedJobIds.includes(selectedJob._id) && { color: '#4ade80' }]}>{appliedJobIds.includes(selectedJob._id) ? '✓ Already Applied' : 'Apply Now'}</Text></TouchableOpacity>
+                  <TouchableOpacity style={[styles.modalApplyBtn, appliedJobIds.includes(selectedJob._id) && styles.modalAppliedBtn]} onPress={() => { setShowJobModal(false); handleApplyJob(selectedJob); }} disabled={appliedJobIds.includes(selectedJob._id)}><Text style={[styles.modalApplyText, appliedJobIds.includes(selectedJob._id) && { color: GREEN_DARK }]}>{appliedJobIds.includes(selectedJob._id) ? '✓ Already Applied' : 'Apply Now'}</Text></TouchableOpacity>
                 </ScrollView>
               )}
             </View>
@@ -827,9 +876,9 @@ export default function BrowseJobs({ onNavigate, onBack }) {
           <View style={styles.applyModalWrap}>
             <View style={styles.applyModalSheet}>
               <View style={styles.applyModalHeader}>
-                <TouchableOpacity onPress={handlePrevStep} disabled={currentStep === 1}><Ionicons name="arrow-back" size={24} color={currentStep === 1 ? 'rgba(255,255,255,0.2)' : '#fff'} /></TouchableOpacity>
+                <TouchableOpacity onPress={handlePrevStep} disabled={currentStep === 1}><Ionicons name="arrow-back" size={24} color={currentStep === 1 ? TEXT_LIGHT : TEXT_MAIN} /></TouchableOpacity>
                 <Text style={styles.applyModalTitle}>Apply for Job</Text>
-                <TouchableOpacity onPress={() => { if (!submitting) { Alert.alert('Exit Application', 'Are you sure?', [{ text: 'Continue', style: 'cancel' }, { text: 'Exit', style: 'destructive', onPress: () => { setShowApplyModal(false); resetApplicationForm(); } }]); } }}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
+                <TouchableOpacity onPress={() => { if (!submitting) { Alert.alert('Exit Application', 'Are you sure?', [{ text: 'Continue', style: 'cancel' }, { text: 'Exit', style: 'destructive', onPress: () => { setShowApplyModal(false); resetApplicationForm(); } }]); } }}><Ionicons name="close" size={24} color={TEXT_MUTED} /></TouchableOpacity>
               </View>
               {renderStepIndicator()}
               <View style={styles.applyModalContentWrapper}>
@@ -839,7 +888,7 @@ export default function BrowseJobs({ onNavigate, onBack }) {
                 {currentStep === 3 && renderStep3()}</>)}
               </View>
               <View style={styles.applyModalFooter}>
-                {currentStep < 3 ? (<TouchableOpacity style={styles.nextStepBtn} onPress={handleNextStep}><Text style={styles.nextStepBtnText}>Continue</Text><Ionicons name="arrow-forward" size={18} color="#0a0a0a" /></TouchableOpacity>) : (<TouchableOpacity style={[styles.submitBtn, submitting && styles.disabledBtn]} onPress={submitApplication} disabled={submitting}>{submitting ? <ActivityIndicator size="small" color="#0a0a0a" /> : <Text style={styles.submitBtnText}>Submit Application</Text>}</TouchableOpacity>)}
+                {currentStep < 3 ? (<TouchableOpacity style={styles.nextStepBtn} onPress={handleNextStep}><Text style={styles.nextStepBtnText}>Continue</Text><Ionicons name="arrow-forward" size={18} color={WHITE} /></TouchableOpacity>) : (<TouchableOpacity style={[styles.submitBtn, submitting && styles.disabledBtn]} onPress={submitApplication} disabled={submitting}>{submitting ? <ActivityIndicator size="small" color={WHITE} /> : <Text style={styles.submitBtnText}>Submit Application</Text>}</TouchableOpacity>)}
               </View>
             </View>
           </View>
@@ -849,149 +898,167 @@ export default function BrowseJobs({ onNavigate, onBack }) {
   );
 }
 
-// Styles (keep all existing styles from your current file)
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
+  safe: { flex: 1, backgroundColor: OFF_WHITE },
   root: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: BORDER },
-  iconBtn: { width: 36, height: 36, borderRadius: 9, backgroundColor: CARD_BG, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BORDER },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
+  iconBtn: { alignSelf: 'flex-start' },
+  iconWrap: {
+    width: 36, height: 36,
+    backgroundColor: WHITE,
+    borderRadius: 10,
+    borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+  headerTitle: { fontSize: 16, fontWeight: '600', color: TEXT_MAIN },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 12, fontSize: 14, color: 'rgba(255,255,255,0.4)' },
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: INPUT_BG, marginHorizontal: 14, marginTop: 10, paddingHorizontal: 12, height: 40, borderRadius: 10, borderWidth: 1, borderColor: BORDER },
-  searchInput: { flex: 1, color: '#fff', fontSize: 13 },
-  resultsLabel: { fontSize: 11, color: 'rgba(255,255,255,0.28)', paddingHorizontal: 14, marginTop: 8, marginBottom: 6 },
+  loadingText: { marginTop: 12, fontSize: 14, color: TEXT_MUTED },
+  searchBox: { 
+    flexDirection: 'row', alignItems: 'center', gap: 8, 
+    backgroundColor: WHITE, marginHorizontal: 14, marginTop: 10, 
+    paddingHorizontal: 12, height: 44, borderRadius: 12, 
+    borderWidth: 1, borderColor: BORDER,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
+  searchInput: { flex: 1, color: TEXT_MAIN, fontSize: 13 },
+  filterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, marginTop: 8, marginBottom: 6 },
+  resultsLabel: { fontSize: 11, color: TEXT_MUTED },
+  filterBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: GREEN_SOFT, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: GREEN_MID },
+  filterBtnText: { fontSize: 11, color: GREEN_DARK, fontWeight: '500' },
   listContent: { paddingHorizontal: 14, paddingBottom: 24, gap: 12 },
-  jobCard: { backgroundColor: CARD_BG, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: BORDER },
+  jobCard: { backgroundColor: WHITE, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: BORDER, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   badgeRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 8 },
-  urgentBadge: { backgroundColor: 'rgba(255,107,107,0.13)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  urgentBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,107,107,0.13)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   urgentText: { fontSize: 10, color: '#ff6b6b', fontWeight: '700' },
   jobHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  companyLogo: { width: 44, height: 44, borderRadius: 10, backgroundColor: 'rgba(212,175,55,0.1)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  logoText: { fontSize: 19, fontWeight: '700', color: GOLD },
+  companyLogo: { width: 44, height: 44, borderRadius: 10, backgroundColor: GREEN_SOFT, alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 1, borderColor: GREEN_MID },
+  logoText: { fontSize: 19, fontWeight: '700', color: GREEN_DARK },
   jobHeaderInfo: { flex: 1 },
   saveIconBtn: { padding: 4, marginLeft: 4 },
-  jobTitle: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 2, lineHeight: 19 },
-  companyName: { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
+  jobTitle: { fontSize: 14, fontWeight: '700', color: TEXT_MAIN, marginBottom: 2, lineHeight: 19 },
+  companyName: { fontSize: 12, color: TEXT_MUTED },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   metaChip: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  metaText: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
-  salary: { fontSize: 14, fontWeight: '700', color: GOLD, marginBottom: 10 },
+  metaText: { fontSize: 11, color: TEXT_MUTED },
+  salary: { fontSize: 14, fontWeight: '700', color: GREEN_DARK, marginBottom: 10 },
   skillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
-  skillBadge: { backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  skillText: { fontSize: 11, color: 'rgba(255,255,255,0.45)' },
-  applyBtn: { backgroundColor: GOLD, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
-  appliedBtn: { backgroundColor: 'rgba(74,222,128,0.1)', borderWidth: 1, borderColor: '#4ade80' },
-  applyBtnText: { fontSize: 13, fontWeight: '700', color: '#0a0a0a' },
-  appliedBtnText: { color: '#4ade80' },
+  skillBadge: { backgroundColor: GREEN_SOFT, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 0.5, borderColor: GREEN_MID },
+  skillText: { fontSize: 11, color: GREEN_DARK, fontWeight: '500' },
+  applyBtn: { backgroundColor: GREEN_DARK, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  appliedBtn: { backgroundColor: `${GREEN}15`, borderWidth: 1, borderColor: GREEN },
+  applyBtnText: { fontSize: 13, fontWeight: '700', color: WHITE },
+  appliedBtnText: { color: GREEN },
   emptyState: { alignItems: 'center', paddingVertical: 60 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyTitle: { fontSize: 16, color: 'rgba(255,255,255,0.4)', fontWeight: '600' },
-  emptySub: { fontSize: 12, color: 'rgba(255,255,255,0.2)', marginTop: 6 },
+  emptyIconWrap: { width: 80, height: 80, backgroundColor: GREEN_SOFT, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  emptyTitle: { fontSize: 16, color: TEXT_MUTED, fontWeight: '600' },
+  emptySub: { fontSize: 12, color: TEXT_LIGHT, marginTop: 6 },
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 99 },
-  drawer: { position: 'absolute', top: 0, right: 0, bottom: 0, width: 280, backgroundColor: '#111', borderLeftWidth: 1, borderLeftColor: BORDER, zIndex: 100, padding: 18, paddingTop: 22 },
+  drawer: { position: 'absolute', top: 0, right: 0, bottom: 0, width: 280, backgroundColor: WHITE, borderLeftWidth: 1, borderLeftColor: BORDER, zIndex: 100, padding: 18, paddingTop: 22 },
   drawerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  drawerTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
-  drawerSection: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.5)', marginTop: 16, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
+  drawerTitle: { fontSize: 17, fontWeight: '700', color: TEXT_MAIN },
+  drawerSection: { fontSize: 11, fontWeight: '700', color: TEXT_MUTED, marginTop: 16, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
   drawerChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  drawerChip: { backgroundColor: CARD_BG, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: BORDER },
-  drawerChipActive: { backgroundColor: 'rgba(212,175,55,0.15)', borderColor: GOLD },
-  drawerChipText: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
-  drawerChipTextActive: { color: GOLD, fontWeight: '600' },
-  drawerApplyBtn: { backgroundColor: GOLD, paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginTop: 18 },
-  drawerApplyText: { fontSize: 14, fontWeight: '700', color: '#0a0a0a' },
+  drawerChip: { backgroundColor: OFF_WHITE, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: BORDER },
+  drawerChipActive: { backgroundColor: GREEN_SOFT, borderColor: GREEN_DARK },
+  drawerChipText: { fontSize: 12, color: TEXT_MUTED },
+  drawerChipTextActive: { color: GREEN_DARK, fontWeight: '600' },
+  drawerApplyBtn: { backgroundColor: GREEN_DARK, paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginTop: 18 },
+  drawerApplyText: { fontSize: 14, fontWeight: '700', color: WHITE },
   modalWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#111', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18, maxHeight: '88%', borderTopWidth: 1, borderColor: BORDER },
-  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 14 },
-  modalCloseBtn: { position: 'absolute', top: 16, right: 16, width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  modalSheet: { backgroundColor: WHITE, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18, maxHeight: '88%', borderTopWidth: 1, borderColor: BORDER },
+  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 14 },
+  modalCloseBtn: { position: 'absolute', top: 16, right: 16, width: 30, height: 30, borderRadius: 15, backgroundColor: OFF_WHITE, alignItems: 'center', justifyContent: 'center', zIndex: 1, borderWidth: 1, borderColor: BORDER },
   modalHeader: { flexDirection: 'row', gap: 12, marginBottom: 14, marginTop: 4 },
-  modalLogo: { width: 48, height: 48, borderRadius: 10, backgroundColor: 'rgba(212,175,55,0.1)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  modalLogoText: { fontSize: 20, fontWeight: '700', color: GOLD },
-  modalTitle: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 3 },
-  modalCompany: { fontSize: 13, color: 'rgba(255,255,255,0.45)' },
+  modalLogo: { width: 48, height: 48, borderRadius: 10, backgroundColor: GREEN_SOFT, alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 1, borderColor: GREEN_MID },
+  modalLogoText: { fontSize: 20, fontWeight: '700', color: GREEN_DARK },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: TEXT_MAIN, marginBottom: 3 },
+  modalCompany: { fontSize: 13, color: TEXT_MUTED },
   modalSaveBtn: { padding: 8, marginLeft: 8 },
   modalMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
   modalMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  modalMetaText: { fontSize: 12, color: 'rgba(255,255,255,0.45)' },
-  modalSalary: { fontSize: 18, fontWeight: '700', color: GOLD, marginBottom: 16 },
-  modalSection: { fontSize: 13, fontWeight: '700', color: '#fff', marginBottom: 6, marginTop: 12 },
-  modalDesc: { fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 20 },
+  modalMetaText: { fontSize: 12, color: TEXT_MUTED },
+  modalSalary: { fontSize: 18, fontWeight: '700', color: GREEN_DARK, marginBottom: 16 },
+  modalSection: { fontSize: 13, fontWeight: '700', color: TEXT_MAIN, marginBottom: 6, marginTop: 12 },
+  modalDesc: { fontSize: 13, color: TEXT_MUTED, lineHeight: 20 },
   modalSkills: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 18 },
-  modalSkillBadge: { backgroundColor: CARD_BG, paddingHorizontal: 11, paddingVertical: 5, borderRadius: 7, borderWidth: 1, borderColor: BORDER },
-  modalSkillText: { fontSize: 12, color: 'rgba(255,255,255,0.55)' },
-  modalApplyBtn: { backgroundColor: GOLD, paddingVertical: 13, borderRadius: 10, alignItems: 'center', marginBottom: 14 },
-  modalAppliedBtn: { backgroundColor: 'rgba(74,222,128,0.1)', borderWidth: 1, borderColor: '#4ade80' },
-  modalApplyText: { fontSize: 14, fontWeight: '700', color: '#0a0a0a' },
+  modalSkillBadge: { backgroundColor: GREEN_SOFT, paddingHorizontal: 11, paddingVertical: 5, borderRadius: 7, borderWidth: 1, borderColor: GREEN_MID },
+  modalSkillText: { fontSize: 12, color: GREEN_DARK, fontWeight: '500' },
+  modalApplyBtn: { backgroundColor: GREEN_DARK, paddingVertical: 13, borderRadius: 10, alignItems: 'center', marginBottom: 14 },
+  modalAppliedBtn: { backgroundColor: `${GREEN}15`, borderWidth: 1, borderColor: GREEN },
+  modalApplyText: { fontSize: 14, fontWeight: '700', color: WHITE },
   applyModalWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'flex-end' },
-  applyModalSheet: { backgroundColor: CARD_BG, borderTopLeftRadius: 20, borderTopRightRadius: 20, height: '90%' },
+  applyModalSheet: { backgroundColor: WHITE, borderTopLeftRadius: 20, borderTopRightRadius: 20, height: '90%' },
   applyModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: BORDER },
-  applyModalTitle: { fontSize: 18, fontWeight: '600', color: '#fff' },
+  applyModalTitle: { fontSize: 18, fontWeight: '600', color: TEXT_MAIN },
   applyModalContentWrapper: { flex: 1 },
   jobInfoHeader: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: BORDER },
-  stepIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, backgroundColor: CARD_BG },
-  stepDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BORDER },
-  stepDotActive: { backgroundColor: GOLD, borderColor: GOLD },
-  stepDotText: { fontSize: 14, fontWeight: '700', color: 'rgba(255,255,255,0.5)' },
-  stepDotTextActive: { color: '#0a0a0a' },
-  stepLine: { width: 40, height: 2, backgroundColor: 'rgba(255,255,255,0.1)', marginHorizontal: 5 },
-  stepLineActive: { backgroundColor: GOLD },
+  stepIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, backgroundColor: WHITE },
+  stepDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: OFF_WHITE, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BORDER },
+  stepDotActive: { backgroundColor: GREEN_DARK, borderColor: GREEN_DARK },
+  stepDotText: { fontSize: 14, fontWeight: '700', color: TEXT_MUTED },
+  stepDotTextActive: { color: WHITE },
+  stepLine: { width: 40, height: 2, backgroundColor: BORDER, marginHorizontal: 5 },
+  stepLineActive: { backgroundColor: GREEN_DARK },
   stepContent: { paddingHorizontal: 20, paddingBottom: 30 },
-  applyJobTitle: { fontSize: 16, fontWeight: '600', color: '#fff', marginBottom: 2 },
-  applyJobCompany: { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
-  applyLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.6)', marginBottom: 8, marginTop: 16 },
-  applyInput: { backgroundColor: INPUT_BG, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: '#fff', fontSize: 14, borderWidth: 1, borderColor: BORDER, marginBottom: 16 },
+  applyJobTitle: { fontSize: 16, fontWeight: '600', color: TEXT_MAIN, marginBottom: 2 },
+  applyJobCompany: { fontSize: 12, color: TEXT_MUTED },
+  applyLabel: { fontSize: 13, fontWeight: '600', color: TEXT_MUTED, marginBottom: 8, marginTop: 16 },
+  applyInput: { backgroundColor: OFF_WHITE, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: TEXT_MAIN, fontSize: 14, borderWidth: 1, borderColor: BORDER, marginBottom: 16 },
   applyTextArea: { height: 100, textAlignVertical: 'top' },
-  uploadBtn: { backgroundColor: INPUT_BG, borderRadius: 10, paddingVertical: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BORDER, borderStyle: 'dashed', marginBottom: 16 },
-  uploadBtnText: { fontSize: 12, color: GOLD, marginTop: 8 },
-  fileInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: INPUT_BG, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, marginBottom: 16 },
-  fileName: { flex: 1, fontSize: 12, color: '#fff' },
+  uploadBtn: { backgroundColor: OFF_WHITE, borderRadius: 10, paddingVertical: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BORDER, borderStyle: 'dashed', marginBottom: 16 },
+  uploadBtnText: { fontSize: 12, color: GREEN_DARK, marginTop: 8 },
+  fileInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: OFF_WHITE, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, marginBottom: 16, borderWidth: 1, borderColor: BORDER },
+  fileName: { flex: 1, fontSize: 12, color: TEXT_MAIN },
   educationScroll: { flexDirection: 'row', marginBottom: 16 },
-  educationChip: { backgroundColor: INPUT_BG, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, marginRight: 8, borderWidth: 1, borderColor: BORDER },
-  educationChipActive: { backgroundColor: 'rgba(212,175,55,0.15)', borderColor: GOLD },
-  educationChipText: { fontSize: 12, color: 'rgba(255,255,255,0.6)' },
-  educationChipTextActive: { color: GOLD, fontWeight: '600' },
+  educationChip: { backgroundColor: OFF_WHITE, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, marginRight: 8, borderWidth: 1, borderColor: BORDER },
+  educationChipActive: { backgroundColor: GREEN_SOFT, borderColor: GREEN_DARK },
+  educationChipText: { fontSize: 12, color: TEXT_MUTED },
+  educationChipTextActive: { color: GREEN_DARK, fontWeight: '600' },
   experienceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 },
-  addExperienceBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(212,175,55,0.15)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  addExperienceText: { fontSize: 11, color: GOLD, fontWeight: '500' },
+  addExperienceBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: GREEN_SOFT, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: GREEN_MID },
+  addExperienceText: { fontSize: 11, color: GREEN_DARK, fontWeight: '500' },
   noExperience: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
-  noExperienceText: { fontSize: 14, color: 'rgba(255,255,255,0.4)', marginTop: 10 },
-  noExperienceSub: { fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 4 },
-  experienceCard: { backgroundColor: INPUT_BG, borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: BORDER },
+  noExperienceText: { fontSize: 14, color: TEXT_MUTED, marginTop: 10 },
+  noExperienceSub: { fontSize: 11, color: TEXT_LIGHT, marginTop: 4 },
+  experienceCard: { backgroundColor: OFF_WHITE, borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: BORDER },
   experienceCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   experienceCardTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  experienceJobTitle: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  experienceJobTitle: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN },
   experienceCardActions: { flexDirection: 'row', gap: 12 },
-  experienceCompany: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 },
-  experienceDate: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 6 },
-  experienceDesc: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
+  experienceCompany: { fontSize: 12, color: TEXT_MUTED, marginBottom: 4 },
+  experienceDate: { fontSize: 11, color: TEXT_LIGHT, marginBottom: 6 },
+  experienceDesc: { fontSize: 11, color: TEXT_MUTED },
   expModalWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  expModalSheet: { backgroundColor: CARD_BG, borderRadius: 16, width: '100%', maxHeight: '80%', borderWidth: 1, borderColor: BORDER },
+  expModalSheet: { backgroundColor: WHITE, borderRadius: 16, width: '100%', maxHeight: '80%', borderWidth: 1, borderColor: BORDER },
   expModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: BORDER },
-  expModalTitle: { fontSize: 18, fontWeight: '600', color: '#fff' },
+  expModalTitle: { fontSize: 18, fontWeight: '600', color: TEXT_MAIN },
   expModalContent: { paddingHorizontal: 20, maxHeight: '70%' },
-  expModalBtn: { backgroundColor: GOLD, paddingVertical: 14, borderRadius: 10, alignItems: 'center', margin: 20 },
-  expModalBtnText: { fontSize: 14, fontWeight: '600', color: '#0a0a0a' },
+  expModalBtn: { backgroundColor: GREEN_DARK, paddingVertical: 14, borderRadius: 10, alignItems: 'center', margin: 20 },
+  expModalBtnText: { fontSize: 14, fontWeight: '600', color: WHITE },
   currentlyWorkingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-  checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 2, borderColor: GOLD, alignItems: 'center', justifyContent: 'center' },
-  checkboxLabel: { fontSize: 12, color: 'rgba(255,255,255,0.6)' },
-  reviewSectionTitle: { fontSize: 14, fontWeight: '600', color: GOLD, marginTop: 16, marginBottom: 8 },
-  reviewCard: { backgroundColor: INPUT_BG, borderRadius: 10, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: BORDER },
-  reviewJobTitle: { fontSize: 16, fontWeight: '600', color: '#fff', marginBottom: 4 },
-  reviewCompany: { fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 6 },
-  reviewSalary: { fontSize: 14, fontWeight: '600', color: GOLD },
+  checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 2, borderColor: GREEN_DARK, alignItems: 'center', justifyContent: 'center' },
+  checkboxLabel: { fontSize: 12, color: TEXT_MUTED },
+  reviewSectionTitle: { fontSize: 14, fontWeight: '600', color: GREEN_DARK, marginTop: 16, marginBottom: 8 },
+  reviewCard: { backgroundColor: OFF_WHITE, borderRadius: 10, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: BORDER },
+  reviewJobTitle: { fontSize: 16, fontWeight: '600', color: TEXT_MAIN, marginBottom: 4 },
+  reviewCompany: { fontSize: 13, color: TEXT_MUTED, marginBottom: 6 },
+  reviewSalary: { fontSize: 14, fontWeight: '600', color: GREEN_DARK },
   reviewRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
-  reviewLabel: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
-  reviewValue: { fontSize: 12, color: '#fff', flex: 1 },
-  reviewExpTitle: { fontSize: 14, fontWeight: '600', color: '#fff', marginBottom: 2 },
-  reviewExpCompany: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 },
-  reviewExpDate: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 6 },
-  reviewExpDesc: { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 6 },
-  reviewCoverLetter: { fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 18, marginTop: 8 },
-  coverLetterInput: { backgroundColor: INPUT_BG, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, marginTop: 8 },
-  nextStepBtn: { backgroundColor: GOLD, paddingVertical: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
-  nextStepBtnText: { fontSize: 16, fontWeight: '600', color: '#0a0a0a' },
-  submitBtn: { backgroundColor: GOLD, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
-  submitBtnText: { fontSize: 16, fontWeight: '600', color: '#0a0a0a' },
+  reviewLabel: { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
+  reviewValue: { fontSize: 12, color: TEXT_MAIN, flex: 1 },
+  reviewExpTitle: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN, marginBottom: 2 },
+  reviewExpCompany: { fontSize: 12, color: TEXT_MUTED, marginBottom: 4 },
+  reviewExpDate: { fontSize: 11, color: TEXT_LIGHT, marginBottom: 6 },
+  reviewExpDesc: { fontSize: 12, color: TEXT_MUTED, marginTop: 6 },
+  reviewCoverLetter: { fontSize: 13, color: TEXT_MUTED, lineHeight: 18, marginTop: 8 },
+  coverLetterInput: { backgroundColor: OFF_WHITE, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, marginTop: 8, borderWidth: 1, borderColor: BORDER },
+  nextStepBtn: { backgroundColor: GREEN_DARK, paddingVertical: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  nextStepBtnText: { fontSize: 16, fontWeight: '600', color: WHITE },
+  submitBtn: { backgroundColor: GREEN_DARK, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
+  submitBtnText: { fontSize: 16, fontWeight: '600', color: WHITE },
   disabledBtn: { opacity: 0.6 },
   applyModalFooter: { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: BORDER },
 });

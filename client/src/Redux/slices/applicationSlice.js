@@ -2,103 +2,54 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../services/api';
 
-// Helper function to create FormData for application with file upload
-const createApplicationFormData = (applicationData) => {
-  const formData = new FormData();
-  
-  // Add basic fields
-  formData.append('job_id', applicationData.job_id);
-  formData.append('cover_letter', applicationData.cover_letter);
-  
-  if (applicationData.proposed_rate) {
-    formData.append('proposed_rate', String(applicationData.proposed_rate));
-  }
-  
-  // Add resume file if present
-  if (applicationData.resume && applicationData.resume.uri) {
-    // Get filename and extension
-    const uriParts = applicationData.resume.uri.split('/');
-    const fileName = applicationData.resume.name || uriParts[uriParts.length - 1];
-    
-    const fileObj = {
-      uri: applicationData.resume.uri,
-      name: fileName,
-      type: applicationData.resume.mimeType || getFileType(fileName),
-    };
-    formData.append('resume', fileObj);
-  }
-  
-  // Add education data as JSON string
-  if (applicationData.education) {
-    formData.append('education', JSON.stringify(applicationData.education));
-  }
-  
-  // Add experiences data as JSON string
-  if (applicationData.experiences && applicationData.experiences.length > 0) {
-    formData.append('experiences', JSON.stringify(applicationData.experiences));
-  }
-  
-  return formData;
-};
-
-// Helper function to get file type from filename
-const getFileType = (fileName) => {
-  const ext = fileName.split('.').pop().toLowerCase();
-  switch (ext) {
-    case 'pdf':
-      return 'application/pdf';
-    case 'doc':
-      return 'application/msword';
-    case 'docx':
-      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    default:
-      return 'application/octet-stream';
-  }
-};
-
 // Apply for a job with comprehensive data (Freelancer)
 export const applyForJob = createAsyncThunk(
   'applications/applyForJob',
-  async (applicationData, { getState, rejectWithValue }) => {
+  async (formData, { getState, rejectWithValue }) => {
     try {
       const token = getState().auth.token;
       if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+        return rejectWithValue({ message: 'No token found. Please login again.' });
       }
 
+      // Debug logging
+      console.log('applyForJob called with formData type:', formData instanceof FormData ? 'FormData' : typeof formData);
+      
       let response;
       
-      // Check if we need to send as FormData (has file)
-      if (applicationData.resume && applicationData.resume.uri) {
-        // May resume file - gamitin ang /applications/with-resume
-        const formData = createApplicationFormData(applicationData);
+      // Check if formData is FormData (from file upload) or regular object
+      if (formData instanceof FormData) {
+        // Log FormData contents for debugging
+        console.log('=== FormData Contents ===');
+        for (let pair of formData.entries()) {
+          console.log(pair[0], ':', typeof pair[1] === 'object' ? (pair[1].name || pair[1].uri || 'Object') : pair[1]);
+        }
         
-        response = await api.post('/applications/with-resume', formData, {
-          headers: { 
+        response = await api.post('/applications', formData, {
+          headers: {
             Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
+            // Do NOT set Content-Type - let the browser/RN set it with boundary
           },
         });
       } else {
-        // Walang resume file - gamitin ang /applications
-        response = await api.post('/applications', {
-          job_id: applicationData.job_id,
-          cover_letter: applicationData.cover_letter,
-          proposed_rate: applicationData.proposed_rate,
-          education: applicationData.education,
-          experiences: applicationData.experiences,
-        }, {
-          headers: { 
+        // Regular JSON request (no file)
+        response = await api.post('/applications', formData, {
+          headers: {
             Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+            'Content-Type': 'application/json',
+          },
         });
       }
       
+      console.log('Application response:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Apply for job error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      console.error('Apply for job error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      return rejectWithValue(error.response?.data || { message: error.message || 'Failed to submit application' });
     }
   }
 );
@@ -374,6 +325,7 @@ const applicationSlice = createSlice({
       .addCase(applyForJob.fulfilled, (state, action) => {
         state.isLoading = false;
         state.applySuccess = true;
+        state.error = null;
         if (action.payload.application) {
           state.applications.unshift(action.payload.application);
           state.totalCount += 1;
@@ -383,6 +335,7 @@ const applicationSlice = createSlice({
         state.isLoading = false;
         state.error = action.payload;
         state.applySuccess = false;
+        console.error('Apply for job rejected:', action.payload);
       })
       
       // Get Freelancer Applications

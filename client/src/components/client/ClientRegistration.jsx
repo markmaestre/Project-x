@@ -12,6 +12,7 @@ import {
   Platform,
   ScrollView,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,13 +20,28 @@ import { useDispatch, useSelector } from 'react-redux';
 import * as ImagePicker from 'react-native-image-picker';
 import { registerClient, clearError } from '../../Redux/slices/authSlice';
 
+// ── Design tokens (matches RoleSelection) ──────────────────────────────────
+const GREEN      = '#4ADE80';
+const GREEN_DARK = '#22C55E';
+const GREEN_SOFT = '#DCFCE7';
+const GREEN_MID  = '#86EFAC';
+const WHITE      = '#FFFFFF';
+const OFF_WHITE  = '#F0FDF4';
+const BORDER     = 'rgba(74,222,128,0.25)';
+const TEXT_MAIN  = '#0F2417';
+const TEXT_MUTED = '#6B7280';
+const ERROR      = '#EF4444';
+const ERROR_BG   = 'rgba(239,68,68,0.08)';
+const ERROR_BORDER = 'rgba(239,68,68,0.3)';
+
 export default function ClientRegistration({ onNavigate }) {
   const dispatch = useDispatch();
   const { isLoading, error } = useSelector((state) => state.auth);
-  
-  const [showPassword, setShowPassword] = useState(false);
+
+  const [showPassword, setShowPassword]               = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [profilePicture, setProfilePicture] = useState(null);
+  const [profilePicture, setProfilePicture]           = useState(null);
+  const [showTermsModal, setShowTermsModal]           = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -45,87 +61,56 @@ export default function ClientRegistration({ onNavigate }) {
     preferred_communication_method: '',
     terms_accepted: false,
   });
-  
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors]           = useState({});
   const [serverError, setServerError] = useState(null);
-  
-  const scrollViewRef = useRef();
+  const scrollViewRef                 = useRef();
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const set = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field])  setErrors(prev => ({ ...prev, [field]: null }));
+    if (serverError)    setServerError(null);
+  };
 
   const validateForm = () => {
-    const newErrors = {};
-    
-    if (!formData.first_name?.trim()) {
-      newErrors.first_name = 'First name is required';
-    }
-    if (!formData.last_name?.trim()) {
-      newErrors.last_name = 'Last name is required';
-    }
-    if (!formData.email_address?.trim()) {
-      newErrors.email_address = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email_address)) {
-      newErrors.email_address = 'Email is invalid';
-    }
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
-    if (!formData.confirm_password) {
-      newErrors.confirm_password = 'Please confirm your password';
-    } else if (formData.password !== formData.confirm_password) {
-      newErrors.confirm_password = 'Passwords do not match';
-    }
-    if (!formData.terms_accepted) {
-      newErrors.terms_accepted = 'You must accept the terms and conditions';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const e = {};
+    if (!formData.first_name?.trim())      e.first_name      = 'First name is required';
+    if (!formData.last_name?.trim())       e.last_name       = 'Last name is required';
+    if (!formData.email_address?.trim())   e.email_address   = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(formData.email_address)) e.email_address = 'Email is invalid';
+    if (!formData.password)                e.password        = 'Password is required';
+    else if (formData.password.length < 6) e.password        = 'Minimum 6 characters';
+    if (!formData.confirm_password)        e.confirm_password = 'Please confirm your password';
+    else if (formData.password !== formData.confirm_password) e.confirm_password = 'Passwords do not match';
+    if (!formData.terms_accepted)          e.terms_accepted  = 'You must accept the terms';
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
   const handleImagePick = () => {
     ImagePicker.launchImageLibrary(
-      {
-        mediaType: 'photo',
-        quality: 0.8,
-        maxWidth: 500,
-        maxHeight: 500,
-        includeBase64: false,
-      },
+      { mediaType: 'photo', quality: 0.8, maxWidth: 500, maxHeight: 500, includeBase64: false },
       (response) => {
-        if (response.didCancel) {
-          console.log('User cancelled image picker');
-        } else if (response.error) {
-          console.log('ImagePicker Error: ', response.error);
-          Alert.alert('Error', 'Failed to pick image');
-        } else if (response.assets && response.assets[0]) {
-          setProfilePicture(response.assets[0]);
-        }
+        if (response.assets?.[0]) setProfilePicture(response.assets[0]);
       }
     );
   };
 
   const handleRegister = async () => {
-    // Clear previous server error
     setServerError(null);
-    
-    // Validate form first
     if (!validateForm()) {
-      if (scrollViewRef.current) {
-        scrollViewRef.current.scrollTo({ y: 0, animated: true });
-      }
-      Alert.alert('Validation Error', 'Please check all required fields and fix the errors.', [{ text: 'OK' }]);
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      Alert.alert('Check your details', 'Please fix the highlighted fields before continuing.', [{ text: 'OK' }]);
       return;
     }
-    
-    // IMPORTANT: Keep confirm_password for backend validation
+
     const userData = {
       first_name: formData.first_name,
       last_name: formData.last_name,
       company_name: formData.company_name || null,
       email_address: formData.email_address,
       password: formData.password,
-      confirm_password: formData.confirm_password, // INCLUDE THIS!
+      confirm_password: formData.confirm_password,
       phone_number: formData.phone_number || null,
       country: formData.country || null,
       city: formData.city || null,
@@ -138,8 +123,6 @@ export default function ClientRegistration({ onNavigate }) {
       preferred_communication_method: formData.preferred_communication_method || null,
       terms_accepted: true,
     };
-    
-    // Add profile picture if selected
     if (profilePicture) {
       userData.profile_picture = {
         uri: profilePicture.uri,
@@ -147,393 +130,506 @@ export default function ClientRegistration({ onNavigate }) {
         fileName: profilePicture.fileName || `profile_${Date.now()}.jpg`,
       };
     }
-    
-    console.log('Sending client data with confirm_password:', {
-      ...userData,
-      password: '***',
-      confirm_password: '***'
-    });
-    
+
     const result = await dispatch(registerClient(userData));
-    
+
     if (registerClient.fulfilled.match(result)) {
-      // Success - Ask if user wants to continue to login
       Alert.alert(
-        'Registration Successful! 🎉',
-        `${result.payload.message || 'Your client account has been created successfully!'}\n\nWould you like to continue to login?`,
+        'Account Created! 🎉',
+        result.payload.message || 'Your client account is ready.',
         [
-          { 
-            text: 'No, Stay Here', 
-            onPress: () => {
-              Alert.alert('Stay on Registration', 'You can review your information or create another account.', [{ text: 'OK' }]);
-            },
-            style: 'cancel'
-          },
-          { 
-            text: 'Yes, Continue to Login', 
-            onPress: () => {
-              resetForm();
-              onNavigate('Login');
-            }
-          }
+          { text: 'Stay Here', style: 'cancel' },
+          { text: 'Sign In', onPress: () => { resetForm(); onNavigate('Login'); } },
         ]
       );
     } else if (registerClient.rejected.match(result)) {
-      // Show error but stay on page - DO NOT NAVIGATE AWAY
-      const errorMessage = result.payload?.message || 'Something went wrong. Please try again.';
-      setServerError(errorMessage);
-      
-      if (scrollViewRef.current) {
-        scrollViewRef.current.scrollTo({ y: 0, animated: true });
+      const msg = result.payload?.message || 'Something went wrong. Please try again.';
+      setServerError(msg);
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      if (msg.toLowerCase().includes('email already exists')) {
+        setErrors(p => ({ ...p, email_address: 'This email is already registered' }));
+      } else if (msg.toLowerCase().includes('passwords do not match')) {
+        setErrors(p => ({ ...p, confirm_password: 'Passwords do not match' }));
       }
-      
-      // Show specific error based on what went wrong
-      if (errorMessage.toLowerCase().includes('email already exists')) {
-        setErrors(prev => ({ ...prev, email_address: 'This email is already registered' }));
-        Alert.alert('Registration Failed', 'This email address is already registered. Please use a different email or login.', [{ text: 'OK' }]);
-      } else if (errorMessage.toLowerCase().includes('confirm password') || errorMessage.toLowerCase().includes('passwords do not match')) {
-        setErrors(prev => ({ ...prev, confirm_password: 'Passwords do not match' }));
-        Alert.alert('Registration Failed', 'Passwords do not match. Please make sure both passwords are the same.', [{ text: 'OK' }]);
-      } else if (errorMessage.toLowerCase().includes('password')) {
-        Alert.alert('Registration Failed', 'There was an issue with your password. Please check the requirements.', [{ text: 'OK' }]);
-      } else {
-        Alert.alert('Registration Failed', errorMessage, [{ text: 'OK' }]);
-      }
+      Alert.alert('Registration Failed', msg, [{ text: 'OK' }]);
     }
   };
 
   const resetForm = () => {
     setFormData({
-      first_name: '',
-      last_name: '',
-      company_name: '',
-      email_address: '',
-      phone_number: '',
-      password: '',
-      confirm_password: '',
-      country: '',
-      city: '',
-      address: '',
-      business_type: '',
-      industry: '',
-      bio_about: '',
-      website: '',
-      budget_range: '',
-      preferred_communication_method: '',
-      terms_accepted: false,
+      first_name: '', last_name: '', company_name: '', email_address: '',
+      phone_number: '', password: '', confirm_password: '', country: '',
+      city: '', address: '', business_type: '', industry: '', bio_about: '',
+      website: '', budget_range: '', preferred_communication_method: '', terms_accepted: false,
     });
     setProfilePicture(null);
     setErrors({});
     setServerError(null);
   };
 
-  React.useEffect(() => {
-    return () => {
-      dispatch(clearError());
-    };
-  }, []);
+  const handleAcceptTerms = () => {
+    set('terms_accepted', true);
+    setShowTermsModal(false);
+  };
 
+  React.useEffect(() => () => { dispatch(clearError()); }, []);
+
+  // ── Reusable field components ─────────────────────────────────────────────
+  const Field = ({ label, required, error, children }) => (
+    <View style={styles.inputGroup}>
+      <Text style={styles.label}>
+        {label}{required && <Text style={styles.required}> *</Text>}
+      </Text>
+      {children}
+      {error && (
+        <View style={styles.fieldErrorRow}>
+          <Ionicons name="alert-circle-outline" size={12} color={ERROR} />
+          <Text style={styles.fieldErrorText}>{error}</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
-        <ScrollView 
-          ref={scrollViewRef}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.container}>
-            <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('RoleSelection')}>
-              <Ionicons name="arrow-back" size={24} color="#D4AF37" />
-            </TouchableOpacity>
+      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
 
-            <View style={styles.header}>
-              <View style={styles.roleBadge}>
-                <Ionicons name="business-outline" size={20} color="#D4AF37" />
-                <Text style={styles.roleBadgeText}>Client Registration</Text>
-              </View>
-              <Text style={styles.title}>Create Business Account</Text>
-              <Text style={styles.subtitle}>Post projects and hire talented freelancers</Text>
+      {/* Terms and Conditions Modal */}
+      <Modal
+        visible={showTermsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTermsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Terms and Conditions</Text>
+              <TouchableOpacity 
+                onPress={() => setShowTermsModal(false)}
+                style={styles.modalClose}
+              >
+                <Ionicons name="close" size={24} color={TEXT_MUTED} />
+              </TouchableOpacity>
             </View>
 
-            {/* Server Error Display */}
-            {serverError && (
-              <View style={styles.serverErrorContainer}>
-                <Ionicons name="alert-circle" size={20} color="#ff6b6b" />
-                <Text style={styles.serverErrorText}>{serverError}</Text>
-              </View>
-            )}
+            <ScrollView style={styles.modalContent}>
+              <Text style={styles.termsText}>
+                <Text style={styles.termsHeading}>1. Acceptance of Terms{'\n\n'}</Text>
+                By registering as a Client on Taskra, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our platform.
 
-            <View style={styles.form}>
-              {/* Profile Picture Section */}
-              <View style={styles.profileSection}>
-                <TouchableOpacity onPress={handleImagePick} style={styles.profileImageContainer}>
+                {'\n\n'}<Text style={styles.termsHeading}>2. Client Responsibilities{'\n\n'}</Text>
+                • You agree to provide accurate and complete information when creating your account.
+                • You are responsible for maintaining the confidentiality of your account credentials.
+                • You agree to post legitimate projects and pay freelancers promptly for completed work.
+                • You will not post any illegal, fraudulent, or inappropriate content.
+
+                {'\n\n'}<Text style={styles.termsHeading}>3. Payment Terms{'\n\n'}</Text>
+                • Taskra facilitates secure payments between clients and freelancers.
+                • A service fee may be applied to each transaction.
+                • Payments are processed through our secure payment gateway.
+                • Disputes will be reviewed by our team and resolved fairly.
+
+                {'\n\n'}<Text style={styles.termsHeading}>4. Project Guidelines{'\n\n'}</Text>
+                • All project descriptions must be clear and accurate.
+                • Changes to project scope should be documented and agreed upon.
+                • Milestones and deliverables must be clearly defined.
+                • Intellectual property rights transfer upon full payment unless otherwise agreed.
+
+                {'\n\n'}<Text style={styles.termsHeading}>5. Code of Conduct{'\n\n'}</Text>
+                • Treat freelancers with respect and professionalism.
+                • Provide constructive feedback and timely responses.
+                • Do not request free work or speculative proposals.
+                • Report any violations or suspicious activities.
+
+                {'\n\n'}<Text style={styles.termsHeading}>6. Account Termination{'\n\n'}</Text>
+                Taskra reserves the right to suspend or terminate accounts that violate these terms, engage in fraudulent activities, or harm the platform's integrity.
+
+                {'\n\n'}<Text style={styles.termsHeading}>7. Privacy Policy{'\n\n'}</Text>
+                Your personal information is protected according to our Privacy Policy. We do not share your data without consent except as required by law.
+
+                {'\n\n'}<Text style={styles.termsHeading}>8. Limitation of Liability{'\n\n'}</Text>
+                Taskra acts as an intermediary and is not responsible for the quality of work or disputes between parties. We provide dispute resolution services but do not guarantee outcomes.
+
+                {'\n\n'}<Text style={styles.termsHeading}>9. Modifications{'\n\n'}</Text>
+                We may update these terms from time to time. Continued use of the platform constitutes acceptance of modified terms.
+
+                {'\n\n'}<Text style={styles.termsHeading}>10. Contact Information{'\n\n'}</Text>
+                For questions about these terms, contact us at: support@taskra.com
+
+                {'\n\n'}<Text style={styles.termsEffective}>Effective Date: January 1, 2024</Text>
+              </Text>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.modalButtonCancel}
+                onPress={() => setShowTermsModal(false)}
+              >
+                <Text style={styles.modalButtonCancelText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalButtonAccept}
+                onPress={handleAcceptTerms}
+              >
+                <Text style={styles.modalButtonAcceptText}>Accept Terms</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scroll}
+        >
+          {/* ── Back ── */}
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => onNavigate('RoleSelection')}
+          >
+            <View style={styles.backIconWrap}>
+              <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+            </View>
+          </TouchableOpacity>
+
+          {/* ── Header ── */}
+          <View style={styles.header}>
+            <View style={styles.roleBadge}>
+              <Ionicons name="people-outline" size={16} color={GREEN_DARK} />
+              <Text style={styles.roleBadgeText}>Client Registration</Text>
+            </View>
+            <Text style={styles.title}>Create Business{'\n'}Account</Text>
+            <Text style={styles.subtitle}>
+              Post projects and hire talented freelancers
+            </Text>
+          </View>
+
+          {/* ── Server error ── */}
+          {serverError && (
+            <View style={styles.serverErrorBox}>
+              <Ionicons name="alert-circle" size={16} color={ERROR} />
+              <Text style={styles.serverErrorText}>{serverError}</Text>
+            </View>
+          )}
+
+          {/* ── Form ── */}
+          <View style={styles.form}>
+
+            {/* Section: Profile Photo */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Profile Photo</Text>
+              <View style={styles.photoRow}>
+                <TouchableOpacity onPress={handleImagePick} style={styles.photoButton} activeOpacity={0.8}>
                   {profilePicture ? (
-                    <Image source={{ uri: profilePicture.uri }} style={styles.profileImage} />
+                    <Image source={{ uri: profilePicture.uri }} style={styles.photoImage} />
                   ) : (
-                    <View style={styles.profilePlaceholder}>
-                      <Ionicons name="camera-outline" size={40} color="#D4AF37" />
-                      <Text style={styles.profilePlaceholderText}>Add Photo</Text>
+                    <View style={styles.photoPlaceholder}>
+                      <Ionicons name="camera-outline" size={26} color={GREEN_DARK} />
                     </View>
                   )}
                 </TouchableOpacity>
-                <Text style={styles.profileHint}>Tap to add profile picture (optional)</Text>
+                <View style={styles.photoMeta}>
+                  <Text style={styles.photoTitle}>
+                    {profilePicture ? 'Photo selected' : 'Add a profile photo'}
+                  </Text>
+                  <Text style={styles.photoHint}>Optional · JPG or PNG</Text>
+                  {profilePicture && (
+                    <TouchableOpacity onPress={() => setProfilePicture(null)}>
+                      <Text style={styles.photoRemove}>Remove</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
+            </View>
+
+            {/* Section: Personal Info */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Personal Info</Text>
 
               <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.label}>First Name *</Text>
+                <Field label="First Name" required error={errors.first_name} style={{ flex: 1 }}>
                   <TextInput
-                    style={[styles.input, errors.first_name && styles.inputError]}
+                    style={[styles.input, errors.first_name && styles.inputError, { flex: 1 }]}
                     placeholder="First name"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    placeholderTextColor={TEXT_MUTED}
                     value={formData.first_name}
-                    onChangeText={(text) => {
-                      setFormData({ ...formData, first_name: text });
-                      if (errors.first_name) setErrors({ ...errors, first_name: null });
-                      if (serverError) setServerError(null);
-                    }}
+                    onChangeText={t => set('first_name', t)}
                   />
-                  {errors.first_name && <Text style={styles.errorText}>{errors.first_name}</Text>}
-                </View>
-                <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                  <Text style={styles.label}>Last Name *</Text>
+                </Field>
+                <View style={{ width: 12 }} />
+                <Field label="Last Name" required error={errors.last_name} style={{ flex: 1 }}>
                   <TextInput
-                    style={[styles.input, errors.last_name && styles.inputError]}
+                    style={[styles.input, errors.last_name && styles.inputError, { flex: 1 }]}
                     placeholder="Last name"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    placeholderTextColor={TEXT_MUTED}
                     value={formData.last_name}
-                    onChangeText={(text) => {
-                      setFormData({ ...formData, last_name: text });
-                      if (errors.last_name) setErrors({ ...errors, last_name: null });
-                      if (serverError) setServerError(null);
-                    }}
+                    onChangeText={t => set('last_name', t)}
                   />
-                  {errors.last_name && <Text style={styles.errorText}>{errors.last_name}</Text>}
-                </View>
+                </Field>
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email Address *</Text>
+              <Field label="Email Address" required error={errors.email_address}>
                 <TextInput
                   style={[styles.input, errors.email_address && styles.inputError]}
-                  placeholder="Email address"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  placeholder="you@company.com"
+                  placeholderTextColor={TEXT_MUTED}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   value={formData.email_address}
-                  onChangeText={(text) => {
-                    setFormData({ ...formData, email_address: text });
-                    if (errors.email_address) setErrors({ ...errors, email_address: null });
-                    if (serverError) setServerError(null);
-                  }}
+                  onChangeText={t => set('email_address', t)}
                 />
-                {errors.email_address && <Text style={styles.errorText}>{errors.email_address}</Text>}
-              </View>
+              </Field>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Company Name</Text>
+              <Field label="Phone Number">
                 <TextInput
                   style={styles.input}
-                  placeholder="Company name (optional)"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  value={formData.company_name}
-                  onChangeText={(text) => setFormData({ ...formData, company_name: text })}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Phone Number</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Phone number (optional)"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  placeholder="+63 (optional)"
+                  placeholderTextColor={TEXT_MUTED}
                   keyboardType="phone-pad"
                   value={formData.phone_number}
-                  onChangeText={(text) => setFormData({ ...formData, phone_number: text })}
+                  onChangeText={t => set('phone_number', t)}
                 />
-              </View>
+              </Field>
+            </View>
+
+            {/* Section: Business Details */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Business Details</Text>
+
+              <Field label="Company Name">
+                <TextInput
+                  style={styles.input}
+                  placeholder="Your company (optional)"
+                  placeholderTextColor={TEXT_MUTED}
+                  value={formData.company_name}
+                  onChangeText={t => set('company_name', t)}
+                />
+              </Field>
 
               <View style={styles.row}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.label}>Country</Text>
+                <Field label="Business Type" style={{ flex: 1 }}>
                   <TextInput
-                    style={styles.input}
-                    placeholder="Country"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    value={formData.country}
-                    onChangeText={(text) => setFormData({ ...formData, country: text })}
+                    style={[styles.input, { flex: 1 }]}
+                    placeholder="e.g. Technology"
+                    placeholderTextColor={TEXT_MUTED}
+                    value={formData.business_type}
+                    onChangeText={t => set('business_type', t)}
                   />
-                </View>
-                <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                  <Text style={styles.label}>City</Text>
+                </Field>
+                <View style={{ width: 12 }} />
+                <Field label="Industry" style={{ flex: 1 }}>
                   <TextInput
-                    style={styles.input}
-                    placeholder="City"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    value={formData.city}
-                    onChangeText={(text) => setFormData({ ...formData, city: text })}
+                    style={[styles.input, { flex: 1 }]}
+                    placeholder="e.g. Finance"
+                    placeholderTextColor={TEXT_MUTED}
+                    value={formData.industry}
+                    onChangeText={t => set('industry', t)}
                   />
-                </View>
+                </Field>
               </View>
 
-              {/* Address Field */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Address</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Your business address (optional)"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  multiline
-                  numberOfLines={3}
-                  value={formData.address}
-                  onChangeText={(text) => setFormData({ ...formData, address: text })}
-                />
-                <Text style={styles.hintText}>Enter your complete business address (optional)</Text>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Business Type</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., Technology, Retail, Services"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  value={formData.business_type}
-                  onChangeText={(text) => setFormData({ ...formData, business_type: text })}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Industry</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., IT, Finance, Healthcare"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  value={formData.industry}
-                  onChangeText={(text) => setFormData({ ...formData, industry: text })}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Bio / About Business</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Tell us about your business..."
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  multiline
-                  numberOfLines={4}
-                  value={formData.bio_about}
-                  onChangeText={(text) => setFormData({ ...formData, bio_about: text })}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Website</Text>
+              <Field label="Website">
                 <TextInput
                   style={styles.input}
                   placeholder="https://yourcompany.com"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  placeholderTextColor={TEXT_MUTED}
                   autoCapitalize="none"
                   value={formData.website}
-                  onChangeText={(text) => setFormData({ ...formData, website: text })}
+                  onChangeText={t => set('website', t)}
                 />
+              </Field>
+
+              <Field label="About Your Business">
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Briefly describe what your company does…"
+                  placeholderTextColor={TEXT_MUTED}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  value={formData.bio_about}
+                  onChangeText={t => set('bio_about', t)}
+                />
+              </Field>
+            </View>
+
+            {/* Section: Location */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Location</Text>
+
+              <View style={styles.row}>
+                <Field label="Country" style={{ flex: 1 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    placeholder="Country"
+                    placeholderTextColor={TEXT_MUTED}
+                    value={formData.country}
+                    onChangeText={t => set('country', t)}
+                  />
+                </Field>
+                <View style={{ width: 12 }} />
+                <Field label="City" style={{ flex: 1 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    placeholder="City"
+                    placeholderTextColor={TEXT_MUTED}
+                    value={formData.city}
+                    onChangeText={t => set('city', t)}
+                  />
+                </Field>
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Budget Range</Text>
+              <Field label="Address">
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Business address (optional)"
+                  placeholderTextColor={TEXT_MUTED}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                  value={formData.address}
+                  onChangeText={t => set('address', t)}
+                />
+              </Field>
+            </View>
+
+            {/* Section: Preferences */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Preferences</Text>
+
+              <Field label="Budget Range">
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g., ₱10,000 - ₱50,000"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  placeholder="e.g. ₱10,000 – ₱50,000"
+                  placeholderTextColor={TEXT_MUTED}
                   value={formData.budget_range}
-                  onChangeText={(text) => setFormData({ ...formData, budget_range: text })}
+                  onChangeText={t => set('budget_range', t)}
                 />
-              </View>
+              </Field>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Preferred Communication Method</Text>
+              <Field label="Preferred Communication">
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g., Email, Phone, Video Call"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  placeholder="e.g. Email, Phone, Video Call"
+                  placeholderTextColor={TEXT_MUTED}
                   value={formData.preferred_communication_method}
-                  onChangeText={(text) => setFormData({ ...formData, preferred_communication_method: text })}
+                  onChangeText={t => set('preferred_communication_method', t)}
                 />
-              </View>
+              </Field>
+            </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Password *</Text>
-                <View style={styles.passwordContainer}>
+            {/* Section: Security */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Security</Text>
+
+              <Field label="Password" required error={errors.password}>
+                <View style={styles.passwordWrap}>
                   <TextInput
                     style={[styles.input, styles.passwordInput, errors.password && styles.inputError]}
-                    placeholder="Password (min. 6 characters)"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    placeholder="Min. 6 characters"
+                    placeholderTextColor={TEXT_MUTED}
                     secureTextEntry={!showPassword}
                     value={formData.password}
-                    onChangeText={(text) => {
-                      setFormData({ ...formData, password: text });
-                      if (errors.password) setErrors({ ...errors, password: null });
-                      if (errors.confirm_password && formData.confirm_password === text) {
-                        setErrors({ ...errors, confirm_password: null });
-                      }
-                      if (serverError) setServerError(null);
-                    }}
+                    onChangeText={t => set('password', t)}
                   />
-                  <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
-                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="rgba(255,255,255,0.5)" />
+                  <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(v => !v)}>
+                    <Ionicons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={TEXT_MUTED}
+                    />
                   </TouchableOpacity>
                 </View>
-                {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
-              </View>
+              </Field>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Confirm Password *</Text>
-                <View style={styles.passwordContainer}>
+              <Field label="Confirm Password" required error={errors.confirm_password}>
+                <View style={styles.passwordWrap}>
                   <TextInput
                     style={[styles.input, styles.passwordInput, errors.confirm_password && styles.inputError]}
-                    placeholder="Confirm password"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    placeholder="Repeat password"
+                    placeholderTextColor={TEXT_MUTED}
                     secureTextEntry={!showConfirmPassword}
                     value={formData.confirm_password}
-                    onChangeText={(text) => {
-                      setFormData({ ...formData, confirm_password: text });
-                      if (errors.confirm_password) setErrors({ ...errors, confirm_password: null });
-                      if (serverError) setServerError(null);
-                    }}
+                    onChangeText={t => set('confirm_password', t)}
                   />
-                  <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                    <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="rgba(255,255,255,0.5)" />
+                  <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPassword(v => !v)}>
+                    <Ionicons
+                      name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={TEXT_MUTED}
+                    />
                   </TouchableOpacity>
                 </View>
-                {errors.confirm_password && <Text style={styles.errorText}>{errors.confirm_password}</Text>}
-              </View>
-
-              <TouchableOpacity 
-                style={styles.checkboxContainer}
-                onPress={() => setFormData({ ...formData, terms_accepted: !formData.terms_accepted })}>
-                <View style={[styles.checkbox, formData.terms_accepted && styles.checkboxChecked]}>
-                  {formData.terms_accepted && <Ionicons name="checkmark" size={16} color="#0a0a0a" />}
-                </View>
-                <Text style={styles.checkboxLabel}>
-                  I accept the <Text style={styles.checkboxLink}>Terms and Conditions</Text> *
-                </Text>
-              </TouchableOpacity>
-              {errors.terms_accepted && <Text style={styles.errorText}>{errors.terms_accepted}</Text>}
-
-              <TouchableOpacity
-                style={styles.registerButton}
-                onPress={handleRegister}
-                disabled={isLoading}
-                activeOpacity={0.85}>
-                {isLoading ? <ActivityIndicator color="#0a0a0a" /> : <Text style={styles.registerButtonText}>Create Client Account</Text>}
-              </TouchableOpacity>
-
-              <View style={styles.loginPrompt}>
-                <Text style={styles.loginPromptText}>Already have an account?</Text>
-                <TouchableOpacity onPress={() => onNavigate('Login')}>
-                  <Text style={styles.loginPromptLink}> Sign In</Text>
-                </TouchableOpacity>
-              </View>
+              </Field>
             </View>
+
+            {/* Terms */}
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => set('terms_accepted', !formData.terms_accepted)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, formData.terms_accepted && styles.checkboxChecked]}>
+                {formData.terms_accepted && (
+                  <Ionicons name="checkmark" size={14} color={WHITE} />
+                )}
+              </View>
+              <Text style={styles.checkboxLabel}>
+                I accept the{' '}
+                <Text 
+                  style={styles.checkboxLink}
+                  onPress={() => setShowTermsModal(true)}
+                >
+                  Terms and Conditions
+                </Text>
+                <Text style={styles.required}> *</Text>
+              </Text>
+            </TouchableOpacity>
+            {errors.terms_accepted && (
+              <View style={styles.fieldErrorRow}>
+                <Ionicons name="alert-circle-outline" size={12} color={ERROR} />
+                <Text style={styles.fieldErrorText}>{errors.terms_accepted}</Text>
+              </View>
+            )}
+
+            {/* Submit */}
+            <TouchableOpacity
+              style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]}
+              onPress={handleRegister}
+              disabled={isLoading}
+              activeOpacity={0.85}
+            >
+              {isLoading ? (
+                <ActivityIndicator color={WHITE} />
+              ) : (
+                <>
+                  <Ionicons name="person-add-outline" size={18} color={WHITE} style={{ marginRight: 8 }} />
+                  <Text style={styles.submitBtnText}>Create Client Account</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Info strip */}
+            <View style={styles.infoStrip}>
+              <Ionicons name="shield-checkmark-outline" size={14} color={GREEN_DARK} />
+              <Text style={styles.infoText}>Free to join · No hidden fees · Secure payments</Text>
+            </View>
+
+            {/* Sign in link */}
+            <View style={styles.loginPrompt}>
+              <Text style={styles.loginPromptText}>Already have an account?</Text>
+              <TouchableOpacity onPress={() => onNavigate('Login')}>
+                <Text style={styles.loginPromptLink}> Sign In</Text>
+              </TouchableOpacity>
+            </View>
+
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -542,44 +638,235 @@ export default function ClientRegistration({ onNavigate }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a0a0a' },
-  flex: { flex: 1 },
-  container: { flex: 1, padding: 24 },
-  backButton: { marginBottom: 16, width: 40 },
-  header: { alignItems: 'center', marginBottom: 32 },
-  roleBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(212,175,55,0.1)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginBottom: 16, gap: 8 },
-  roleBadgeText: { fontSize: 13, color: '#D4AF37', fontWeight: '500' },
-  title: { fontSize: 32, fontWeight: '700', color: '#ffffff', marginBottom: 8 },
-  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.5)', textAlign: 'center' },
-  serverErrorContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(220,53,69,0.15)', borderRadius: 8, padding: 12, marginBottom: 20, gap: 8, borderWidth: 1, borderColor: 'rgba(220,53,69,0.3)' },
-  errorContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(220,53,69,0.1)', borderRadius: 8, padding: 12, marginBottom: 20, gap: 8 },
-  errorText: { fontSize: 12, color: '#ff6b6b' },
-  serverErrorText: { fontSize: 13, color: '#ff6b6b', flex: 1 },
-  form: { gap: 20 },
-  profileSection: { alignItems: 'center', marginBottom: 16 },
-  profileImageContainer: { marginBottom: 8 },
-  profileImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: '#D4AF37' },
-  profilePlaceholder: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#111111', borderWidth: 2, borderColor: '#D4AF37', alignItems: 'center', justifyContent: 'center', borderStyle: 'dashed' },
-  profilePlaceholderText: { fontSize: 12, color: '#D4AF37', marginTop: 4 },
-  profileHint: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  inputGroup: { gap: 8 },
-  label: { fontSize: 14, fontWeight: '500', color: '#ffffff' },
-  input: { backgroundColor: '#111111', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 14, fontSize: 16, color: '#ffffff' },
-  textArea: { minHeight: 100, textAlignVertical: 'top' },
-  inputError: { borderColor: '#ff6b6b' },
-  hintText: { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4 },
-  passwordContainer: { position: 'relative' },
-  passwordInput: { paddingRight: 48 },
-  eyeIcon: { position: 'absolute', right: 14, top: 14 },
-  checkboxContainer: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#D4AF37', alignItems: 'center', justifyContent: 'center' },
-  checkboxChecked: { backgroundColor: '#D4AF37' },
-  checkboxLabel: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
-  checkboxLink: { color: '#D4AF37', fontWeight: '500' },
-  registerButton: { backgroundColor: '#D4AF37', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
-  registerButtonText: { fontSize: 16, fontWeight: '600', color: '#0a0a0a' },
-  loginPrompt: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
-  loginPromptText: { fontSize: 14, color: 'rgba(255,255,255,0.5)' },
-  loginPromptLink: { fontSize: 14, color: '#D4AF37', fontWeight: '600' },
+  safe:   { flex: 1, backgroundColor: OFF_WHITE },
+  flex:   { flex: 1 },
+  scroll: { padding: 24, paddingBottom: 48 },
+
+  // Back
+  backButton:   { marginBottom: 24, alignSelf: 'flex-start' },
+  backIconWrap: {
+    width: 38, height: 38,
+    backgroundColor: WHITE,
+    borderRadius: 11,
+    borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+
+  // Header
+  header:       { alignItems: 'center', marginBottom: 28 },
+  roleBadge:    {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: GREEN_SOFT,
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1, borderColor: GREEN_MID,
+    marginBottom: 16,
+  },
+  roleBadgeText: { fontSize: 13, color: GREEN_DARK, fontWeight: '600' },
+  title:   { fontSize: 28, fontWeight: '800', color: TEXT_MAIN, textAlign: 'center', letterSpacing: -0.5, lineHeight: 34, marginBottom: 8 },
+  subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center' },
+
+  // Server error
+  serverErrorBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: ERROR_BG,
+    borderWidth: 1, borderColor: ERROR_BORDER,
+    borderRadius: 12, padding: 14, marginBottom: 20,
+  },
+  serverErrorText: { fontSize: 13, color: ERROR, flex: 1, lineHeight: 18 },
+
+  // Form layout
+  form:    { gap: 0 },
+  section: {
+    backgroundColor: WHITE,
+    borderRadius: 18,
+    borderWidth: 1.5, borderColor: BORDER,
+    padding: 18,
+    marginBottom: 14,
+    gap: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04, shadowRadius: 8, elevation: 1,
+  },
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', color: GREEN_DARK,
+    textTransform: 'uppercase', letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  row: { flexDirection: 'row' },
+
+  // Photo picker
+  photoRow:        { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  photoButton:     {},
+  photoImage:      { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: GREEN },
+  photoPlaceholder:{
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: GREEN_SOFT,
+    borderWidth: 2, borderColor: GREEN_MID,
+    borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  photoMeta:   { flex: 1 },
+  photoTitle:  { fontSize: 14, fontWeight: '600', color: TEXT_MAIN, marginBottom: 2 },
+  photoHint:   { fontSize: 12, color: TEXT_MUTED },
+  photoRemove: { fontSize: 12, color: ERROR, marginTop: 4, fontWeight: '500' },
+
+  // Inputs
+  inputGroup: { gap: 6 },
+  label:      { fontSize: 13, fontWeight: '600', color: TEXT_MAIN },
+  required:   { color: ERROR },
+  input: {
+    backgroundColor: OFF_WHITE,
+    borderWidth: 1.5, borderColor: BORDER,
+    borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 13,
+    fontSize: 15, color: TEXT_MAIN,
+  },
+  textArea:   { minHeight: 90 },
+  inputError: { borderColor: ERROR },
+
+  // Field error
+  fieldErrorRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  fieldErrorText: { fontSize: 11, color: ERROR },
+
+  // Password
+  passwordWrap:  { position: 'relative' },
+  passwordInput: { paddingRight: 46 },
+  eyeBtn:        { position: 'absolute', right: 14, top: 14 },
+
+  // Checkbox
+  checkboxRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: WHITE,
+    borderRadius: 14, borderWidth: 1.5, borderColor: BORDER,
+    padding: 14, marginBottom: 6,
+  },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 7,
+    borderWidth: 2, borderColor: GREEN_MID,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: OFF_WHITE,
+  },
+  checkboxChecked: { backgroundColor: GREEN_DARK, borderColor: GREEN_DARK },
+  checkboxLabel:   { fontSize: 14, color: TEXT_MUTED, flex: 1 },
+  checkboxLink:    { color: GREEN_DARK, fontWeight: '700' },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: WHITE,
+    borderRadius: 20,
+    width: '90%',
+    maxHeight: '85%',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+    backgroundColor: WHITE,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  modalClose: {
+    padding: 4,
+  },
+  modalContent: {
+    padding: 20,
+    maxHeight: '70%',
+  },
+  termsText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: TEXT_MUTED,
+  },
+  termsHeading: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  termsEffective: {
+    fontSize: 12,
+    color: GREEN_DARK,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    gap: 12,
+  },
+  modalButtonCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    alignItems: 'center',
+  },
+  modalButtonCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+  },
+  modalButtonAccept: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: GREEN_DARK,
+    alignItems: 'center',
+  },
+  modalButtonAcceptText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: WHITE,
+  },
+
+  // Submit
+  submitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: GREEN_DARK,
+    borderRadius: 14, paddingVertical: 16,
+    marginTop: 8, marginBottom: 14,
+    shadowColor: GREEN_DARK,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 4,
+  },
+  submitBtnDisabled: { opacity: 0.6 },
+  submitBtnText: { fontSize: 16, fontWeight: '700', color: WHITE, letterSpacing: 0.2 },
+
+  // Info strip
+  infoStrip: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, marginBottom: 4,
+    paddingVertical: 10, paddingHorizontal: 16,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 12, borderWidth: 1, borderColor: GREEN_MID,
+  },
+  infoText: { fontSize: 12, color: GREEN_DARK, fontWeight: '500' },
+
+  // Login prompt
+  loginPrompt: { flexDirection: 'row', justifyContent: 'center', marginTop: 16, paddingBottom: 8 },
+  loginPromptText: { fontSize: 14, color: TEXT_MUTED },
+  loginPromptLink: { fontSize: 14, color: GREEN_DARK, fontWeight: '700' },
 });

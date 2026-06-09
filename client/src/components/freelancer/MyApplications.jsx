@@ -1,487 +1,117 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  View, Text, TouchableOpacity, StyleSheet, 
+  Modal, Alert, FlatList, TextInput, ScrollView, RefreshControl, ActivityIndicator, StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import {
-  getFreelancerApplications,
-  getSavedJobs,
-  unsaveJob,
-} from '../../Redux/slices/applicationSlice';
+import { getReceivedOffers, updateOfferStatus } from '../../Redux/slices/offerSlice';
+import { getFreelancerJobs } from '../../Redux/slices/jobSlice';
 
-// ─── Design Tokens ───────────────────────────────────────────────────────────
-const GOLD       = '#C9A84C';
-const GOLD_LIGHT = 'rgba(201,168,76,0.12)';
-const GOLD_MID   = 'rgba(201,168,76,0.35)';
-const BG         = '#080810';
-const SURFACE    = '#10101C';
-const CARD       = '#13131F';
-const CARD_HOVER = '#16162A';
-const BORDER     = 'rgba(255,255,255,0.06)';
-const BORDER_MED = 'rgba(255,255,255,0.10)';
-const TEXT_1     = '#F0F0F8';
-const TEXT_2     = 'rgba(240,240,248,0.55)';
-const TEXT_3     = 'rgba(240,240,248,0.30)';
+const GREEN       = '#4ADE80';
+const GREEN_DARK  = '#22C55E';
+const GREEN_SOFT  = '#DCFCE7';
+const GREEN_MID   = '#86EFAC';
+const WHITE       = '#FFFFFF';
+const OFF_WHITE   = '#F0FDF4';
+const BORDER      = 'rgba(74,222,128,0.25)';
+const TEXT_MAIN   = '#0F2417';
+const TEXT_MUTED  = '#6B7280';
+const TEXT_LIGHT  = '#9CA3AF';
 
-const STATUS = {
-  pending:  { bg: 'rgba(201,168,76,0.10)', border: 'rgba(201,168,76,0.35)', text: '#C9A84C', dot: '#C9A84C', label: 'Under Review',      icon: 'time-outline' },
-  reviewed: { bg: 'rgba(96,165,250,0.10)',  border: 'rgba(96,165,250,0.30)', text: '#7EB8FA', dot: '#7EB8FA', label: 'Reviewed',           icon: 'eye-outline' },
-  offered:  { bg: 'rgba(52,211,153,0.10)',  border: 'rgba(52,211,153,0.30)', text: '#34D399', dot: '#34D399', label: 'Interview / Offer',   icon: 'star-outline' },
-  accepted: { bg: 'rgba(52,211,153,0.14)',  border: 'rgba(52,211,153,0.45)', text: '#34D399', dot: '#34D399', label: 'Accepted',            icon: 'checkmark-circle-outline' },
-  rejected: { bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.28)', text: '#F87171', dot: '#F87171', label: 'Not Selected',      icon: 'close-circle-outline' },
-};
-const getStatus = (s) => STATUS[s] || { bg: 'rgba(255,255,255,0.05)', border: BORDER_MED, text: TEXT_2, dot: TEXT_3, label: s || 'Applied', icon: 'document-text-outline' };
+const STATUS_IN_PROGRESS = '#3b82f6';
+const STATUS_COMPLETED = '#4ade80';
+const STATUS_PENDING = '#f59e0b';
+const STATUS_CANCELLED = '#ef4444';
 
-const TABS = ['Applied', 'Saved'];
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const timeAgo = (ds) => {
-  if (!ds) return 'Recently';
-  const d = Math.floor((Date.now() - new Date(ds)) / 86400000);
-  if (d === 0) return 'Today';
-  if (d === 1) return 'Yesterday';
-  if (d < 7)  return `${d}d ago`;
-  if (d < 30) return `${Math.floor(d / 7)}w ago`;
-  return `${Math.floor(d / 30)}mo ago`;
-};
-
-const catIcon = (title = '') => {
-  const t = title.toLowerCase();
-  if (t.includes('design') || t.includes('ui') || t.includes('ux')) return '🎨';
-  if (t.includes('dev') || t.includes('react') || t.includes('node') || t.includes('engineer')) return '💻';
-  if (t.includes('write') || t.includes('content') || t.includes('copy')) return '✍️';
-  if (t.includes('market') || t.includes('seo') || t.includes('social')) return '📊';
-  if (t.includes('video') || t.includes('edit') || t.includes('motion')) return '🎬';
-  return '💼';
-};
-
-const budget = (job) =>
-  job?.budget_amount
-    ? `₱${Number(job.budget_amount).toLocaleString()}${job.budget_type === 'hourly' ? '/hr' : ''}`
-    : '—';
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const Pill = ({ icon, label, color = TEXT_3 }) => (
-  <View style={pill.wrap}>
-    <Ionicons name={icon} size={11} color={color} />
-    <Text style={[pill.text, { color }]}>{label}</Text>
-  </View>
-);
-const pill = StyleSheet.create({
-  wrap:  { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 6, borderWidth: 0.5, borderColor: BORDER_MED },
-  text:  { fontSize: 11, fontWeight: '500' },
-});
-
-const Divider = () => <View style={{ height: 1, backgroundColor: BORDER, marginVertical: 10 }} />;
-
-// ─── Application Card ─────────────────────────────────────────────────────────
-const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage }) => {
-  const job = application.job_id;
-  const st  = getStatus(application.status);
-  const isOffered = application.status === 'offered';
-
-  return (
-    <View style={ac.card}>
-      {/* Top row */}
-      <View style={ac.topRow}>
-        <View style={ac.logoBox}>
-          <Text style={ac.logoEmoji}>{catIcon(job?.title)}</Text>
-        </View>
-        <View style={ac.topMeta}>
-          <Text style={ac.jobTitle} numberOfLines={2}>{job?.title || 'Unknown Job'}</Text>
-          <TouchableOpacity style={ac.clientRow} onPress={onViewClient} activeOpacity={0.7}>
-            <Text style={ac.clientName}>{job?.client_id?.company_name || 'Client'}</Text>
-            <Ionicons name="chevron-forward" size={11} color={GOLD} />
-          </TouchableOpacity>
-        </View>
-        {/* Status badge — top right */}
-        <View style={[ac.statusBadge, { backgroundColor: st.bg, borderColor: st.border }]}>
-          <View style={[ac.dot, { backgroundColor: st.dot }]} />
-          <Text style={[ac.statusText, { color: st.text }]}>{st.label}</Text>
-        </View>
-      </View>
-
-      {/* Meta pills */}
-      <View style={ac.pillRow}>
-        <Pill icon="cash-outline"     label={budget(job)}                   color={GOLD} />
-        <Pill icon="location-outline" label={job?.work_setup || 'Remote'}             />
-        <Pill icon="calendar-outline" label={`Applied ${timeAgo(application.applied_at)}`} />
-      </View>
-
-      {/* Offer alert */}
-      {isOffered && (
-        <View style={ac.offerBanner}>
-          <Ionicons name="star" size={13} color={GOLD} />
-          <Text style={ac.offerText}>You received an offer — check your messages.</Text>
-        </View>
-      )}
-
-      <Divider />
-
-      {/* Actions */}
-      <View style={ac.actions}>
-        <TouchableOpacity style={ac.btnOutline} onPress={onViewJob} activeOpacity={0.75}>
-          <Ionicons name="eye-outline" size={13} color={TEXT_2} />
-          <Text style={ac.btnOutlineText}>View Job</Text>
-        </TouchableOpacity>
-        {isOffered ? (
-          <TouchableOpacity style={ac.btnGold} onPress={onMessage} activeOpacity={0.85}>
-            <Ionicons name="chatbubble-outline" size={13} color={BG} />
-            <Text style={ac.btnGoldText}>Message Client</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={ac.btnOutline} onPress={onViewClient} activeOpacity={0.75}>
-            <Ionicons name="person-outline" size={13} color={TEXT_2} />
-            <Text style={ac.btnOutlineText}>View Client</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
-};
-
-const ac = StyleSheet.create({
-  card:       { backgroundColor: CARD, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: BORDER, marginBottom: 10 },
-  topRow:     { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  logoBox:    { width: 42, height: 42, borderRadius: 10, backgroundColor: GOLD_LIGHT, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  logoEmoji:  { fontSize: 20 },
-  topMeta:    { flex: 1, minWidth: 0 },
-  jobTitle:   { fontSize: 14, fontWeight: '700', color: TEXT_1, lineHeight: 20, marginBottom: 2 },
-  clientRow:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  clientName: { fontSize: 12, color: TEXT_2 },
-  statusBadge:{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 0.75, flexShrink: 0 },
-  dot:        { width: 5, height: 5, borderRadius: 3 },
-  statusText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4 },
-  pillRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
-  offerBanner:{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: GOLD_LIGHT, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, marginBottom: 4, borderWidth: 0.75, borderColor: GOLD_MID },
-  offerText:  { fontSize: 11, color: GOLD, flex: 1, fontWeight: '500' },
-  actions:    { flexDirection: 'row', gap: 8 },
-  btnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 0.75, borderColor: BORDER_MED },
-  btnOutlineText: { fontSize: 12, fontWeight: '600', color: TEXT_2 },
-  btnGold:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 9, backgroundColor: GOLD },
-  btnGoldText:{ fontSize: 12, fontWeight: '700', color: BG },
-});
-
-// ─── Saved Job Card ───────────────────────────────────────────────────────────
-const SavedJobCard = ({ job, onViewJob, onViewClient, onUnsave, onApply }) => (
-  <View style={sj.card}>
-    <View style={sj.topRow}>
-      <View style={sj.logoBox}>
-        <Text style={sj.logoEmoji}>{catIcon(job.title)}</Text>
-      </View>
-      <View style={sj.topMeta}>
-        <Text style={sj.jobTitle} numberOfLines={2}>{job.title}</Text>
-        <TouchableOpacity style={sj.clientRow} onPress={onViewClient} activeOpacity={0.7}>
-          <Text style={sj.clientName}>{job.client_id?.company_name || 'Client'}</Text>
-          <Ionicons name="chevron-forward" size={11} color={GOLD} />
-        </TouchableOpacity>
-      </View>
-      <TouchableOpacity onPress={onUnsave} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-        <Ionicons name="bookmark" size={20} color={GOLD} />
-      </TouchableOpacity>
-    </View>
-
-    <View style={sj.pillRow}>
-      <Pill icon="cash-outline"     label={budget(job)}                color={GOLD} />
-      <Pill icon="location-outline" label={job.work_setup || 'Remote'}             />
-    </View>
-
-    {job.required_skills?.length > 0 && (
-      <View style={sj.skillsRow}>
-        {job.required_skills.slice(0, 3).map((s, i) => (
-          <View key={i} style={sj.skill}>
-            <Text style={sj.skillText}>{s}</Text>
-          </View>
-        ))}
-        {job.required_skills.length > 3 && (
-          <View style={sj.skill}>
-            <Text style={sj.skillText}>+{job.required_skills.length - 3}</Text>
-          </View>
-        )}
-      </View>
-    )}
-
-    <Divider />
-
-    <View style={sj.actions}>
-      <TouchableOpacity style={sj.btnOutline} onPress={onViewJob} activeOpacity={0.75}>
-        <Ionicons name="eye-outline" size={13} color={TEXT_2} />
-        <Text style={sj.btnOutlineText}>View Details</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={sj.btnGold} onPress={onApply} activeOpacity={0.85}>
-        <Text style={sj.btnGoldText}>Apply Now</Text>
-        <Ionicons name="arrow-forward" size={13} color={BG} />
-      </TouchableOpacity>
-    </View>
-  </View>
-);
-
-const sj = StyleSheet.create({
-  card:       { backgroundColor: CARD, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: BORDER, marginBottom: 10 },
-  topRow:     { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  logoBox:    { width: 42, height: 42, borderRadius: 10, backgroundColor: GOLD_LIGHT, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  logoEmoji:  { fontSize: 20 },
-  topMeta:    { flex: 1, minWidth: 0 },
-  jobTitle:   { fontSize: 14, fontWeight: '700', color: TEXT_1, lineHeight: 20, marginBottom: 2 },
-  clientRow:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  clientName: { fontSize: 12, color: TEXT_2 },
-  pillRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
-  skillsRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
-  skill:      { backgroundColor: 'rgba(201,168,76,0.07)', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 6, borderWidth: 0.5, borderColor: GOLD_MID },
-  skillText:  { fontSize: 10, color: GOLD, fontWeight: '500' },
-  actions:    { flexDirection: 'row', gap: 8 },
-  btnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 0.75, borderColor: BORDER_MED },
-  btnOutlineText: { fontSize: 12, fontWeight: '600', color: TEXT_2 },
-  btnGold:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 9, backgroundColor: GOLD },
-  btnGoldText:{ fontSize: 12, fontWeight: '700', color: BG },
-});
-
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-const StatCard = ({ label, count, color, icon, active, onPress }) => (
-  <TouchableOpacity
-    style={[sc.card, { borderColor: active ? color : BORDER }, active && { backgroundColor: `${color}14` }]}
-    onPress={onPress}
-    activeOpacity={0.75}
-  >
-    <Ionicons name={icon} size={16} color={color} />
-    <Text style={[sc.count, { color }]}>{count}</Text>
-    <Text style={sc.label}>{label}</Text>
-  </TouchableOpacity>
-);
-
-const sc = StyleSheet.create({
-  card:  { minWidth: 76, backgroundColor: CARD, borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, gap: 3 },
-  count: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
-  label: { fontSize: 9, color: TEXT_3, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
-});
-
-// ─── Job Details Modal ────────────────────────────────────────────────────────
-const JobModal = ({ job, visible, onClose, onViewClient }) => {
-  if (!job) return null;
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={md.overlay}>
-        <View style={md.sheet}>
-          <View style={md.handle} />
-          <TouchableOpacity style={md.closeBtn} onPress={onClose}>
-            <Ionicons name="close" size={16} color={TEXT_2} />
-          </TouchableOpacity>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Header */}
-            <View style={md.header}>
-              <View style={md.logoBox}>
-                <Text style={{ fontSize: 26 }}>{catIcon(job.title)}</Text>
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={md.title}>{job.title}</Text>
-                <TouchableOpacity style={md.clientRow} onPress={onViewClient} activeOpacity={0.7}>
-                  <Text style={md.clientName}>{job.client_id?.company_name || 'Client'}</Text>
-                  <Ionicons name="person-circle-outline" size={14} color={GOLD} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Salary */}
-            <Text style={md.salary}>{budget(job)}</Text>
-
-            {/* Meta */}
-            <View style={md.metaRow}>
-              {[
-                { icon: 'location-outline',  label: job.work_setup || 'Remote' },
-                { icon: 'briefcase-outline', label: job.job_type || 'Contract' },
-                { icon: 'time-outline',      label: `Posted ${timeAgo(job.created_at)}` },
-                { icon: 'people-outline',    label: `${job.total_applicants || 0} applicants` },
-              ].map(({ icon, label }) => (
-                <View key={label} style={md.metaItem}>
-                  <Ionicons name={icon} size={12} color={TEXT_3} />
-                  <Text style={md.metaText}>{label}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={md.divider} />
-
-            <Text style={md.sectionLabel}>Description</Text>
-            <Text style={md.desc}>{job.description}</Text>
-
-            {job.required_skills?.length > 0 && (
-              <>
-                <Text style={md.sectionLabel}>Required Skills</Text>
-                <View style={md.skills}>
-                  {job.required_skills.map((s, i) => (
-                    <View key={i} style={md.skillBadge}>
-                      <Text style={md.skillText}>{s}</Text>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-
-            <TouchableOpacity style={md.viewClientBtn} onPress={onViewClient} activeOpacity={0.8}>
-              <Ionicons name="business-outline" size={16} color={GOLD} />
-              <Text style={md.viewClientText}>View Client Profile</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
-// ─── Client Modal ─────────────────────────────────────────────────────────────
-const ClientModal = ({ job, visible, onClose, onMessage }) => {
-  if (!job?.client_id) return null;
-  const c = job.client_id;
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={md.overlay}>
-        <View style={md.sheet}>
-          <View style={md.handle} />
-          <TouchableOpacity style={md.closeBtn} onPress={onClose}>
-            <Ionicons name="close" size={16} color={TEXT_2} />
-          </TouchableOpacity>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Avatar */}
-            <View style={cm.avatarWrap}>
-              <View style={cm.avatar}>
-                {c.profile_picture
-                  ? <Image source={{ uri: c.profile_picture }} style={cm.avatarImg} />
-                  : <Text style={cm.avatarLetters}>{c.first_name?.[0]}{c.last_name?.[0]}</Text>}
-              </View>
-              <Text style={cm.name}>{c.first_name} {c.last_name}</Text>
-              <View style={cm.rolePill}>
-                <Text style={cm.roleText}>Client</Text>
-              </View>
-            </View>
-
-            {/* Info rows */}
-            <View style={cm.infoCard}>
-              {[
-                { icon: 'business-outline',      label: 'Company',  value: c.company_name },
-                { icon: 'mail-outline',          label: 'Email',    value: c.email_address },
-                { icon: 'call-outline',          label: 'Phone',    value: c.phone_number },
-                { icon: 'location-outline',      label: 'Location', value: c.city ? `${c.city}, ${c.country}` : null },
-                { icon: 'document-text-outline', label: 'Industry', value: c.industry },
-              ].map(({ icon, label, value }) => (
-                <View key={label} style={cm.infoRow}>
-                  <View style={cm.infoIconBox}>
-                    <Ionicons name={icon} size={15} color={GOLD} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={cm.infoLabel}>{label}</Text>
-                    <Text style={cm.infoValue}>{value || 'Not provided'}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
-            {c.bio_about && (
-              <>
-                <Text style={md.sectionLabel}>About</Text>
-                <Text style={cm.bio}>{c.bio_about}</Text>
-              </>
-            )}
-
-            <TouchableOpacity style={cm.msgBtn} onPress={onMessage} activeOpacity={0.85}>
-              <Ionicons name="chatbubble-outline" size={16} color={BG} />
-              <Text style={cm.msgBtnText}>Send Message</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
-const md = StyleSheet.create({
-  overlay:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', justifyContent: 'flex-end' },
-  sheet:         { backgroundColor: '#0E0E1A', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, maxHeight: '90%', borderTopWidth: 1, borderColor: BORDER_MED },
-  handle:        { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.12)', alignSelf: 'center', marginBottom: 16 },
-  closeBtn:      { position: 'absolute', top: 14, right: 14, width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.07)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
-  header:        { flexDirection: 'row', gap: 12, marginBottom: 10, alignItems: 'flex-start' },
-  logoBox:       { width: 52, height: 52, borderRadius: 12, backgroundColor: GOLD_LIGHT, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  title:         { fontSize: 17, fontWeight: '800', color: TEXT_1, lineHeight: 23 },
-  clientRow:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  clientName:    { fontSize: 12, color: TEXT_2 },
-  salary:        { fontSize: 22, fontWeight: '800', color: GOLD, marginBottom: 10, letterSpacing: -0.5 },
-  metaRow:       { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
-  metaItem:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText:      { fontSize: 12, color: TEXT_2 },
-  divider:       { height: 1, backgroundColor: BORDER, marginVertical: 14 },
-  sectionLabel:  { fontSize: 13, fontWeight: '700', color: TEXT_1, marginBottom: 8, marginTop: 4 },
-  desc:          { fontSize: 13, color: TEXT_2, lineHeight: 21, marginBottom: 8 },
-  skills:        { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 18 },
-  skillBadge:    { backgroundColor: CARD, paddingHorizontal: 11, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: BORDER_MED },
-  skillText:     { fontSize: 12, color: TEXT_2 },
-  viewClientBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: GOLD_LIGHT, paddingVertical: 13, borderRadius: 12, marginTop: 4, marginBottom: 24, borderWidth: 0.75, borderColor: GOLD_MID },
-  viewClientText:{ fontSize: 13, fontWeight: '700', color: GOLD },
-});
-
-const cm = StyleSheet.create({
-  avatarWrap:    { alignItems: 'center', marginBottom: 20, marginTop: 4 },
-  avatar:        { width: 80, height: 80, borderRadius: 40, backgroundColor: GOLD_LIGHT, alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 2, borderColor: GOLD_MID },
-  avatarImg:     { width: 80, height: 80, borderRadius: 40 },
-  avatarLetters: { fontSize: 30, fontWeight: '800', color: GOLD },
-  name:          { fontSize: 20, fontWeight: '700', color: TEXT_1, marginBottom: 6 },
-  rolePill:      { backgroundColor: GOLD_LIGHT, paddingHorizontal: 12, paddingVertical: 3, borderRadius: 20, borderWidth: 0.75, borderColor: GOLD_MID },
-  roleText:      { fontSize: 11, color: GOLD, fontWeight: '600' },
-  infoCard:      { backgroundColor: CARD, borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: BORDER, gap: 12 },
-  infoRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  infoIconBox:   { width: 30, height: 30, borderRadius: 8, backgroundColor: GOLD_LIGHT, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  infoLabel:     { fontSize: 10, color: TEXT_3, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
-  infoValue:     { fontSize: 13, color: TEXT_1, fontWeight: '500' },
-  bio:           { fontSize: 13, color: TEXT_2, lineHeight: 21, marginBottom: 20 },
-  msgBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: GOLD, paddingVertical: 14, borderRadius: 12, marginBottom: 24 },
-  msgBtnText:    { fontSize: 14, fontWeight: '700', color: BG },
-});
-
-// ─── Main Screen ──────────────────────────────────────────────────────────────
-export default function MyApplications({ onNavigate, onBack }) {
+export default function MyJobs({ onNavigate }) {
   const dispatch = useDispatch();
-  const { applications, savedJobs, isLoading } = useSelector((s) => s.applications);
+  const { receivedOffers, isLoading: offersLoading } = useSelector((state) => state.offers);
+  const { list: jobs, isLoading: jobsLoading } = useSelector((state) => state.jobs.jobs);
+  const { user } = useSelector((state) => state.auth);
+  
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [activeTab, setActiveTab] = useState('active');
+  const [messageInput, setMessageInput] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [myJobs, setMyJobs] = useState([]);
 
-  const [activeTab,      setActiveTab]      = useState('Applied');
-  const [refreshing,     setRefreshing]     = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState(null);
-  const [showJobModal,   setShowJobModal]   = useState(false);
-  const [showClientModal,setShowClientModal]= useState(false);
-  const [selectedJob,    setSelectedJob]    = useState(null);
-  const [stats,          setStats]          = useState({ total: 0, pending: 0, reviewed: 0, offered: 0, accepted: 0, rejected: 0 });
-
+  // Fetch data
   const fetchData = useCallback(async () => {
     try {
       await Promise.all([
-        dispatch(getFreelancerApplications({})).unwrap(),
-        dispatch(getSavedJobs()).unwrap(),
+        dispatch(getReceivedOffers({})).unwrap(),
+        dispatch(getFreelancerJobs({ limit: 50 })).unwrap(),
       ]);
-    } catch (e) { console.error(e); }
+    } catch (error) {
+      console.error('Error fetching jobs:', error);
+      Alert.alert('Error', 'Failed to load jobs');
+    }
   }, [dispatch]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-
   useEffect(() => {
-    setStats({
-      total:    applications.length,
-      pending:  applications.filter(a => a.status === 'pending').length,
-      reviewed: applications.filter(a => a.status === 'reviewed').length,
-      offered:  applications.filter(a => a.status === 'offered').length,
-      accepted: applications.filter(a => a.status === 'accepted').length,
-      rejected: applications.filter(a => a.status === 'rejected').length,
-    });
-  }, [applications]);
+    fetchData();
+  }, [fetchData]);
+
+  // Process accepted offers into jobs
+  useEffect(() => {
+    if (receivedOffers && receivedOffers.length > 0) {
+      const acceptedJobs = receivedOffers
+        .filter(offer => offer.status === 'accepted')
+        .map(offer => ({
+          id: offer._id,
+          offerId: offer._id,
+          clientName: offer.client_name || 'Client',
+          clientId: offer.client_id,
+          projectTitle: offer.job_title || 'Untitled Project',
+          description: offer.message || 'No description provided',
+          budget: `₱${offer.amount?.toLocaleString() || 0}`,
+          budgetType: 'Fixed',
+          startDate: formatDate(offer.created_at),
+          deadline: offer.expiry_date ? formatDate(offer.expiry_date) : 'Not specified',
+          status: offer.status === 'accepted' ? 'in_progress' : offer.status,
+          progress: calculateProgress(offer.created_at, offer.updated_at),
+          category: offer.job_category || 'General',
+          skills: offer.required_skills || [],
+          milestones: generateMilestones(offer),
+          messages: offer.messages || [],
+          clientRating: offer.client_rating || 4.5,
+          submittedForReview: offer.submitted_for_review || false,
+          created_at: offer.created_at,
+        }));
+      
+      setMyJobs(acceptedJobs);
+    }
+  }, [receivedOffers]);
+
+  // Helper function to format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
+  };
+
+  // Helper function to calculate progress
+  const calculateProgress = (startDate, lastUpdate) => {
+    if (!startDate) return 0;
+    const start = new Date(startDate);
+    const now = new Date();
+    const daysSinceStart = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+    // Assume project takes 30 days, calculate progress
+    const progress = Math.min(Math.floor((daysSinceStart / 30) * 100), 95);
+    return progress;
+  };
+
+  // Generate milestones based on offer
+  const generateMilestones = (offer) => {
+    return [
+      { id: 'm1', title: 'Project Started', completed: true, date: formatDate(offer.created_at) },
+      { id: 'm2', title: 'Work in Progress', completed: false, dueDate: formatDate(new Date(new Date(offer.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)) },
+      { id: 'm3', title: 'Submit for Review', completed: false, dueDate: formatDate(new Date(new Date(offer.created_at).getTime() + 14 * 24 * 60 * 60 * 1000)) },
+      { id: 'm4', title: 'Project Completion', completed: false, dueDate: formatDate(new Date(new Date(offer.created_at).getTime() + 30 * 24 * 60 * 60 * 1000)) },
+    ];
+  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -489,221 +119,1087 @@ export default function MyApplications({ onNavigate, onBack }) {
     setRefreshing(false);
   }, [fetchData]);
 
-  const handleUnsave = (jobId, title) => {
-    Alert.alert('Remove Saved Job', `Remove "${title}" from saved?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: async () => {
-        try {
-          await dispatch(unsaveJob(jobId)).unwrap();
-          fetchData();
-        } catch { Alert.alert('Error', 'Could not remove job'); }
-      }},
-    ]);
+  const getStatusColor = (status) => {
+    switch(status) {
+      case 'in_progress': return STATUS_IN_PROGRESS;
+      case 'completed': return STATUS_COMPLETED;
+      case 'pending': return STATUS_PENDING;
+      case 'cancelled': return STATUS_CANCELLED;
+      default: return TEXT_MAIN;
+    }
   };
 
-  const openJobModal    = (job) => { setSelectedJob(job); setShowJobModal(true); };
-  const openClientModal = (job) => { setSelectedJob(job); setShowClientModal(true); };
+  const getStatusText = (status) => {
+    switch(status) {
+      case 'in_progress': return 'In Progress';
+      case 'completed': return 'Completed';
+      case 'pending': return 'Pending';
+      case 'cancelled': return 'Cancelled';
+      default: return status;
+    }
+  };
 
-  const filtered = selectedStatus
-    ? applications.filter(a => a.status === selectedStatus)
-    : applications;
+  const getStatusIcon = (status) => {
+    switch(status) {
+      case 'in_progress': return 'play-circle-outline';
+      case 'completed': return 'checkmark-circle-outline';
+      case 'pending': return 'time-outline';
+      case 'cancelled': return 'close-circle-outline';
+      default: return 'help-outline';
+    }
+  };
 
-  const STAT_CARDS = [
-    { key: 'total',    label: 'Total',     count: stats.total,    color: GOLD,      icon: 'grid-outline' },
-    { key: 'pending',  label: 'Pending',   count: stats.pending,  color: '#C9A84C', icon: 'time-outline' },
-    { key: 'reviewed', label: 'Reviewed',  count: stats.reviewed, color: '#7EB8FA', icon: 'eye-outline' },
-    { key: 'offered',  label: 'Interview', count: stats.offered,  color: '#34D399', icon: 'star-outline' },
-    { key: 'accepted', label: 'Accepted',  count: stats.accepted, color: '#34D399', icon: 'checkmark-circle-outline' },
-    { key: 'rejected', label: 'Rejected',  count: stats.rejected, color: '#F87171', icon: 'close-circle-outline' },
-  ];
+  const handleSubmitForReview = (job) => {
+    Alert.alert(
+      'Submit for Review',
+      'Are you ready to submit this project for client review?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Submit',
+          onPress: async () => {
+            try {
+              await dispatch(updateOfferStatus({ 
+                offerId: job.offerId, 
+                status: 'completed' 
+              })).unwrap();
+              
+              Alert.alert('Success', 'Project submitted for client review!');
+              fetchData();
+              setSelectedJob(null);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to submit project');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleMarkComplete = (job) => {
+    Alert.alert(
+      'Complete Project',
+      'Are you sure this project is complete?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Complete',
+          onPress: async () => {
+            try {
+              await dispatch(updateOfferStatus({ 
+                offerId: job.offerId, 
+                status: 'completed' 
+              })).unwrap();
+              
+              Alert.alert('Success', 'Project marked as completed!');
+              fetchData();
+              setSelectedJob(null);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update project status');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const sendMessage = () => {
+    if (!messageInput.trim()) return;
+    Alert.alert('Message Sent', 'Your message has been sent to the client');
+    setMessageInput('');
+  };
+
+  const calculateDaysRemaining = (deadline) => {
+    if (!deadline || deadline === 'Not specified') return null;
+    const today = new Date();
+    const deadlineDate = new Date(deadline);
+    const diffTime = deadlineDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getProgressBarColor = (progress) => {
+    if (progress < 30) return '#ef4444';
+    if (progress < 70) return '#f59e0b';
+    return '#4ade80';
+  };
+
+  const getClientInitials = (clientName) => {
+    return clientName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  const filteredJobs = () => {
+    if (activeTab === 'active') {
+      return myJobs.filter(job => job.status === 'in_progress');
+    } else if (activeTab === 'completed') {
+      return myJobs.filter(job => job.status === 'completed');
+    } else {
+      return myJobs.filter(job => job.status === 'pending');
+    }
+  };
+
+  const getTabCount = (tab) => {
+    if (tab === 'active') return myJobs.filter(job => job.status === 'in_progress').length;
+    if (tab === 'completed') return myJobs.filter(job => job.status === 'completed').length;
+    return myJobs.filter(job => job.status === 'pending').length;
+  };
+
+  const isLoading = jobsLoading || offersLoading;
+
+  const JobCard = ({ job, onPress }) => {
+    const daysRemaining = calculateDaysRemaining(job.deadline);
+    const isUrgent = daysRemaining !== null && daysRemaining <= 3;
+    
+    return (
+      <TouchableOpacity 
+        style={styles.jobCard}
+        onPress={() => onPress(job)}
+        activeOpacity={0.85}
+      >
+        <View style={styles.jobHeader}>
+          <View style={styles.clientInfo}>
+            <View style={[styles.clientAvatar, { backgroundColor: GREEN_DARK }]}>
+              <Text style={styles.clientInitials}>{getClientInitials(job.clientName)}</Text>
+            </View>
+            <View>
+              <Text style={styles.clientName}>{job.clientName}</Text>
+              <View style={styles.ratingContainer}>
+                <Ionicons name="star" size={12} color={GREEN_DARK} />
+                <Text style={styles.ratingText}>{job.clientRating}</Text>
+              </View>
+            </View>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(job.status) + '20' }]}>
+            <Ionicons name={getStatusIcon(job.status)} size={12} color={getStatusColor(job.status)} />
+            <Text style={[styles.statusText, { color: getStatusColor(job.status) }]}>
+              {getStatusText(job.status)}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.projectTitle}>{job.projectTitle}</Text>
+        <Text style={styles.projectCategory}>{job.category}</Text>
+
+        <View style={styles.progressSection}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressLabel}>Progress</Text>
+            <Text style={styles.progressPercent}>{job.progress}%</Text>
+          </View>
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: `${job.progress}%`, backgroundColor: getProgressBarColor(job.progress) }]} />
+          </View>
+        </View>
+
+        <View style={styles.jobDetails}>
+          <View style={styles.detailItem}>
+            <Ionicons name="cash-outline" size={14} color={GREEN_DARK} />
+            <Text style={styles.detailText}>{job.budget}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Ionicons name="calendar-outline" size={14} color={GREEN_DARK} />
+            <Text style={styles.detailText}>
+              {job.status === 'pending' ? `Starts: ${job.startDate}` : `Due: ${job.deadline}`}
+            </Text>
+          </View>
+        </View>
+
+        {job.status === 'in_progress' && daysRemaining !== null && (
+          <View style={styles.deadlineWarning}>
+            {isUrgent && <Ionicons name="warning" size={14} color="#ef4444" />}
+            <Text style={[styles.deadlineText, isUrgent && styles.deadlineUrgent]}>
+              {daysRemaining} days remaining
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const JobDetailModal = ({ job, visible, onClose }) => {
+    if (!job) return null;
+
+    const completedMilestones = job.milestones?.filter(m => m.completed).length || 0;
+    const totalMilestones = job.milestones?.length || 0;
+
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={visible}
+        onRequestClose={onClose}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} onPress={onClose} activeOpacity={1} />
+          <View style={styles.modalContainer}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
+                  <Ionicons name="close" size={24} color={TEXT_MUTED} />
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>Project Details</Text>
+                <View style={{ width: 40 }} />
+              </View>
+
+              <View style={styles.modalContent}>
+                {/* Client Info */}
+                <View style={styles.modalClientSection}>
+                  <View style={[styles.modalClientAvatar, { backgroundColor: GREEN_DARK }]}>
+                    <Text style={styles.modalClientInitials}>{getClientInitials(job.clientName)}</Text>
+                  </View>
+                  <View style={styles.modalClientInfo}>
+                    <Text style={styles.modalClientName}>{job.clientName}</Text>
+                    <View style={styles.modalRating}>
+                      <Ionicons name="star" size={14} color={GREEN_DARK} />
+                      <Text style={styles.modalRatingText}>{job.clientRating}</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.modalStatusBadge, { backgroundColor: getStatusColor(job.status) + '20' }]}>
+                    <Ionicons name={getStatusIcon(job.status)} size={14} color={getStatusColor(job.status)} />
+                    <Text style={[styles.modalStatusText, { color: getStatusColor(job.status) }]}>
+                      {getStatusText(job.status)}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Project Info */}
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>Project Title</Text>
+                  <Text style={styles.modalProjectTitle}>{job.projectTitle}</Text>
+                </View>
+
+                <View style={styles.modalSection}>
+                  <View style={styles.sectionHeader}>
+                    <Ionicons name="document-text-outline" size={16} color={GREEN_DARK} />
+                    <Text style={styles.modalSectionTitle}>Description</Text>
+                  </View>
+                  <Text style={styles.modalDescription}>{job.description}</Text>
+                </View>
+
+                {/* Budget & Timeline */}
+                <View style={styles.modalDetailsGrid}>
+                  <View style={styles.modalDetailCard}>
+                    <Ionicons name="cash-outline" size={20} color={GREEN_DARK} />
+                    <Text style={styles.modalDetailLabel}>Budget</Text>
+                    <Text style={styles.modalDetailValue}>{job.budget}</Text>
+                    <Text style={styles.modalDetailSub}>{job.budgetType}</Text>
+                  </View>
+                  <View style={styles.modalDetailCard}>
+                    <Ionicons name="calendar-outline" size={20} color={GREEN_DARK} />
+                    <Text style={styles.modalDetailLabel}>Timeline</Text>
+                    <Text style={styles.modalDetailValue}>
+                      {job.startDate} - {job.deadline}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Progress */}
+                <View style={styles.modalSection}>
+                  <View style={styles.sectionHeader}>
+                    <Ionicons name="trending-up-outline" size={16} color={GREEN_DARK} />
+                    <Text style={styles.modalSectionTitle}>Overall Progress</Text>
+                  </View>
+                  <View style={styles.modalProgressSection}>
+                    <View style={styles.progressHeader}>
+                      <Text style={styles.progressLabel}>Completion</Text>
+                      <Text style={styles.progressPercent}>{job.progress}%</Text>
+                    </View>
+                    <View style={styles.progressBarBg}>
+                      <View style={[styles.progressBarFill, { width: `${job.progress}%`, backgroundColor: getProgressBarColor(job.progress) }]} />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Milestones */}
+                <View style={styles.modalSection}>
+                  <View style={styles.sectionHeader}>
+                    <Ionicons name="flag-outline" size={16} color={GREEN_DARK} />
+                    <Text style={styles.modalSectionTitle}>Milestones</Text>
+                  </View>
+                  <View style={styles.milestoneSummary}>
+                    <Text style={styles.milestoneCount}>
+                      {completedMilestones}/{totalMilestones} Completed
+                    </Text>
+                  </View>
+                  {job.milestones?.map((milestone, index) => (
+                    <View key={milestone.id} style={styles.milestoneItem}>
+                      <View style={[styles.milestoneIcon, milestone.completed && styles.milestoneIconCompleted]}>
+                        {milestone.completed ? (
+                          <Ionicons name="checkmark" size={12} color={TEXT_MAIN} />
+                        ) : (
+                          <Text style={styles.milestoneNumber}>{index + 1}</Text>
+                        )}
+                      </View>
+                      <View style={styles.milestoneInfo}>
+                        <Text style={[styles.milestoneTitle, milestone.completed && styles.milestoneTitleCompleted]}>
+                          {milestone.title}
+                        </Text>
+                        {milestone.completed ? (
+                          <Text style={styles.milestoneDate}>Completed {milestone.date}</Text>
+                        ) : (
+                          <Text style={styles.milestoneDue}>Due {milestone.dueDate}</Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Skills */}
+                {job.skills && job.skills.length > 0 && (
+                  <View style={styles.modalSection}>
+                    <View style={styles.sectionHeader}>
+                      <Ionicons name="flash-outline" size={16} color={GREEN_DARK} />
+                      <Text style={styles.modalSectionTitle}>Skills Required</Text>
+                    </View>
+                    <View style={styles.skillsContainer}>
+                      {job.skills.map((skill, index) => (
+                        <View key={index} style={styles.modalSkillChip}>
+                          <Text style={styles.modalSkillText}>{skill}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Messages */}
+                <View style={styles.modalSection}>
+                  <View style={styles.sectionHeader}>
+                    <Ionicons name="chatbubbles-outline" size={16} color={GREEN_DARK} />
+                    <Text style={styles.modalSectionTitle}>Messages</Text>
+                  </View>
+                  <ScrollView style={styles.messagesContainer} nestedScrollEnabled={true}>
+                    {(!job.messages || job.messages.length === 0) && (
+                      <Text style={styles.noMessages}>No messages yet</Text>
+                    )}
+                  </ScrollView>
+                  <View style={styles.messageInputContainer}>
+                    <TextInput
+                      style={styles.messageInput}
+                      placeholder="Type a message..."
+                      placeholderTextColor={TEXT_LIGHT}
+                      value={messageInput}
+                      onChangeText={setMessageInput}
+                    />
+                    <TouchableOpacity style={styles.sendBtn} onPress={sendMessage}>
+                      <Ionicons name="send" size={18} color={TEXT_MAIN} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Action Buttons */}
+                {job.status === 'in_progress' && (
+                  <View style={styles.modalActions}>
+                    {!job.submittedForReview && (
+                      <TouchableOpacity 
+                        style={[styles.modalActionBtn, styles.modalSubmitBtn]}
+                        onPress={() => handleSubmitForReview(job)}
+                      >
+                        <Ionicons name="cloud-upload-outline" size={20} color={TEXT_MAIN} />
+                        <Text style={styles.modalSubmitText}>Submit for Review</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity 
+                      style={[styles.modalActionBtn, styles.modalCompleteBtn]}
+                      onPress={() => handleMarkComplete(job)}
+                    >
+                      <Ionicons name="checkmark-circle" size={20} color={TEXT_MAIN} />
+                      <Text style={styles.modalCompleteText}>Mark Complete</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {job.status === 'completed' && (
+                  <View style={styles.completedSection}>
+                    <Ionicons name="checkmark-circle" size={48} color={STATUS_COMPLETED} />
+                    <Text style={styles.completedTitle}>Project Completed!</Text>
+                    <Text style={styles.completedText}>
+                      This project has been successfully completed
+                    </Text>
+                    <TouchableOpacity 
+                      style={styles.leaveReviewBtn}
+                      onPress={() => Alert.alert('Review', 'Review feature coming soon!')}
+                    >
+                      <Ionicons name="star-outline" size={20} color={GREEN_DARK} />
+                      <Text style={styles.leaveReviewText}>Leave a Review</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
 
   if (isLoading && !refreshing) {
     return (
-      <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <TouchableOpacity style={s.iconBtn} onPress={onBack}><Ionicons name="arrow-back" size={18} color={TEXT_2} /></TouchableOpacity>
-          <Text style={s.headerTitle}>My <Text style={s.gold}>Applications</Text></Text>
-          <View style={{ width: 36 }} />
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} style={styles.backBtn}>
+            <View style={styles.backIconWrap}>
+              <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.title}>My Jobs</Text>
+          <View style={{ width: 40 }} />
         </View>
-        <View style={s.centerLoading}>
-          <ActivityIndicator size="large" color={GOLD} />
-          <Text style={s.loadingText}>Loading applications…</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={GREEN_DARK} />
+          <Text style={styles.loadingText}>Loading your jobs...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-      {/* ── Header ── */}
-      <View style={s.header}>
-        <TouchableOpacity style={s.iconBtn} onPress={onBack} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={18} color={TEXT_2} />
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} style={styles.backBtn}>
+          <View style={styles.backIconWrap}>
+            <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+          </View>
         </TouchableOpacity>
-        <Text style={s.headerTitle}>My <Text style={s.gold}>Applications</Text></Text>
-        <TouchableOpacity style={s.iconBtn} onPress={onRefresh} activeOpacity={0.7}>
-          <Ionicons name="refresh-outline" size={18} color={TEXT_2} />
-        </TouchableOpacity>
+        <Text style={styles.title}>My Jobs</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* ── Stats Row ── */}
-      <View style={s.statsBorder}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.statsScroll}>
-          {STAT_CARDS.map(sc => (
-            <StatCard
-              key={sc.key}
-              label={sc.label}
-              count={sc.count}
-              color={sc.color}
-              icon={sc.icon}
-              active={selectedStatus === sc.key}
-              onPress={() => {
-                setSelectedStatus(selectedStatus === sc.key ? null : sc.key);
-                setActiveTab('Applied');
-              }}
-            />
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* ── Active filter chip ── */}
-      {selectedStatus && (
-        <View style={s.filterBar}>
-          <Ionicons name="funnel-outline" size={13} color={GOLD} />
-          <Text style={s.filterText}>Showing: {getStatus(selectedStatus).label}</Text>
-          <TouchableOpacity onPress={() => setSelectedStatus(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="close-circle" size={16} color={GOLD} />
+      {/* Tabs */}
+      <View style={styles.tabsContainer}>
+        {['active', 'completed', 'pending'].map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tab, activeTab === tab && styles.tabActive]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+              {tab === 'active' ? 'Active' : tab === 'completed' ? 'Completed' : 'Pending'}
+            </Text>
+            <View style={[styles.tabBadge, activeTab === tab && styles.tabBadgeActive]}>
+              <Text style={[styles.tabBadgeText, activeTab === tab && styles.tabBadgeTextActive]}>
+                {getTabCount(tab)}
+              </Text>
+            </View>
           </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ── Tabs ── */}
-      <View style={s.tabRow}>
-        {TABS.map(tab => {
-          const isActive = activeTab === tab;
-          const badge = tab === 'Applied' ? stats.total : savedJobs.length;
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[s.tab, isActive && s.tabActive]}
-              onPress={() => { setActiveTab(tab); setSelectedStatus(null); }}
-              activeOpacity={0.75}
-            >
-              <Text style={[s.tabText, isActive && s.tabTextActive]}>{tab}</Text>
-              {badge > 0 && (
-                <View style={[s.badge, isActive && s.badgeActive]}>
-                  <Text style={[s.badgeText, isActive && s.badgeTextActive]}>{badge}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
+        ))}
       </View>
 
-      {/* ── Content ── */}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={s.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />}
-      >
-        {activeTab === 'Applied' ? (
-          filtered.length === 0 ? (
-            <View style={s.empty}>
-              <View style={s.emptyIconBox}>
-                <Ionicons name="document-text-outline" size={32} color={TEXT_3} />
-              </View>
-              <Text style={s.emptyTitle}>{selectedStatus ? `No ${getStatus(selectedStatus).label} applications` : 'No applications yet'}</Text>
-              <Text style={s.emptyDesc}>{selectedStatus ? 'Try a different filter.' : 'Start applying for jobs to track them here.'}</Text>
-              {selectedStatus && (
-                <TouchableOpacity style={s.clearBtn} onPress={() => setSelectedStatus(null)}>
-                  <Text style={s.clearBtnText}>Clear Filter</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : filtered.map(app => (
-            <ApplicationCard
-              key={app._id}
-              application={app}
-              onViewJob={()   => openJobModal(app.job_id)}
-              onViewClient={() => openClientModal(app.job_id)}
-              onMessage={()   => onNavigate('Messages', { clientId: app.job_id?.client_id?._id })}
-            />
-          ))
-        ) : (
-          savedJobs.length === 0 ? (
-            <View style={s.empty}>
-              <View style={s.emptyIconBox}>
-                <Ionicons name="bookmark-outline" size={32} color={TEXT_3} />
-              </View>
-              <Text style={s.emptyTitle}>No saved jobs</Text>
-              <Text style={s.emptyDesc}>Bookmark jobs you're interested in to revisit them later.</Text>
-              <TouchableOpacity style={s.clearBtn} onPress={() => onNavigate('BrowseJobs')}>
-                <Text style={s.clearBtnText}>Browse Jobs</Text>
-              </TouchableOpacity>
-            </View>
-          ) : savedJobs.map(job => (
-            <SavedJobCard
-              key={job._id}
-              job={job}
-              onViewJob={()    => openJobModal(job)}
-              onViewClient={()  => openClientModal(job)}
-              onUnsave={()     => handleUnsave(job._id, job.title)}
-              onApply={()      => onNavigate('BrowseJobs')}
-            />
-          ))
+      <FlatList
+        data={filteredJobs()}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <JobCard job={item} onPress={setSelectedJob} />
         )}
-      </ScrollView>
-
-      {/* ── Modals ── */}
-      <JobModal
-        job={selectedJob}
-        visible={showJobModal}
-        onClose={() => setShowJobModal(false)}
-        onViewClient={() => { setShowJobModal(false); setShowClientModal(true); }}
+        contentContainerStyle={styles.jobsList}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GREEN_DARK} />
+        }
+        ListEmptyComponent={() => (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconWrap}>
+              <Ionicons name="briefcase-outline" size={48} color={GREEN_DARK} />
+            </View>
+            <Text style={styles.emptyTitle}>No jobs found</Text>
+            <Text style={styles.emptyText}>
+              {activeTab === 'active' 
+                ? "You don't have any active jobs at the moment" 
+                : activeTab === 'completed'
+                ? "You haven't completed any jobs yet"
+                : "No pending jobs to start"}
+            </Text>
+            <TouchableOpacity 
+              style={styles.browseJobsBtn}
+              onPress={() => onNavigate('BrowseJobs')}
+            >
+              <Text style={styles.browseJobsText}>Browse Jobs</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       />
-      <ClientModal
+
+      <JobDetailModal 
         job={selectedJob}
-        visible={showClientModal}
-        onClose={() => setShowClientModal(false)}
-        onMessage={() => {
-          setShowClientModal(false);
-          onNavigate('Messages', {
-            clientId:   selectedJob?.client_id?._id,
-            clientName: `${selectedJob?.client_id?.first_name} ${selectedJob?.client_id?.last_name}`,
-          });
-        }}
+        visible={selectedJob !== null}
+        onClose={() => setSelectedJob(null)}
       />
     </SafeAreaView>
   );
 }
 
-// ─── Screen-level Styles ──────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  safe:         { flex: 1, backgroundColor: BG },
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
-  iconBtn:      { width: 36, height: 36, borderRadius: 10, backgroundColor: SURFACE, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: BORDER_MED },
-  headerTitle:  { fontSize: 16, fontWeight: '300', color: TEXT_1, letterSpacing: 0.2 },
-  gold:         { color: GOLD, fontStyle: 'italic', fontWeight: '600' },
-  statsBorder:  { borderBottomWidth: 1, borderBottomColor: BORDER },
-  statsScroll:  { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  filterBar:    { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'rgba(201,168,76,0.07)', borderBottomWidth: 1, borderBottomColor: BORDER },
-  filterText:   { flex: 1, fontSize: 12, color: GOLD, fontWeight: '500' },
-  tabRow:       { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 10, borderBottomWidth: 1, borderBottomColor: BORDER },
-  tab:          { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 22, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER },
-  tabActive:    { backgroundColor: GOLD_LIGHT, borderColor: GOLD_MID },
-  tabText:      { fontSize: 13, fontWeight: '600', color: TEXT_3 },
-  tabTextActive:{ color: GOLD },
-  badge:        { backgroundColor: BORDER_MED, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, minWidth: 20, alignItems: 'center' },
-  badgeActive:  { backgroundColor: GOLD },
-  badgeText:    { fontSize: 10, fontWeight: '700', color: TEXT_2 },
-  badgeTextActive: { color: BG },
-  list:         { padding: 16, paddingBottom: 48 },
-  centerLoading:{ flex: 1, alignItems: 'center', justifyContent: 'center' },
-  loadingText:  { marginTop: 12, fontSize: 13, color: TEXT_3 },
-  empty:        { alignItems: 'center', paddingVertical: 64, paddingHorizontal: 24 },
-  emptyIconBox: { width: 72, height: 72, borderRadius: 20, backgroundColor: SURFACE, alignItems: 'center', justifyContent: 'center', marginBottom: 16, borderWidth: 1, borderColor: BORDER_MED },
-  emptyTitle:   { fontSize: 17, fontWeight: '700', color: TEXT_1, marginBottom: 8, textAlign: 'center' },
-  emptyDesc:    { fontSize: 13, color: TEXT_3, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  clearBtn:     { backgroundColor: GOLD, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 10 },
-  clearBtnText: { fontSize: 13, fontWeight: '700', color: BG },
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: OFF_WHITE },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 16, 
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  backBtn: { alignSelf: 'flex-start' },
+  backIconWrap: {
+    width: 38, height: 38,
+    backgroundColor: WHITE,
+    borderRadius: 11,
+    borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+  title: { fontSize: 16, fontWeight: '600', color: TEXT_MAIN },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: TEXT_MUTED,
+  },
+
+  // Tabs
+  tabsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: WHITE,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  tabActive: {
+    backgroundColor: GREEN_SOFT,
+    borderColor: GREEN_DARK,
+  },
+  tabText: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+  },
+  tabTextActive: {
+    color: GREEN_DARK,
+    fontWeight: '500',
+  },
+  tabBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: BORDER,
+  },
+  tabBadgeActive: {
+    backgroundColor: GREEN_DARK,
+  },
+  tabBadgeText: {
+    fontSize: 10,
+    color: TEXT_MUTED,
+  },
+  tabBadgeTextActive: {
+    color: WHITE,
+    fontWeight: '600',
+  },
+
+  // Job Card
+  jobsList: {
+    padding: 16,
+  },
+  jobCard: {
+    backgroundColor: WHITE,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  },
+  jobHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  clientInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  clientAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: GREEN_DARK,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clientInitials: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: WHITE,
+  },
+  clientName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  ratingText: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  projectTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    marginBottom: 4,
+  },
+  projectCategory: {
+    fontSize: 12,
+    color: GREEN_DARK,
+    marginBottom: 12,
+  },
+  progressSection: {
+    marginBottom: 12,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  progressLabel: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+  progressPercent: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+  },
+  progressBarBg: {
+    height: 4,
+    backgroundColor: BORDER,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  jobDetails: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 8,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  detailText: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+  deadlineWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  deadlineText: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+  deadlineUrgent: {
+    color: '#ef4444',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  modalContainer: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  modalCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+  },
+  modalContent: {
+    padding: 20,
+  },
+  modalClientSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  modalClientAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: GREEN_DARK,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalClientInitials: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: WHITE,
+  },
+  modalClientInfo: {
+    flex: 1,
+  },
+  modalClientName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    marginBottom: 4,
+  },
+  modalRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  modalRatingText: {
+    fontSize: 13,
+    color: TEXT_MAIN,
+  },
+  modalStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+  },
+  modalStatusText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  modalSection: {
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  modalSectionTitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: TEXT_MUTED,
+  },
+  modalProjectTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+  },
+  modalDescription: {
+    fontSize: 14,
+    color: TEXT_MUTED,
+    lineHeight: 20,
+  },
+  modalDetailsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  modalDetailCard: {
+    flex: 1,
+    backgroundColor: OFF_WHITE,
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  modalDetailLabel: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  modalDetailValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    textAlign: 'center',
+  },
+  modalDetailSub: {
+    fontSize: 10,
+    color: TEXT_LIGHT,
+  },
+  modalProgressSection: {
+    backgroundColor: OFF_WHITE,
+    padding: 12,
+    borderRadius: 12,
+  },
+  milestoneSummary: {
+    marginBottom: 12,
+  },
+  milestoneCount: {
+    fontSize: 12,
+    color: GREEN_DARK,
+  },
+  milestoneItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  milestoneIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: BORDER,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  milestoneIconCompleted: {
+    backgroundColor: STATUS_COMPLETED,
+  },
+  milestoneNumber: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+  },
+  milestoneInfo: {
+    flex: 1,
+  },
+  milestoneTitle: {
+    fontSize: 13,
+    color: TEXT_MAIN,
+    marginBottom: 2,
+  },
+  milestoneTitleCompleted: {
+    textDecorationLine: 'line-through',
+    color: TEXT_MUTED,
+  },
+  milestoneDate: {
+    fontSize: 10,
+    color: STATUS_COMPLETED,
+  },
+  milestoneDue: {
+    fontSize: 10,
+    color: STATUS_PENDING,
+  },
+  skillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  modalSkillChip: {
+    backgroundColor: GREEN_SOFT,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: GREEN_MID,
+  },
+  modalSkillText: {
+    fontSize: 12,
+    color: GREEN_DARK,
+  },
+  messagesContainer: {
+    maxHeight: 200,
+    marginBottom: 12,
+  },
+  noMessages: {
+    textAlign: 'center',
+    color: TEXT_LIGHT,
+    paddingVertical: 20,
+  },
+  messageInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  messageInput: {
+    flex: 1,
+    backgroundColor: OFF_WHITE,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    color: TEXT_MAIN,
+    fontSize: 13,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  sendBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: GREEN_DARK,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  modalActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  modalSubmitBtn: {
+    backgroundColor: GREEN_DARK,
+  },
+  modalSubmitText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: WHITE,
+  },
+  modalCompleteBtn: {
+    backgroundColor: STATUS_COMPLETED,
+  },
+  modalCompleteText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: WHITE,
+  },
+  completedSection: {
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  completedTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  completedText: {
+    fontSize: 14,
+    color: TEXT_MUTED,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  leaveReviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: GREEN_SOFT,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: GREEN_MID,
+  },
+  leaveReviewText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: GREEN_DARK,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyIconWrap: {
+    width: 80, height: 80,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: TEXT_MUTED,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  browseJobsBtn: {
+    backgroundColor: GREEN_DARK,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  browseJobsText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: WHITE,
+  },
 });
+
