@@ -9,34 +9,47 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-const GREEN       = '#4ADE80';
-const GREEN_DARK  = '#22C55E';
-const GREEN_SOFT  = '#DCFCE7';
-const GREEN_MID   = '#86EFAC';
-const WHITE       = '#FFFFFF';
-const OFF_WHITE   = '#F0FDF4';
-const BORDER      = 'rgba(74,222,128,0.25)';
-const TEXT_MAIN   = '#0F2417';
-const TEXT_MUTED  = '#6B7280';
-const TEXT_LIGHT  = '#9CA3AF';
+// ── Vantara Design tokens ──────────────────────────────────────────────────────────
+const NAVY       = '#071A3E';
+const NAVY2      = '#0D2151';
+const BLUE       = '#0055A5';
+const BLUE_MD    = '#0073CF';
+const BLUE_LT    = '#1E90FF';
+const GOLD       = '#C89520';
+const GOLD_LT    = '#E8B84B';
+const GOLD_DK    = '#8A6410';
+const SILVER     = '#8899B0';
+const SILVER2    = '#B8C8D8';
+const WHITE      = '#FFFFFF';
+const BG         = '#EEF4FA';
+const CARD       = '#FFFFFF';
+const TEXT_MAIN  = '#071A3E';
+const TEXT_MUTED = '#3A5070';
+const TEXT_LIGHT = '#7A90A8';
+const BORDER     = '#C8D8E8';
+const GREEN      = '#059669';
+const GREEN_SOFT = '#D1FAE5';
+const GREEN_MID  = '#86EFAC';
+const GREEN_DARK = '#059669';
+// ─────────────────────────────────────────────────────────────────────────────────
 
 export default function RoleSelection({ onNavigate }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
       <View style={styles.container}>
 
         {/* Back */}
         <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('Login')}>
           <View style={styles.backIconWrap}>
-            <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+            <Ionicons name="arrow-back" size={18} color={WHITE} />
           </View>
         </TouchableOpacity>
 
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoBox}>
-            <Text style={styles.logoLetter}>T</Text>
+            <Ionicons name="flash-outline" size={32} color={NAVY} />
           </View>
           <Text style={styles.title}>Join Taskra</Text>
           <Text style={styles.subtitle}>Choose how you want to use the platform</Text>
@@ -50,7 +63,7 @@ export default function RoleSelection({ onNavigate }) {
         >
           <View style={styles.roleCardInner}>
             <View style={styles.roleIconContainer}>
-              <Ionicons name="briefcase-outline" size={28} color={GREEN_DARK} />
+              <Ionicons name="briefcase-outline" size={28} color={BLUE} />
             </View>
             <View style={styles.roleInfo}>
               <Text style={styles.roleTitle}>I'm a Freelancer</Text>
@@ -59,7 +72,7 @@ export default function RoleSelection({ onNavigate }) {
               </Text>
             </View>
             <View style={styles.chevronWrap}>
-              <Ionicons name="arrow-forward" size={16} color={GREEN_DARK} />
+              <Ionicons name="arrow-forward" size={16} color={BLUE} />
             </View>
           </View>
 
@@ -81,7 +94,7 @@ export default function RoleSelection({ onNavigate }) {
         >
           <View style={styles.roleCardInner}>
             <View style={styles.roleIconContainer}>
-              <Ionicons name="people-outline" size={28} color={GREEN_DARK} />
+              <Ionicons name="people-outline" size={28} color={BLUE} />
             </View>
             <View style={styles.roleInfo}>
               <Text style={styles.roleTitle}>I'm a Client</Text>
@@ -90,7 +103,7 @@ export default function RoleSelection({ onNavigate }) {
               </Text>
             </View>
             <View style={styles.chevronWrap}>
-              <Ionicons name="arrow-forward" size={16} color={GREEN_DARK} />
+              <Ionicons name="arrow-forward" size={16} color={BLUE} />
             </View>
           </View>
 
@@ -106,7 +119,7 @@ export default function RoleSelection({ onNavigate }) {
 
         {/* Info strip */}
         <View style={styles.infoStrip}>
-          <Ionicons name="shield-checkmark-outline" size={14} color={GREEN_DARK} />
+          <Ionicons name="shield-checkmark-outline" size={14} color={GOLD_DK} />
           <Text style={styles.infoText}>Free to join · No hidden fees · Secure payments</Text>
         </View>
 
@@ -124,40 +137,37 @@ export default function RoleSelection({ onNavigate }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: OFF_WHITE },
+  safe: { flex: 1, backgroundColor: BG },
   container: { flex: 1, padding: 24 },
 
   // Back
   backButton: { marginBottom: 24, alignSelf: 'flex-start' },
   backIconWrap: {
     width: 38, height: 38,
-    backgroundColor: WHITE,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: 11,
-    borderWidth: 1, borderColor: BORDER,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
 
   // Header
   header: { alignItems: 'center', marginBottom: 36 },
   logoBox: {
     width: 68, height: 68,
-    backgroundColor: GREEN,
+    backgroundColor: GOLD,
     borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 18,
-    shadowColor: GREEN_DARK,
+    shadowColor: GOLD,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
   },
-  logoLetter: { fontSize: 32, fontWeight: '800', color: WHITE },
   title: { fontSize: 26, fontWeight: '700', color: TEXT_MAIN, marginBottom: 6, letterSpacing: -0.3 },
   subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center' },
 
   // Role cards
   roleCard: {
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderWidth: 1.5,
     borderColor: BORDER,
     borderRadius: 18,
@@ -175,8 +185,8 @@ const styles = StyleSheet.create({
   roleIconContainer: {
     width: 52, height: 52,
     borderRadius: 14,
-    backgroundColor: GREEN_SOFT,
-    borderWidth: 1, borderColor: GREEN_MID,
+    backgroundColor: 'rgba(0,104,181,0.08)',
+    borderWidth: 1.5, borderColor: 'rgba(0,104,181,0.2)',
     alignItems: 'center', justifyContent: 'center',
     marginRight: 14,
   },
@@ -185,7 +195,7 @@ const styles = StyleSheet.create({
   roleDescription: { fontSize: 12, color: TEXT_MUTED, lineHeight: 18 },
   chevronWrap: {
     width: 30, height: 30,
-    backgroundColor: GREEN_SOFT,
+    backgroundColor: 'rgba(0,104,181,0.08)',
     borderRadius: 8,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -194,21 +204,21 @@ const styles = StyleSheet.create({
   tagRow: { flexDirection: 'row', gap: 8 },
   tag: {
     paddingVertical: 4, paddingHorizontal: 10,
-    backgroundColor: GREEN_SOFT,
+    backgroundColor: 'rgba(0,104,181,0.08)',
     borderRadius: 999,
-    borderWidth: 1, borderColor: GREEN_MID,
+    borderWidth: 1.5, borderColor: 'rgba(0,104,181,0.2)',
   },
-  tagText: { fontSize: 10, color: GREEN_DARK, fontWeight: '600' },
+  tagText: { fontSize: 10, color: BLUE, fontWeight: '600' },
 
   // Info strip
   infoStrip: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, marginTop: 8, marginBottom: 4,
     paddingVertical: 10, paddingHorizontal: 16,
-    backgroundColor: GREEN_SOFT,
-    borderRadius: 12, borderWidth: 1, borderColor: GREEN_MID,
+    backgroundColor: 'rgba(200,149,32,0.08)',
+    borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(200,149,32,0.2)',
   },
-  infoText: { fontSize: 12, color: GREEN_DARK, fontWeight: '500' },
+  infoText: { fontSize: 12, color: GOLD_DK, fontWeight: '500' },
 
   // Login prompt
   loginPrompt: {
@@ -216,5 +226,5 @@ const styles = StyleSheet.create({
     marginTop: 24, paddingVertical: 8,
   },
   loginPromptText: { fontSize: 14, color: TEXT_MUTED },
-  loginPromptLink: { fontSize: 14, color: GREEN_DARK, fontWeight: '700' },
+  loginPromptLink: { fontSize: 14, color: BLUE, fontWeight: '700' },
 });

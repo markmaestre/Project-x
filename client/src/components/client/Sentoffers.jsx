@@ -8,23 +8,38 @@ import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { getSentOffers, updateOfferStatus } from '../../Redux/slices/offerSlice';
 
-const GREEN       = '#4ADE80';
-const GREEN_DARK  = '#22C55E';
-const GREEN_SOFT  = '#DCFCE7';
-const GREEN_MID   = '#86EFAC';
-const WHITE       = '#FFFFFF';
-const OFF_WHITE   = '#F0FDF4';
-const BORDER      = 'rgba(74,222,128,0.25)';
-const TEXT_MAIN   = '#0F2417';
-const TEXT_MUTED  = '#6B7280';
-const TEXT_LIGHT  = '#9CA3AF';
+// ── Vantara Design tokens ──────────────────────────────────────────────────────────
+const NAVY       = '#071A3E';
+const NAVY2      = '#0D2151';
+const BLUE       = '#0055A5';
+const BLUE_MD    = '#0073CF';
+const BLUE_LT    = '#1E90FF';
+const GOLD       = '#C89520';
+const GOLD_LT    = '#E8B84B';
+const GOLD_DK    = '#8A6410';
+const SILVER     = '#8899B0';
+const SILVER2    = '#B8C8D8';
+const WHITE      = '#FFFFFF';
+const BG         = '#EEF4FA';
+const CARD       = '#FFFFFF';
+const TEXT_MAIN  = '#071A3E';
+const TEXT_MUTED = '#3A5070';
+const TEXT_LIGHT = '#7A90A8';
+const BORDER     = '#C8D8E8';
+const GREEN      = '#059669';
+const GREEN_SOFT = '#D1FAE5';
+const GREEN_MID  = '#86EFAC';
+const GREEN_DARK = '#059669';
+const ORANGE     = '#F97316';
+const RED        = '#EF4444';
+// ─────────────────────────────────────────────────────────────────────────────────
 
 const TABS = ['All', 'pending', 'accepted', 'declined', 'expired'];
 
 const statusStyle = {
-  pending:  { bg: `${GREEN_DARK}15`, border: `${GREEN_DARK}30`, text: GREEN_DARK, dot: GREEN_DARK, label: 'Pending', icon: 'time-outline' },
-  accepted: { bg: '#4ade8015', border: '#4ade8030', text: '#4ade80', dot: '#4ade80', label: 'Accepted', icon: 'checkmark-circle-outline' },
-  declined: { bg: '#f8717115', border: '#f8717130', text: '#f87171', dot: '#f87171', label: 'Declined', icon: 'close-circle-outline' },
+  pending:  { bg: `${GOLD}15`, border: `${GOLD}30`, text: GOLD, dot: GOLD, label: 'Pending', icon: 'time-outline' },
+  accepted: { bg: `${GREEN}15`, border: `${GREEN}30`, text: GREEN, dot: GREEN, label: 'Accepted', icon: 'checkmark-circle-outline' },
+  declined: { bg: `${RED}15`, border: `${RED}30`, text: RED, dot: RED, label: 'Declined', icon: 'close-circle-outline' },
   expired:  { bg: `${TEXT_MUTED}15`, border: `${TEXT_MUTED}30`, text: TEXT_MUTED, dot: TEXT_MUTED, label: 'Expired', icon: 'alert-circle-outline' },
 };
 
@@ -48,7 +63,7 @@ const formatDate = (dateString) => {
 const formatFullDate = (dateString) => {
   if (!dateString) return 'N/A';
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString('en-PH', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -64,7 +79,7 @@ const getInitials = (firstName, lastName) => {
 
 // Generate random color based on name
 const getAvatarColor = (name) => {
-  const colors = [GREEN, GREEN_DARK, '#60a5fa', '#fbbf24', '#f87171', '#34d399', '#818cf8', '#f472b6'];
+  const colors = [BLUE, BLUE_MD, GOLD, '#60a5fa', '#fbbf24', '#f87171', '#34d399', '#818cf8', '#f472b6'];
   const index = name?.length % colors.length || 0;
   return colors[index];
 };
@@ -119,9 +134,9 @@ export default function SentOffersScreen({ onNavigate }) {
       'Withdraw Offer',
       'Are you sure you want to withdraw this offer? The freelancer will be notified.',
       [
-        { text: 'No, Keep It', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Yes, Withdraw',
+          text: 'Withdraw',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -188,8 +203,8 @@ export default function SentOffersScreen({ onNavigate }) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Offer Details</Text>
-              <TouchableOpacity onPress={() => setShowOfferModal(false)}>
-                <Ionicons name="close" size={24} color={TEXT_MUTED} />
+              <TouchableOpacity onPress={() => setShowOfferModal(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={22} color={TEXT_MUTED} />
               </TouchableOpacity>
             </View>
 
@@ -217,6 +232,7 @@ export default function SentOffersScreen({ onNavigate }) {
                 <View style={styles.detailSection}>
                   <Text style={styles.detailLabel}>Your Message</Text>
                   <View style={styles.messageCard}>
+                    <Ionicons name="chatbubble-outline" size={14} color={BLUE} style={{ marginRight: 8 }} />
                     <Text style={styles.messageValue}>{selectedOffer.message}</Text>
                   </View>
                 </View>
@@ -231,7 +247,7 @@ export default function SentOffersScreen({ onNavigate }) {
               {selectedOffer.expiry_date && (
                 <View style={styles.detailSection}>
                   <Text style={styles.detailLabel}>Expiry Date</Text>
-                  <Text style={[styles.detailValue, { color: selectedOffer.status === 'expired' ? '#f87171' : GREEN_DARK }]}>
+                  <Text style={[styles.detailValue, { color: selectedOffer.status === 'expired' ? RED : BLUE }]}>
                     {formatFullDate(selectedOffer.expiry_date)}
                     {selectedOffer.status === 'expired' && ' (Expired)'}
                   </Text>
@@ -253,21 +269,21 @@ export default function SentOffersScreen({ onNavigate }) {
                       style={[styles.modalActionBtn, styles.viewFreelancerBtn]}
                       onPress={() => handleViewFreelancer(selectedOffer)}
                     >
-                      <Ionicons name="person-outline" size={18} color={GREEN_DARK} />
+                      <Ionicons name="person-outline" size={16} color={BLUE} />
                       <Text style={styles.viewFreelancerBtnText}>View Freelancer</Text>
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={[styles.modalActionBtn, styles.viewJobBtn]}
                       onPress={() => handleViewJob(selectedOffer.job_id)}
                     >
-                      <Ionicons name="briefcase-outline" size={18} color="#60a5fa" />
+                      <Ionicons name="briefcase-outline" size={16} color={BLUE} />
                       <Text style={styles.viewJobBtnText}>View Job</Text>
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={[styles.modalActionBtn, styles.cancelOfferBtn]}
                       onPress={() => handleCancelOffer(selectedOffer._id)}
                     >
-                      <Ionicons name="close-circle-outline" size={18} color="#f87171" />
+                      <Ionicons name="close-circle-outline" size={16} color={RED} />
                       <Text style={styles.cancelOfferBtnText}>Withdraw Offer</Text>
                     </TouchableOpacity>
                   </>
@@ -278,7 +294,7 @@ export default function SentOffersScreen({ onNavigate }) {
                     style={[styles.modalActionBtn, styles.resendOfferBtn]}
                     onPress={() => handleResendOffer(selectedOffer)}
                   >
-                    <Ionicons name="refresh-outline" size={18} color={GREEN_DARK} />
+                    <Ionicons name="refresh-outline" size={16} color={WHITE} />
                     <Text style={styles.resendOfferBtnText}>Send New Offer</Text>
                   </TouchableOpacity>
                 )}
@@ -289,15 +305,15 @@ export default function SentOffersScreen({ onNavigate }) {
                       style={[styles.modalActionBtn, styles.viewFreelancerBtn]}
                       onPress={() => handleViewFreelancer(selectedOffer)}
                     >
-                      <Ionicons name="person-outline" size={18} color={GREEN_DARK} />
+                      <Ionicons name="person-outline" size={16} color={BLUE} />
                       <Text style={styles.viewFreelancerBtnText}>View Freelancer</Text>
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={[styles.modalActionBtn, styles.messageFreelancerBtn]}
                       onPress={() => handleMessageFreelancer(selectedOffer.freelancer_id)}
                     >
-                      <Ionicons name="chatbubble-outline" size={18} color="#60a5fa" />
-                      <Text style={styles.messageFreelancerBtnText}>Message Freelancer</Text>
+                      <Ionicons name="chatbubble-outline" size={16} color={WHITE} />
+                      <Text style={styles.messageFreelancerBtnText}>Message</Text>
                     </TouchableOpacity>
                   </>
                 )}
@@ -325,15 +341,15 @@ export default function SentOffersScreen({ onNavigate }) {
           <View style={[styles.modalContent, { maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Freelancer Profile</Text>
-              <TouchableOpacity onPress={() => setShowFreelancerModal(false)}>
-                <Ionicons name="close" size={24} color={TEXT_MUTED} />
+              <TouchableOpacity onPress={() => setShowFreelancerModal(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={22} color={TEXT_MUTED} />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Profile Header */}
               <View style={styles.profileHeader}>
-                <View style={styles.profileAvatar}>
+                <View style={[styles.profileAvatar, { backgroundColor: BLUE }]}>
                   {freelancer.freelancer_profile_picture ? (
                     <Image source={{ uri: freelancer.freelancer_profile_picture }} style={styles.profileAvatarImage} />
                   ) : (
@@ -350,7 +366,7 @@ export default function SentOffersScreen({ onNavigate }) {
               {freelancer.freelancer_skills && freelancer.freelancer_skills.length > 0 && (
                 <View style={styles.detailSection}>
                   <View style={styles.sectionHeader}>
-                    <Ionicons name="flash-outline" size={16} color={GREEN_DARK} />
+                    <Ionicons name="flash-outline" size={16} color={BLUE} />
                     <Text style={styles.detailSectionTitle}>Skills</Text>
                   </View>
                   <View style={styles.skillsContainer}>
@@ -366,32 +382,32 @@ export default function SentOffersScreen({ onNavigate }) {
               {/* Offer Info */}
               <View style={styles.detailSection}>
                 <View style={styles.sectionHeader}>
-                  <Ionicons name="document-text-outline" size={16} color={GREEN_DARK} />
+                  <Ionicons name="document-text-outline" size={16} color={BLUE} />
                   <Text style={styles.detailSectionTitle}>Offer Details</Text>
                 </View>
                 <View style={styles.offerInfoCard}>
                   <View style={styles.offerInfoRow}>
-                    <Ionicons name="cash-outline" size={14} color={GREEN_DARK} />
+                    <Ionicons name="cash-outline" size={14} color={BLUE} />
                     <Text style={styles.offerInfoText}>Amount: ₱{freelancer.amount?.toLocaleString()}</Text>
                   </View>
                   <View style={styles.offerInfoRow}>
-                    <Ionicons name="briefcase-outline" size={14} color={GREEN_DARK} />
+                    <Ionicons name="briefcase-outline" size={14} color={BLUE} />
                     <Text style={styles.offerInfoText}>Job: {freelancer.job_title}</Text>
                   </View>
                   <View style={styles.offerInfoRow}>
-                    <Ionicons name="calendar-outline" size={14} color={GREEN_DARK} />
+                    <Ionicons name="calendar-outline" size={14} color={BLUE} />
                     <Text style={styles.offerInfoText}>Sent: {formatFullDate(freelancer.created_at)}</Text>
                   </View>
                   {freelancer.status === 'accepted' && (
                     <View style={styles.offerInfoRow}>
-                      <Ionicons name="checkmark-circle-outline" size={14} color="#4ade80" />
-                      <Text style={[styles.offerInfoText, { color: '#4ade80' }]}>Accepted on {formatFullDate(freelancer.responded_at)}</Text>
+                      <Ionicons name="checkmark-circle-outline" size={14} color={GREEN} />
+                      <Text style={[styles.offerInfoText, { color: GREEN }]}>Accepted on {formatFullDate(freelancer.responded_at)}</Text>
                     </View>
                   )}
                   {freelancer.status === 'declined' && (
                     <View style={styles.offerInfoRow}>
-                      <Ionicons name="close-circle-outline" size={14} color="#f87171" />
-                      <Text style={[styles.offerInfoText, { color: '#f87171' }]}>Declined on {formatFullDate(freelancer.responded_at)}</Text>
+                      <Ionicons name="close-circle-outline" size={14} color={RED} />
+                      <Text style={[styles.offerInfoText, { color: RED }]}>Declined on {formatFullDate(freelancer.responded_at)}</Text>
                     </View>
                   )}
                 </View>
@@ -406,8 +422,8 @@ export default function SentOffersScreen({ onNavigate }) {
                     handleMessageFreelancer(freelancer.freelancer_id);
                   }}
                 >
-                  <Ionicons name="chatbubble-outline" size={18} color="#60a5fa" />
-                  <Text style={styles.messageProfileBtnText}>Message Freelancer</Text>
+                  <Ionicons name="chatbubble-outline" size={16} color={WHITE} />
+                  <Text style={styles.messageProfileBtnText}>Message</Text>
                 </TouchableOpacity>
                 
                 {freelancer.status === 'pending' && (
@@ -418,8 +434,8 @@ export default function SentOffersScreen({ onNavigate }) {
                       handleCancelOffer(freelancer._id);
                     }}
                   >
-                    <Ionicons name="close-circle-outline" size={18} color="#f87171" />
-                    <Text style={styles.withdrawProfileBtnText}>Withdraw Offer</Text>
+                    <Ionicons name="close-circle-outline" size={16} color={RED} />
+                    <Text style={styles.withdrawProfileBtnText}>Withdraw</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -434,18 +450,18 @@ export default function SentOffersScreen({ onNavigate }) {
   if (isLoading && !refreshing) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
         <View style={styles.topbar}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('ClientDashboard')}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('Mypostings')}>
             <View style={styles.backIconWrap}>
-              <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+              <Ionicons name="arrow-back" size={18} color={WHITE} />
             </View>
           </TouchableOpacity>
-          <Text style={styles.topbarTitle}>Sent <Text style={styles.green}>Offers</Text></Text>
-          <View style={{ width: 36 }} />
+          <Text style={styles.topbarTitle}>Sent Offers</Text>
+          <View style={{ width: 40 }} />
         </View>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={GREEN_DARK} />
+          <ActivityIndicator size="large" color={BLUE} />
           <Text style={styles.loadingText}>Loading your offers...</Text>
         </View>
       </SafeAreaView>
@@ -454,17 +470,17 @@ export default function SentOffersScreen({ onNavigate }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
       <View style={styles.topbar}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('ClientDashboard')}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('Mypostings')}>
           <View style={styles.backIconWrap}>
-            <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+            <Ionicons name="arrow-back" size={18} color={WHITE} />
           </View>
         </TouchableOpacity>
-        <Text style={styles.topbarTitle}>Sent <Text style={styles.green}>Offers</Text></Text>
+        <Text style={styles.topbarTitle}>Sent Offers</Text>
         <TouchableOpacity style={styles.refreshBtn} onPress={fetchSentOffers}>
-          <View style={styles.backIconWrap}>
-            <Ionicons name="refresh-outline" size={18} color={GREEN_DARK} />
+          <View style={styles.refreshIconWrap}>
+            <Ionicons name="refresh-outline" size={18} color={BLUE} />
           </View>
         </TouchableOpacity>
       </View>
@@ -495,6 +511,7 @@ export default function SentOffersScreen({ onNavigate }) {
               <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                 {tab === 'All' ? 'All' : statusStyle[tab]?.label || tab}
               </Text>
+              <View style={[styles.tabDot, activeTab === tab && styles.tabDotActive]} />
             </TouchableOpacity>
           ))}
         </View>
@@ -504,13 +521,13 @@ export default function SentOffersScreen({ onNavigate }) {
         showsVerticalScrollIndicator={false} 
         contentContainerStyle={styles.scroll}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GREEN_DARK} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
         }
       >
         {filteredOffers.length === 0 ? (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconWrap}>
-              <Ionicons name="paper-plane-outline" size={48} color={GREEN_DARK} />
+              <Ionicons name="paper-plane-outline" size={48} color={BLUE} />
             </View>
             <Text style={styles.emptyTitle}>No sent offers</Text>
             <Text style={styles.emptyText}>
@@ -519,10 +536,11 @@ export default function SentOffersScreen({ onNavigate }) {
                 : `No ${statusStyle[activeTab]?.label?.toLowerCase() || activeTab} offers found`}
             </Text>
             <TouchableOpacity 
-              style={styles.browseJobsBtn}
+              style={styles.browseBtn}
               onPress={() => onNavigate('FindJobs')}
             >
-              <Text style={styles.browseJobsBtnText}>Browse Freelancers</Text>
+              <Ionicons name="search-outline" size={18} color={WHITE} style={{ marginRight: 6 }} />
+              <Text style={styles.browseBtnText}>Browse Freelancers</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -542,7 +560,7 @@ export default function SentOffersScreen({ onNavigate }) {
                 }}
               >
                 {/* Avatar */}
-                <View style={[styles.avatar, { backgroundColor: `${avatarColor}22` }]}>
+                <View style={[styles.avatar, { backgroundColor: `${avatarColor}15` }]}>
                   {item.freelancer_profile_picture ? (
                     <Image source={{ uri: item.freelancer_profile_picture }} style={styles.avatarImage} />
                   ) : (
@@ -568,7 +586,7 @@ export default function SentOffersScreen({ onNavigate }) {
                   
                   <View style={styles.cardBottom}>
                     <View style={styles.metaItem}>
-                      <Ionicons name="cash-outline" size={11} color={GREEN_DARK} />
+                      <Ionicons name="cash-outline" size={11} color={BLUE} />
                       <Text style={styles.amount}>₱{item.amount?.toLocaleString()}</Text>
                     </View>
                     <View style={styles.metaItem}>
@@ -592,13 +610,14 @@ export default function SentOffersScreen({ onNavigate }) {
                         style={[styles.actionBtn, styles.cancelBtn]}
                         onPress={() => handleCancelOffer(item._id)}
                       >
+                        <Ionicons name="close-circle-outline" size={12} color={RED} />
                         <Text style={styles.cancelBtnText}>Withdraw</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={[styles.actionBtn, styles.messageBtn]}
                         onPress={() => handleMessageFreelancer(item.freelancer_id)}
                       >
-                        <Ionicons name="chatbubble-outline" size={14} color={WHITE} />
+                        <Ionicons name="chatbubble-outline" size={12} color={WHITE} />
                         <Text style={styles.messageBtnText}>Message</Text>
                       </TouchableOpacity>
                     </View>
@@ -611,7 +630,7 @@ export default function SentOffersScreen({ onNavigate }) {
                         style={[styles.actionBtn, styles.resendActionBtn]}
                         onPress={() => handleResendOffer(item)}
                       >
-                        <Ionicons name="refresh-outline" size={14} color={GREEN_DARK} />
+                        <Ionicons name="refresh-outline" size={12} color={WHITE} />
                         <Text style={styles.resendActionBtnText}>Send New Offer</Text>
                       </TouchableOpacity>
                     </View>
@@ -627,14 +646,14 @@ export default function SentOffersScreen({ onNavigate }) {
                           setShowFreelancerModal(true);
                         }}
                       >
-                        <Ionicons name="person-outline" size={14} color={GREEN_DARK} />
+                        <Ionicons name="person-outline" size={12} color={BLUE} />
                         <Text style={styles.viewProfileActionBtnText}>View Profile</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={[styles.actionBtn, styles.messageBtn]}
                         onPress={() => handleMessageFreelancer(item.freelancer_id)}
                       >
-                        <Ionicons name="chatbubble-outline" size={14} color={WHITE} />
+                        <Ionicons name="chatbubble-outline" size={12} color={WHITE} />
                         <Text style={styles.messageBtnText}>Message</Text>
                       </TouchableOpacity>
                     </View>
@@ -654,136 +673,155 @@ export default function SentOffersScreen({ onNavigate }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: OFF_WHITE },
+  safe: { flex: 1, backgroundColor: BG },
   topbar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: BORDER,
+    paddingHorizontal: 16, paddingVertical: 16,
+    backgroundColor: NAVY,
   },
   backBtn: { alignSelf: 'flex-start' },
   backIconWrap: {
-    width: 38, height: 38,
-    backgroundColor: WHITE,
-    borderRadius: 11,
-    borderWidth: 1, borderColor: BORDER,
+    width: 40, height: 40,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
   refreshBtn: { alignSelf: 'flex-start' },
-  topbarTitle: { fontSize: 16, fontWeight: '600', color: TEXT_MAIN },
-  green: { color: GREEN_DARK, fontStyle: 'italic', fontWeight: '700' },
+  refreshIconWrap: {
+    width: 40, height: 40,
+    backgroundColor: 'rgba(0,104,181,0.1)',
+    borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(0,104,181,0.25)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  topbarTitle: { fontSize: 18, fontWeight: '700', color: WHITE, letterSpacing: -0.3 },
   summaryRow: {
     flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: CARD,
     borderBottomWidth: 1, borderBottomColor: BORDER,
-    backgroundColor: WHITE,
   },
   summaryCard: {
     flex: 1, borderRadius: 12, padding: 12, alignItems: 'center',
     borderWidth: 1,
   },
   summaryCount: { fontSize: 22, fontWeight: '700', marginBottom: 2 },
-  summaryLabel: { fontSize: 10, color: TEXT_MUTED, letterSpacing: 0.5 },
-  tabScroll: { flexGrow: 0 },
+  summaryLabel: { fontSize: 10, color: TEXT_MUTED, letterSpacing: 0.5, fontWeight: '500' },
+  tabScroll: { flexGrow: 0, backgroundColor: CARD },
   tabRow: {
-    flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8,
-    borderBottomWidth: 1, borderBottomColor: BORDER,
+    flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 10,
   },
   tab: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
-    borderWidth: 1, borderColor: BORDER, backgroundColor: WHITE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: BG,
   },
-  tabActive: { backgroundColor: GREEN_SOFT, borderColor: GREEN_DARK },
-  tabText: { fontSize: 11, color: TEXT_MUTED },
-  tabTextActive: { color: GREEN_DARK, fontWeight: '600' },
+  tabActive: { backgroundColor: `${BLUE}10`, borderColor: BLUE },
+  tabText: { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
+  tabTextActive: { color: BLUE, fontWeight: '600' },
+  tabDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'transparent',
+  },
+  tabDotActive: {
+    backgroundColor: BLUE,
+  },
   scroll: { padding: 16, paddingBottom: 40 },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 12, fontSize: 14, color: TEXT_MUTED },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
-  emptyIconWrap: { width: 80, height: 80, backgroundColor: GREEN_SOFT, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  emptyIconWrap: { width: 80, height: 80, backgroundColor: `${BLUE}10`, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: TEXT_MAIN, marginTop: 16, marginBottom: 8 },
-  emptyText: { fontSize: 13, color: TEXT_MUTED, textAlign: 'center', marginBottom: 24 },
-  browseJobsBtn: { backgroundColor: GREEN_DARK, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
-  browseJobsBtnText: { fontSize: 13, fontWeight: '600', color: WHITE },
+  emptyText: { fontSize: 13, color: TEXT_MUTED, textAlign: 'center', marginBottom: 24, paddingHorizontal: 40 },
+  browseBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: BLUE, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
+  browseBtnText: { fontSize: 13, fontWeight: '600', color: WHITE },
   card: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    backgroundColor: WHITE, borderRadius: 14, padding: 14,
-    borderWidth: 1, borderColor: BORDER, marginBottom: 10,
+    backgroundColor: CARD, borderRadius: 18, padding: 14,
+    borderWidth: 1, borderColor: BORDER, marginBottom: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
-  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  avatarImage: { width: 42, height: 42, borderRadius: 21 },
-  avatarText: { fontSize: 14, fontWeight: '700' },
+  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  avatarImage: { width: 48, height: 48, borderRadius: 24 },
+  avatarText: { fontSize: 16, fontWeight: '700' },
   cardBody: { flex: 1 },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  name: { fontSize: 13, fontWeight: '600', color: TEXT_MAIN, marginBottom: 2 },
+  name: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN, marginBottom: 2 },
   role: { fontSize: 11, color: TEXT_MUTED },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 0.5 },
-  statusDot: { width: 5, height: 5, borderRadius: 3 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 0.5 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 10, fontWeight: '600' },
   cardMiddle: { marginBottom: 8 },
-  jobTitle: { fontSize: 12, color: GREEN_DARK, fontWeight: '500' },
+  jobTitle: { fontSize: 12, color: BLUE, fontWeight: '500' },
   cardBottom: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  amount: { fontSize: 12, fontWeight: '600', color: GREEN_DARK },
+  amount: { fontSize: 12, fontWeight: '600', color: BLUE },
   metaText: { fontSize: 10, color: TEXT_LIGHT },
   messagePreview: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
   messageText: { fontSize: 10, color: TEXT_LIGHT, flex: 1 },
   actionButtons: { flexDirection: 'row', gap: 8, marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: BORDER },
-  actionBtn: { flex: 1, paddingVertical: 6, borderRadius: 6, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 4 },
-  cancelBtn: { backgroundColor: '#f8717115', borderWidth: 0.5, borderColor: '#f8717130' },
-  cancelBtnText: { fontSize: 11, fontWeight: '500', color: '#f87171' },
-  messageBtn: { backgroundColor: '#60a5fa15', borderWidth: 0.5, borderColor: '#60a5fa30' },
-  messageBtnText: { fontSize: 11, fontWeight: '500', color: '#60a5fa' },
-  resendActionBtn: { backgroundColor: `${GREEN_DARK}15`, borderWidth: 0.5, borderColor: `${GREEN_DARK}30` },
-  resendActionBtnText: { fontSize: 11, fontWeight: '500', color: GREEN_DARK },
-  viewProfileActionBtn: { backgroundColor: `${GREEN_DARK}15`, borderWidth: 0.5, borderColor: `${GREEN_DARK}30` },
-  viewProfileActionBtnText: { fontSize: 11, fontWeight: '500', color: GREEN_DARK },
+  actionBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  cancelBtn: { backgroundColor: `${RED}10`, borderWidth: 0.5, borderColor: `${RED}30` },
+  cancelBtnText: { fontSize: 11, fontWeight: '500', color: RED },
+  messageBtn: { backgroundColor: BLUE, borderWidth: 0.5, borderColor: `${BLUE}30` },
+  messageBtnText: { fontSize: 11, fontWeight: '500', color: WHITE },
+  resendActionBtn: { backgroundColor: BLUE, borderWidth: 0.5, borderColor: `${BLUE}30` },
+  resendActionBtnText: { fontSize: 11, fontWeight: '500', color: WHITE },
+  viewProfileActionBtn: { backgroundColor: `${BLUE}10`, borderWidth: 0.5, borderColor: `${BLUE}30` },
+  viewProfileActionBtnText: { fontSize: 11, fontWeight: '500', color: BLUE },
   // Modal Styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: WHITE, borderRadius: 16, width: '100%', maxHeight: '85%', borderWidth: 1, borderColor: BORDER },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(7,26,62,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: CARD, borderRadius: 20, width: '100%', maxHeight: '85%', borderWidth: 1, borderColor: BORDER },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: BORDER },
+  modalCloseBtn: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   modalTitle: { fontSize: 18, fontWeight: '600', color: TEXT_MAIN },
   statusBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, margin: 16, borderRadius: 12, borderWidth: 1 },
   statusBannerText: { fontSize: 16, fontWeight: '600' },
   detailSection: { paddingHorizontal: 16, paddingBottom: 16 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  detailSectionTitle: { fontSize: 14, fontWeight: '600', color: GREEN_DARK },
+  detailSectionTitle: { fontSize: 14, fontWeight: '600', color: BLUE },
   detailLabel: { fontSize: 11, fontWeight: '500', color: TEXT_MUTED, marginBottom: 4 },
   detailValue: { fontSize: 14, color: TEXT_MAIN },
-  amountLarge: { fontSize: 28, fontWeight: '700', color: GREEN_DARK },
-  messageCard: { backgroundColor: OFF_WHITE, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: BORDER },
-  messageValue: { fontSize: 13, color: TEXT_MAIN, lineHeight: 18 },
+  amountLarge: { fontSize: 28, fontWeight: '700', color: BLUE },
+  messageCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: BG, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: BORDER },
+  messageValue: { flex: 1, fontSize: 13, color: TEXT_MAIN, lineHeight: 18 },
   modalActions: { flexDirection: 'column', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: BORDER, marginTop: 8 },
-  modalActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 10 },
-  viewFreelancerBtn: { backgroundColor: `${GREEN_DARK}15`, borderWidth: 1, borderColor: `${GREEN_DARK}30` },
-  viewFreelancerBtnText: { fontSize: 14, fontWeight: '600', color: GREEN_DARK },
-  viewJobBtn: { backgroundColor: '#60a5fa15', borderWidth: 1, borderColor: '#60a5fa30' },
-  viewJobBtnText: { fontSize: 14, fontWeight: '600', color: '#60a5fa' },
-  cancelOfferBtn: { backgroundColor: '#f8717115', borderWidth: 1, borderColor: '#f8717130' },
-  cancelOfferBtnText: { fontSize: 14, fontWeight: '600', color: '#f87171' },
-  resendOfferBtn: { backgroundColor: `${GREEN_DARK}15`, borderWidth: 1, borderColor: `${GREEN_DARK}30` },
-  resendOfferBtnText: { fontSize: 14, fontWeight: '600', color: GREEN_DARK },
-  messageFreelancerBtn: { backgroundColor: '#60a5fa15', borderWidth: 1, borderColor: '#60a5fa30' },
-  messageFreelancerBtnText: { fontSize: 14, fontWeight: '600', color: '#60a5fa' },
+  modalActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12 },
+  viewFreelancerBtn: { backgroundColor: `${BLUE}10`, borderWidth: 1, borderColor: `${BLUE}20` },
+  viewFreelancerBtnText: { fontSize: 14, fontWeight: '600', color: BLUE },
+  viewJobBtn: { backgroundColor: `${BLUE}10`, borderWidth: 1, borderColor: `${BLUE}20` },
+  viewJobBtnText: { fontSize: 14, fontWeight: '600', color: BLUE },
+  cancelOfferBtn: { backgroundColor: `${RED}10`, borderWidth: 1, borderColor: `${RED}20` },
+  cancelOfferBtnText: { fontSize: 14, fontWeight: '600', color: RED },
+  resendOfferBtn: { backgroundColor: BLUE, borderWidth: 1, borderColor: `${BLUE}20` },
+  resendOfferBtnText: { fontSize: 14, fontWeight: '600', color: WHITE },
+  messageFreelancerBtn: { backgroundColor: BLUE, borderWidth: 1, borderColor: `${BLUE}20` },
+  messageFreelancerBtnText: { fontSize: 14, fontWeight: '600', color: WHITE },
   // Freelancer Profile Modal Styles
   profileHeader: { alignItems: 'center', paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: BORDER },
-  profileAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: GREEN_DARK, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  profileAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   profileAvatarImage: { width: 80, height: 80, borderRadius: 40 },
   profileInitials: { fontSize: 32, fontWeight: '700', color: WHITE },
   profileName: { fontSize: 20, fontWeight: '600', color: TEXT_MAIN, marginBottom: 4 },
   profileUsername: { fontSize: 13, color: TEXT_MUTED },
   skillsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  skillChip: { backgroundColor: GREEN_SOFT, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 0.5, borderColor: GREEN_MID },
-  skillChipText: { fontSize: 12, color: GREEN_DARK, fontWeight: '500' },
-  offerInfoCard: { backgroundColor: OFF_WHITE, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: BORDER, gap: 6 },
+  skillChip: { backgroundColor: `${BLUE}10`, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 0.5, borderColor: `${BLUE}20` },
+  skillChipText: { fontSize: 12, color: BLUE, fontWeight: '500' },
+  offerInfoCard: { backgroundColor: BG, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: BORDER, gap: 6 },
   offerInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   offerInfoText: { fontSize: 13, color: TEXT_MAIN },
   profileActions: { flexDirection: 'row', padding: 16, gap: 12 },
-  profileActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 10 },
-  messageProfileBtn: { backgroundColor: '#60a5fa15', borderWidth: 1, borderColor: '#60a5fa30' },
-  messageProfileBtnText: { fontSize: 14, fontWeight: '600', color: '#60a5fa' },
-  withdrawProfileBtn: { backgroundColor: '#f8717115', borderWidth: 1, borderColor: '#f8717130' },
-  withdrawProfileBtnText: { fontSize: 14, fontWeight: '600', color: '#f87171' },
+  profileActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12 },
+  messageProfileBtn: { backgroundColor: BLUE, borderWidth: 1, borderColor: `${BLUE}20` },
+  messageProfileBtnText: { fontSize: 14, fontWeight: '600', color: WHITE },
+  withdrawProfileBtn: { backgroundColor: `${RED}10`, borderWidth: 1, borderColor: `${RED}20` },
+  withdrawProfileBtnText: { fontSize: 14, fontWeight: '600', color: RED },
 });

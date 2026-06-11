@@ -11,29 +11,39 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import * as ImagePicker from 'react-native-image-picker';
 import { registerFreelancer, clearError } from '../../Redux/slices/authSlice';
 
-// ── Design tokens (matches ClientRegistration) ──────────────────────────────────
-const GREEN      = '#4ADE80';
-const GREEN_DARK = '#22C55E';
-const GREEN_SOFT = '#DCFCE7';
-const GREEN_MID  = '#86EFAC';
+// ── Vantara Design tokens (matching ClientRegistration and other screens) ──────────────────────────────────
+const NAVY       = '#071A3E';
+const NAVY2      = '#0D2151';
+const BLUE       = '#0055A5';
+const BLUE_MD    = '#0073CF';
+const BLUE_LT    = '#1E90FF';
+const GOLD       = '#C89520';
+const GOLD_LT    = '#E8B84B';
+const GOLD_DK    = '#8A6410';
+const SILVER     = '#8899B0';
+const SILVER2    = '#B8C8D8';
 const WHITE      = '#FFFFFF';
-const OFF_WHITE  = '#F0FDF4';
-const BORDER     = 'rgba(74,222,128,0.25)';
-const TEXT_MAIN  = '#0F2417';
-const TEXT_MUTED = '#6B7280';
-const TEXT_LIGHT = '#9CA3AF';
+const BG         = '#EEF4FA';
+const CARD       = '#FFFFFF';
+const TEXT_MAIN  = '#071A3E';
+const TEXT_MUTED = '#3A5070';
+const TEXT_LIGHT = '#7A90A8';
+const BORDER     = '#C8D8E8';
+const GREEN      = '#059669';
+const GREEN_SOFT = '#D1FAE5';
+const GREEN_MID  = '#86EFAC';
+const GREEN_DARK = '#059669';
 const ERROR      = '#EF4444';
 const ERROR_BG   = 'rgba(239,68,68,0.08)';
 const ERROR_BORDER = 'rgba(239,68,68,0.3)';
+// ─────────────────────────────────────────────────────────────────────────────────
 
 export default function FreelancerRegistration({ onNavigate }) {
   const dispatch = useDispatch();
@@ -41,7 +51,6 @@ export default function FreelancerRegistration({ onNavigate }) {
   
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [profilePicture, setProfilePicture] = useState(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
@@ -110,28 +119,6 @@ export default function FreelancerRegistration({ onNavigate }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleImagePick = () => {
-    ImagePicker.launchImageLibrary(
-      {
-        mediaType: 'photo',
-        quality: 0.8,
-        maxWidth: 500,
-        maxHeight: 500,
-        includeBase64: false,
-      },
-      (response) => {
-        if (response.didCancel) {
-          console.log('User cancelled image picker');
-        } else if (response.error) {
-          console.log('ImagePicker Error: ', response.error);
-          Alert.alert('Error', 'Failed to pick image');
-        } else if (response.assets && response.assets[0]) {
-          setProfilePicture(response.assets[0]);
-        }
-      }
-    );
-  };
-
   const handleRegister = async () => {
     setServerError(null);
     
@@ -166,19 +153,11 @@ export default function FreelancerRegistration({ onNavigate }) {
       terms_accepted: true,
     };
     
-    if (profilePicture) {
-      userData.profile_picture = {
-        uri: profilePicture.uri,
-        type: profilePicture.type || 'image/jpeg',
-        fileName: profilePicture.fileName || `profile_${Date.now()}.jpg`,
-      };
-    }
-    
     const result = await dispatch(registerFreelancer(userData));
     
     if (registerFreelancer.fulfilled.match(result)) {
       Alert.alert(
-        'Account Created! 🎉',
+        'Account Created!',
         result.payload.message || 'Your freelancer account is ready.',
         [
           { text: 'Stay Here', style: 'cancel' },
@@ -226,7 +205,6 @@ export default function FreelancerRegistration({ onNavigate }) {
       certifications: '',
       terms_accepted: false,
     });
-    setProfilePicture(null);
     setErrors({});
     setServerError(null);
   };
@@ -242,7 +220,6 @@ export default function FreelancerRegistration({ onNavigate }) {
     };
   }, []);
 
-  // Helper function to update form data
   const updateField = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }));
@@ -251,7 +228,7 @@ export default function FreelancerRegistration({ onNavigate }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
       {/* Terms and Conditions Modal */}
       <Modal
@@ -354,14 +331,14 @@ export default function FreelancerRegistration({ onNavigate }) {
               onPress={() => onNavigate('RoleSelection')}
             >
               <View style={styles.backIconWrap}>
-                <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+                <Ionicons name="arrow-back" size={18} color={BLUE} />
               </View>
             </TouchableOpacity>
 
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.roleBadge}>
-                <Ionicons name="briefcase-outline" size={16} color={GREEN_DARK} />
+                <Ionicons name="briefcase-outline" size={16} color={BLUE} />
                 <Text style={styles.roleBadgeText}>Freelancer Registration</Text>
               </View>
               <Text style={styles.title}>Start Your{'\n'}Freelance Journey</Text>
@@ -381,36 +358,9 @@ export default function FreelancerRegistration({ onNavigate }) {
             )}
 
             <View style={styles.form}>
-              {/* Profile Picture Section */}
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Profile Photo</Text>
-                <View style={styles.photoRow}>
-                  <TouchableOpacity onPress={handleImagePick} style={styles.photoButton} activeOpacity={0.8}>
-                    {profilePicture ? (
-                      <Image source={{ uri: profilePicture.uri }} style={styles.photoImage} />
-                    ) : (
-                      <View style={styles.photoPlaceholder}>
-                        <Ionicons name="camera-outline" size={26} color={GREEN_DARK} />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                  <View style={styles.photoMeta}>
-                    <Text style={styles.photoTitle}>
-                      {profilePicture ? 'Photo selected' : 'Add a profile photo'}
-                    </Text>
-                    <Text style={styles.photoHint}>Optional · JPG or PNG</Text>
-                    {profilePicture && (
-                      <TouchableOpacity onPress={() => setProfilePicture(null)}>
-                        <Text style={styles.photoRemove}>Remove</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              </View>
-
               {/* Section: Personal Info */}
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Personal Info</Text>
+                <Text style={styles.sectionLabel}>Personal Information</Text>
 
                 <View style={styles.row}>
                   <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
@@ -523,7 +473,7 @@ export default function FreelancerRegistration({ onNavigate }) {
 
               {/* Section: Professional Info */}
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Professional Info</Text>
+                <Text style={styles.sectionLabel}>Professional Information</Text>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Skills</Text>
@@ -736,7 +686,7 @@ export default function FreelancerRegistration({ onNavigate }) {
 
               {/* Info strip */}
               <View style={styles.infoStrip}>
-                <Ionicons name="shield-checkmark-outline" size={14} color={GREEN_DARK} />
+                <Ionicons name="shield-checkmark-outline" size={14} color={BLUE} />
                 <Text style={styles.infoText}>Free to join · No hidden fees · Secure payments</Text>
               </View>
 
@@ -756,7 +706,7 @@ export default function FreelancerRegistration({ onNavigate }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: OFF_WHITE },
+  safe: { flex: 1, backgroundColor: BG },
   flex: { flex: 1 },
   scroll: { padding: 24, paddingBottom: 48 },
   container: { flex: 1 },
@@ -765,7 +715,7 @@ const styles = StyleSheet.create({
   backButton: { marginBottom: 24, alignSelf: 'flex-start' },
   backIconWrap: {
     width: 38, height: 38,
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderRadius: 11,
     borderWidth: 1, borderColor: BORDER,
     alignItems: 'center', justifyContent: 'center',
@@ -777,13 +727,13 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: 28 },
   roleBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: GREEN_SOFT,
+    backgroundColor: `${BLUE}10`,
     paddingHorizontal: 14, paddingVertical: 7,
     borderRadius: 999,
-    borderWidth: 1, borderColor: GREEN_MID,
+    borderWidth: 1, borderColor: `${BLUE}20`,
     marginBottom: 16,
   },
-  roleBadgeText: { fontSize: 13, color: GREEN_DARK, fontWeight: '600' },
+  roleBadgeText: { fontSize: 13, color: BLUE, fontWeight: '600' },
   title: { fontSize: 28, fontWeight: '800', color: TEXT_MAIN, textAlign: 'center', letterSpacing: -0.5, lineHeight: 34, marginBottom: 8 },
   subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center' },
 
@@ -806,7 +756,7 @@ const styles = StyleSheet.create({
   // Form layout
   form: { gap: 0 },
   section: {
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderRadius: 18,
     borderWidth: 1.5, borderColor: BORDER,
     padding: 18,
@@ -816,34 +766,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04, shadowRadius: 8, elevation: 1,
   },
   sectionLabel: {
-    fontSize: 11, fontWeight: '700', color: GREEN_DARK,
+    fontSize: 11, fontWeight: '700', color: BLUE,
     textTransform: 'uppercase', letterSpacing: 0.8,
     marginBottom: 2,
   },
   row: { flexDirection: 'row' },
-
-  // Photo picker
-  photoRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  photoButton: {},
-  photoImage: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: GREEN },
-  photoPlaceholder: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: GREEN_SOFT,
-    borderWidth: 2, borderColor: GREEN_MID,
-    borderStyle: 'dashed',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  photoMeta: { flex: 1 },
-  photoTitle: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN, marginBottom: 2 },
-  photoHint: { fontSize: 12, color: TEXT_MUTED },
-  photoRemove: { fontSize: 12, color: ERROR, marginTop: 4, fontWeight: '500' },
 
   // Inputs
   inputGroup: { gap: 6 },
   label: { fontSize: 13, fontWeight: '600', color: TEXT_MAIN },
   required: { color: ERROR },
   input: {
-    backgroundColor: OFF_WHITE,
+    backgroundColor: BG,
     borderWidth: 1.5, borderColor: BORDER,
     borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 13,
@@ -865,29 +799,29 @@ const styles = StyleSheet.create({
   // Checkbox
   checkboxRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderRadius: 14, borderWidth: 1.5, borderColor: BORDER,
     padding: 14, marginBottom: 6,
   },
   checkbox: {
     width: 22, height: 22, borderRadius: 7,
-    borderWidth: 2, borderColor: GREEN_MID,
+    borderWidth: 2, borderColor: `${BLUE}40`,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: OFF_WHITE,
+    backgroundColor: BG,
   },
-  checkboxChecked: { backgroundColor: GREEN_DARK, borderColor: GREEN_DARK },
+  checkboxChecked: { backgroundColor: BLUE, borderColor: BLUE },
   checkboxLabel: { fontSize: 14, color: TEXT_MUTED, flex: 1 },
-  checkboxLink: { color: GREEN_DARK, fontWeight: '700' },
+  checkboxLink: { color: BLUE, fontWeight: '700' },
 
   // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(7,26,62,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContainer: {
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderRadius: 20,
     width: '90%',
     maxHeight: '85%',
@@ -905,7 +839,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
   },
   modalTitle: {
     fontSize: 20,
@@ -931,7 +865,7 @@ const styles = StyleSheet.create({
   },
   termsEffective: {
     fontSize: 12,
-    color: GREEN_DARK,
+    color: BLUE,
     fontWeight: '600',
     marginTop: 8,
   },
@@ -959,7 +893,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: GREEN_DARK,
+    backgroundColor: BLUE,
     alignItems: 'center',
   },
   modalButtonAcceptText: {
@@ -972,10 +906,10 @@ const styles = StyleSheet.create({
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: GREEN_DARK,
+    backgroundColor: BLUE,
     borderRadius: 14, paddingVertical: 16,
     marginTop: 8, marginBottom: 14,
-    shadowColor: GREEN_DARK,
+    shadowColor: BLUE,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3, shadowRadius: 12, elevation: 4,
   },
@@ -987,13 +921,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, marginBottom: 4,
     paddingVertical: 10, paddingHorizontal: 16,
-    backgroundColor: GREEN_SOFT,
-    borderRadius: 12, borderWidth: 1, borderColor: GREEN_MID,
+    backgroundColor: `${BLUE}08`,
+    borderRadius: 12, borderWidth: 1, borderColor: `${BLUE}20`,
   },
-  infoText: { fontSize: 12, color: GREEN_DARK, fontWeight: '500' },
+  infoText: { fontSize: 12, color: BLUE, fontWeight: '500' },
 
   // Login prompt
   loginPrompt: { flexDirection: 'row', justifyContent: 'center', marginTop: 16, paddingBottom: 8 },
   loginPromptText: { fontSize: 14, color: TEXT_MUTED },
-  loginPromptLink: { fontSize: 14, color: GREEN_DARK, fontWeight: '700' },
+  loginPromptLink: { fontSize: 14, color: BLUE, fontWeight: '700' },
 });

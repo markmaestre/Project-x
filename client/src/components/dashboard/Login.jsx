@@ -17,21 +17,36 @@ import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { login, clearError } from '../../Redux/slices/authSlice';
 
-// ── Design tokens ──────────────────────────────────────────
-const GREEN       = '#4ADE80';
-const GREEN_DARK  = '#22C55E';
-const GREEN_SOFT  = '#DCFCE7';
-const GREEN_MID   = '#86EFAC';
+// ── Semiconductor-Inspired Palette ────────────────────────────────────────────
+// Primary Blue  →  Intel / AMD / Amkor brand blue family
+const BLUE        = '#0068B5';
+const BLUE_LIGHT  = '#3D9DD6';
+const BLUE_DARK   = '#004F8C';
+const BLUE_SOFT   = '#E2EAF4';
+const BLUE_MID    = '#A8C4DC';
+
+// Gold  →  excellence, achievement, premium
+const GOLD        = '#C9960C';
+const GOLD_LIGHT  = '#F0B429';
+const GOLD_SOFT   = '#FDF3D7';
+const GOLD_MID    = '#E6C56A';
+
+// Silver / Neutrals
 const WHITE       = '#FFFFFF';
-const OFF_WHITE   = '#F0FDF4';
-const BORDER      = 'rgba(74,222,128,0.25)';
-const TEXT_MAIN   = '#0F2417';
-const TEXT_MUTED  = '#6B7280';
-const TEXT_LIGHT  = '#9CA3AF';
+const OFF_WHITE   = '#F5F7FA';
+const SURFACE     = '#EBF0F6';
+const BORDER      = 'rgba(0,104,181,0.14)';
+
+// Text
+const TEXT_MAIN   = '#0D1B2A';
+const TEXT_MUTED  = '#4A5E72';
+const TEXT_LIGHT  = '#8B9AB0';
+
+// Status
 const RED_BG      = '#FEF2F2';
 const RED_BORDER  = '#FECACA';
-const RED_TEXT    = '#EF4444';
-// ───────────────────────────────────────────────────────────
+const RED_TEXT    = '#E53935';
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function Login({ onNavigate }) {
   const dispatch = useDispatch();
@@ -63,29 +78,23 @@ export default function Login({ onNavigate }) {
   };
 
   const handleLogin = async () => {
-    // Clear previous errors
     setServerError(null);
     setErrors({});
-    
-    // Validate form
+
     if (!validateForm()) {
       scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
-    
-    // Start loading
+
     setIsLoading(true);
-    
+
     try {
       const result = await dispatch(login(credentials));
-      
-      // Check if login was successful
+
       if (login.fulfilled.match(result)) {
-        // Success - navigate based on user role
         const userRole = result.payload.user.role;
         const normalizedRole = userRole.toLowerCase();
-        
-        // Small delay to ensure state is updated
+
         setTimeout(() => {
           if (normalizedRole === 'client') {
             onNavigate('Client');
@@ -96,15 +105,12 @@ export default function Login({ onNavigate }) {
           }
         }, 100);
       } else if (login.rejected.match(result)) {
-        // Failed - stay on login screen and show errors
         const errorMessage = result.payload?.message || 'Login failed. Please try again.';
         scrollViewRef.current?.scrollTo({ y: 0, animated: true });
 
-        // Handle different error types
-        if (errorMessage.toLowerCase().includes('user not found') || 
+        if (errorMessage.toLowerCase().includes('user not found') ||
             errorMessage.toLowerCase().includes('invalid email') ||
             errorMessage.toLowerCase().includes('email not found')) {
-          // Wrong email — highlight email field and show banner
           setErrors((prev) => ({ ...prev, email_address: 'No account found with this email address.' }));
           setServerError('The email address you entered is not registered.');
         } else if (
@@ -113,20 +119,16 @@ export default function Login({ onNavigate }) {
           errorMessage.toLowerCase().includes('wrong password') ||
           errorMessage.toLowerCase().includes('incorrect password')
         ) {
-          // Wrong password — highlight password field and show banner
           setErrors((prev) => ({ ...prev, password: 'Incorrect password. Please try again.' }));
           setServerError('The email or password you entered is incorrect.');
         } else {
-          // Generic server error — show banner only
           setServerError(errorMessage);
         }
       }
     } catch (error) {
-      // Handle any unexpected errors
       console.error('Login error:', error);
       setServerError('An unexpected error occurred. Please try again.');
     } finally {
-      // Stop loading regardless of success or failure
       setIsLoading(false);
     }
   };
@@ -141,24 +143,27 @@ export default function Login({ onNavigate }) {
       {
         text: 'Send Reset Link',
         onPress: () => {
-          Alert.alert('Reset Link Sent', `If an account exists with ${credentials.email_address}, you'll receive a reset link shortly.`, [{ text: 'OK' }]);
+          Alert.alert(
+            'Reset Link Sent',
+            `If an account exists with ${credentials.email_address}, you'll receive a reset link shortly.`,
+            [{ text: 'OK' }],
+          );
           setCredentials((prev) => ({ ...prev, password: '' }));
         },
       },
     ]);
   };
 
-  // Clear errors when component unmounts
   React.useEffect(() => {
-    return () => { 
-      dispatch(clearError()); 
+    return () => {
+      dispatch(clearError());
       setServerError(null);
       setIsLoading(false);
     };
   }, [dispatch]);
 
   const inputBorder = (field) => {
-    if (errors[field])      return styles.inputBorderError;
+    if (errors[field])          return styles.inputBorderError;
     if (focusedField === field) return styles.inputBorderFocused;
     return styles.inputBorderDefault;
   };
@@ -166,8 +171,8 @@ export default function Login({ onNavigate }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
       >
         <ScrollView
@@ -178,33 +183,36 @@ export default function Login({ onNavigate }) {
         >
           <View style={styles.container}>
 
-            {/* Back Button */}
+            {/* ── Back Button ─────────────────────────────────────────── */}
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => { 
-                setCredentials({ email_address: '', password: '' }); 
-                setErrors({}); 
-                setServerError(null); 
+              onPress={() => {
+                setCredentials({ email_address: '', password: '' });
+                setErrors({});
+                setServerError(null);
                 setIsLoading(false);
-                onNavigate('Home'); 
+                onNavigate('Home');
               }}
               disabled={isLoading}
             >
               <View style={styles.backIconWrap}>
-                <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+                <Ionicons name="arrow-back" size={18} color={BLUE} />
               </View>
             </TouchableOpacity>
 
-            {/* Header */}
+            {/* ── Header ──────────────────────────────────────────────── */}
             <View style={styles.header}>
+              {/* Logo: blue box with gold shimmer top bar */}
               <View style={styles.logoBox}>
+                <View style={styles.logoGoldBar} />
                 <Text style={styles.logoLetter}>T</Text>
               </View>
+              <Text style={styles.logoWordmark}>TASKRA</Text>
               <Text style={styles.title}>Welcome Back</Text>
               <Text style={styles.subtitle}>Sign in to continue to Taskra</Text>
             </View>
 
-            {/* Server error banner */}
+            {/* ── Server Error Banner ─────────────────────────────────── */}
             {(serverError || (error && !serverError)) && !isLoading && (
               <View style={styles.serverErrorContainer}>
                 <View style={styles.serverErrorIcon}>
@@ -216,18 +224,18 @@ export default function Login({ onNavigate }) {
               </View>
             )}
 
-            {/* Form */}
+            {/* ── Form ────────────────────────────────────────────────── */}
             <View style={styles.form}>
 
               {/* Email Field */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Email Address</Text>
                 <View style={[styles.inputWrapper, inputBorder('email_address')]}>
-                  <Ionicons 
-                    name="mail-outline" 
-                    size={18} 
-                    color={focusedField === 'email_address' ? GREEN_DARK : TEXT_LIGHT} 
-                    style={styles.inputIcon} 
+                  <Ionicons
+                    name="mail-outline"
+                    size={18}
+                    color={focusedField === 'email_address' ? BLUE : TEXT_LIGHT}
+                    style={styles.inputIcon}
                   />
                   <TextInput
                     style={styles.input}
@@ -259,19 +267,16 @@ export default function Login({ onNavigate }) {
               <View style={styles.inputGroup}>
                 <View style={styles.labelRow}>
                   <Text style={styles.label}>Password</Text>
-                  <TouchableOpacity 
-                    onPress={handleForgotPassword}
-                    disabled={isLoading}
-                  >
+                  <TouchableOpacity onPress={handleForgotPassword} disabled={isLoading}>
                     <Text style={styles.forgotPasswordText}>Forgot password?</Text>
                   </TouchableOpacity>
                 </View>
                 <View style={[styles.inputWrapper, inputBorder('password')]}>
-                  <Ionicons 
-                    name="lock-closed-outline" 
-                    size={18} 
-                    color={focusedField === 'password' ? GREEN_DARK : TEXT_LIGHT} 
-                    style={styles.inputIcon} 
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={18}
+                    color={focusedField === 'password' ? BLUE : TEXT_LIGHT}
+                    style={styles.inputIcon}
                   />
                   <TextInput
                     style={[styles.input, styles.passwordInput]}
@@ -288,15 +293,15 @@ export default function Login({ onNavigate }) {
                       if (serverError) setServerError(null);
                     }}
                   />
-                  <TouchableOpacity 
-                    style={styles.eyeIcon} 
+                  <TouchableOpacity
+                    style={styles.eyeIcon}
                     onPress={() => setShowPassword(!showPassword)}
                     disabled={isLoading}
                   >
-                    <Ionicons 
-                      name={showPassword ? 'eye-off-outline' : 'eye-outline'} 
-                      size={18} 
-                      color={TEXT_LIGHT} 
+                    <Ionicons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={TEXT_LIGHT}
                     />
                   </TouchableOpacity>
                 </View>
@@ -308,13 +313,15 @@ export default function Login({ onNavigate }) {
                 )}
               </View>
 
-              {/* Sign In Button */}
+              {/* ── Sign In Button ───────────────────────────────────── */}
               <TouchableOpacity
                 style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
                 onPress={handleLogin}
                 activeOpacity={0.85}
                 disabled={isLoading}
               >
+                {/* Gold shimmer bar at top of button */}
+                <View style={styles.loginButtonGoldBar} />
                 <View style={styles.loginButtonInner}>
                   {isLoading ? (
                     <>
@@ -330,23 +337,23 @@ export default function Login({ onNavigate }) {
                 </View>
               </TouchableOpacity>
 
-              {/* Divider */}
+              {/* ── Divider ─────────────────────────────────────────── */}
               <View style={styles.divider}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>or</Text>
                 <View style={styles.dividerLine} />
               </View>
 
-              {/* Sign up */}
+              {/* ── Sign Up Prompt ──────────────────────────────────── */}
               <View style={styles.signupPrompt}>
                 <Text style={styles.signupPromptText}>Don't have an account?</Text>
-                <TouchableOpacity 
-                  onPress={() => { 
-                    setCredentials({ email_address: '', password: '' }); 
-                    setErrors({}); 
-                    setServerError(null); 
+                <TouchableOpacity
+                  onPress={() => {
+                    setCredentials({ email_address: '', password: '' });
+                    setErrors({});
+                    setServerError(null);
                     setIsLoading(false);
-                    onNavigate('RoleSelection'); 
+                    onNavigate('RoleSelection');
                   }}
                   disabled={isLoading}
                 >
@@ -363,40 +370,65 @@ export default function Login({ onNavigate }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: OFF_WHITE },
-  flex: { flex: 1 },
+  safe:            { flex: 1, backgroundColor: OFF_WHITE },
+  flex:            { flex: 1 },
   scrollContainer: { flexGrow: 1 },
-  container: { flex: 1, padding: 24, paddingBottom: 48 },
+  container:       { flex: 1, padding: 24, paddingBottom: 48 },
 
-  // Back
-  backButton: { marginBottom: 20, alignSelf: 'flex-start' },
+  // ── Back ────────────────────────────────────────────────────────────────
+  backButton:   { marginBottom: 20, alignSelf: 'flex-start' },
   backIconWrap: {
     width: 38, height: 38,
     backgroundColor: WHITE,
     borderRadius: 11,
-    borderWidth: 1, borderColor: BORDER,
+    borderWidth: 1.5, borderColor: BORDER,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+    shadowColor: BLUE_DARK,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
   },
 
-  // Header
+  // ── Header ──────────────────────────────────────────────────────────────
   header: { alignItems: 'center', marginBottom: 36 },
   logoBox: {
-    width: 72, height: 72,
-    backgroundColor: GREEN,
-    borderRadius: 20,
+    width: 76, height: 76,
+    backgroundColor: BLUE,
+    borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 20,
-    shadowColor: GREEN_DARK,
+    marginBottom: 14,
+    overflow: 'hidden',
+    // Blue glow shadow
+    shadowColor: BLUE_DARK,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+    shadowOpacity: 0.35, shadowRadius: 14, elevation: 8,
+    // Subtle inner border for dimension
+    borderWidth: 1, borderColor: BLUE_LIGHT,
   },
-  logoLetter: { fontSize: 34, fontWeight: '800', color: WHITE },
-  title: { fontSize: 26, fontWeight: '700', color: TEXT_MAIN, marginBottom: 6, letterSpacing: -0.3 },
-  subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center' },
+  // Gold accent bar at top of logo box
+  logoGoldBar: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    height: 3,
+    backgroundColor: GOLD_LIGHT,
+  },
+  logoWordmark: {
+    fontSize: 11, fontWeight: '800',
+    letterSpacing: 4,
+    color: TEXT_LIGHT,
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 26, fontWeight: '700',
+    color: TEXT_MAIN,
+    marginBottom: 6,
+    letterSpacing: -0.4,
+  },
+  subtitle: {
+    fontSize: 14, color: TEXT_MUTED,
+    textAlign: 'center', fontWeight: '400',
+  },
 
-  // Error banner
+  // ── Error Banner ────────────────────────────────────────────────────────
   serverErrorContainer: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: RED_BG,
@@ -412,60 +444,93 @@ const styles = StyleSheet.create({
   },
   serverErrorText: { fontSize: 13, color: RED_TEXT, flex: 1, lineHeight: 18 },
 
-  // Form
-  form: { gap: 18 },
+  // ── Form ────────────────────────────────────────────────────────────────
+  form:       { gap: 18 },
   inputGroup: { gap: 7 },
-  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   label: { fontSize: 13, fontWeight: '600', color: TEXT_MAIN },
-  forgotPasswordText: { fontSize: 12, color: GREEN_DARK, fontWeight: '600' },
+  forgotPasswordText: { fontSize: 12, color: GOLD, fontWeight: '600' },
 
-  // Input
+  // ── Input ───────────────────────────────────────────────────────────────
   inputWrapper: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: WHITE,
     borderRadius: 12, borderWidth: 1.5,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowColor: BLUE_DARK,
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
-  inputBorderDefault:  { borderColor: 'rgba(74,222,128,0.2)' },
-  inputBorderFocused:  { borderColor: GREEN, shadowColor: GREEN, shadowOpacity: 0.15, shadowRadius: 6, elevation: 2 },
-  inputBorderError:    { borderColor: RED_TEXT },
-  inputIcon: { marginLeft: 14, marginRight: 2 },
+  inputBorderDefault: { borderColor: BORDER },
+  inputBorderFocused: {
+    borderColor: BLUE,
+    shadowColor: BLUE,
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  inputBorderError: { borderColor: RED_TEXT },
+  inputIcon:      { marginLeft: 14, marginRight: 2 },
   input: {
     flex: 1,
     paddingVertical: 14, paddingHorizontal: 10,
     fontSize: 15, color: TEXT_MAIN,
   },
   passwordInput: { paddingRight: 4 },
-  eyeIcon: { padding: 12 },
+  eyeIcon:       { padding: 12 },
 
-  // Field error
-  fieldErrorRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  // ── Field Error ─────────────────────────────────────────────────────────
+  fieldErrorRow:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
   fieldErrorText: { fontSize: 12, color: RED_TEXT },
 
-  // Login button
+  // ── Sign In Button ───────────────────────────────────────────────────────
   loginButton: {
-    backgroundColor: GREEN_DARK,
-    borderRadius: 14, paddingVertical: 16,
-    alignItems: 'center', marginTop: 4,
-    shadowColor: GREEN_DARK,
+    backgroundColor: BLUE,
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 4,
+    overflow: 'hidden',
+    // Blue shadow
+    shadowColor: BLUE_DARK,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
+    shadowOpacity: 0.32, shadowRadius: 10, elevation: 5,
+    // Subtle inner border for dimension
+    borderWidth: 1, borderColor: BLUE_LIGHT,
   },
   loginButtonDisabled: {
-    opacity: 0.7,
-    shadowOpacity: 0.1,
+    opacity: 0.65,
+    shadowOpacity: 0.08,
   },
-  loginButtonInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  loginButtonText: { fontSize: 15, fontWeight: '700', color: WHITE, letterSpacing: 0.3 },
+  // Gold shimmer bar at the top edge of the Sign In button
+  loginButtonGoldBar: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    height: 2.5,
+    backgroundColor: GOLD_LIGHT,
+    opacity: 0.85,
+  },
+  loginButtonInner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  loginButtonText: {
+    fontSize: 15, fontWeight: '700',
+    color: WHITE, letterSpacing: 0.4,
+  },
 
-  // Divider
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(74,222,128,0.3)' },
+  // ── Divider ─────────────────────────────────────────────────────────────
+  divider:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dividerLine: {
+    flex: 1, height: StyleSheet.hairlineWidth,
+    backgroundColor: BLUE_MID, opacity: 0.45,
+  },
   dividerText: { fontSize: 12, color: TEXT_LIGHT, fontWeight: '500' },
 
-  // Sign up
-  signupPrompt: { flexDirection: 'row', justifyContent: 'center' },
+  // ── Sign Up Prompt ───────────────────────────────────────────────────────
+  signupPrompt:     { flexDirection: 'row', justifyContent: 'center' },
   signupPromptText: { fontSize: 14, color: TEXT_MUTED },
-  signupPromptLink: { fontSize: 14, color: GREEN_DARK, fontWeight: '700' },
+  signupPromptLink: { fontSize: 14, color: BLUE, fontWeight: '700' },
 });

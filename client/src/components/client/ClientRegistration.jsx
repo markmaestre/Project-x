@@ -11,28 +11,39 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import * as ImagePicker from 'react-native-image-picker';
 import { registerClient, clearError } from '../../Redux/slices/authSlice';
 
-// ── Design tokens (matches RoleSelection) ──────────────────────────────────
-const GREEN      = '#4ADE80';
-const GREEN_DARK = '#22C55E';
-const GREEN_SOFT = '#DCFCE7';
-const GREEN_MID  = '#86EFAC';
+// ── Vantara Design tokens (matching all screens) ──────────────────────────────────
+const NAVY       = '#071A3E';
+const NAVY2      = '#0D2151';
+const BLUE       = '#0055A5';
+const BLUE_MD    = '#0073CF';
+const BLUE_LT    = '#1E90FF';
+const GOLD       = '#C89520';
+const GOLD_LT    = '#E8B84B';
+const GOLD_DK    = '#8A6410';
+const SILVER     = '#8899B0';
+const SILVER2    = '#B8C8D8';
 const WHITE      = '#FFFFFF';
-const OFF_WHITE  = '#F0FDF4';
-const BORDER     = 'rgba(74,222,128,0.25)';
-const TEXT_MAIN  = '#0F2417';
-const TEXT_MUTED = '#6B7280';
+const BG         = '#EEF4FA';
+const CARD       = '#FFFFFF';
+const TEXT_MAIN  = '#071A3E';
+const TEXT_MUTED = '#3A5070';
+const TEXT_LIGHT = '#7A90A8';
+const BORDER     = '#C8D8E8';
+const GREEN      = '#059669';
+const GREEN_SOFT = '#D1FAE5';
+const GREEN_MID  = '#86EFAC';
+const GREEN_DARK = '#059669';
 const ERROR      = '#EF4444';
 const ERROR_BG   = 'rgba(239,68,68,0.08)';
 const ERROR_BORDER = 'rgba(239,68,68,0.3)';
+// ─────────────────────────────────────────────────────────────────────────────────
 
 export default function ClientRegistration({ onNavigate }) {
   const dispatch = useDispatch();
@@ -40,7 +51,6 @@ export default function ClientRegistration({ onNavigate }) {
 
   const [showPassword, setShowPassword]               = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [profilePicture, setProfilePicture]           = useState(null);
   const [showTermsModal, setShowTermsModal]           = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
@@ -87,15 +97,6 @@ export default function ClientRegistration({ onNavigate }) {
     return Object.keys(e).length === 0;
   };
 
-  const handleImagePick = () => {
-    ImagePicker.launchImageLibrary(
-      { mediaType: 'photo', quality: 0.8, maxWidth: 500, maxHeight: 500, includeBase64: false },
-      (response) => {
-        if (response.assets?.[0]) setProfilePicture(response.assets[0]);
-      }
-    );
-  };
-
   const handleRegister = async () => {
     setServerError(null);
     if (!validateForm()) {
@@ -123,19 +124,12 @@ export default function ClientRegistration({ onNavigate }) {
       preferred_communication_method: formData.preferred_communication_method || null,
       terms_accepted: true,
     };
-    if (profilePicture) {
-      userData.profile_picture = {
-        uri: profilePicture.uri,
-        type: profilePicture.type || 'image/jpeg',
-        fileName: profilePicture.fileName || `profile_${Date.now()}.jpg`,
-      };
-    }
 
     const result = await dispatch(registerClient(userData));
 
     if (registerClient.fulfilled.match(result)) {
       Alert.alert(
-        'Account Created! 🎉',
+        'Account Created!',
         result.payload.message || 'Your client account is ready.',
         [
           { text: 'Stay Here', style: 'cancel' },
@@ -162,7 +156,6 @@ export default function ClientRegistration({ onNavigate }) {
       city: '', address: '', business_type: '', industry: '', bio_about: '',
       website: '', budget_range: '', preferred_communication_method: '', terms_accepted: false,
     });
-    setProfilePicture(null);
     setErrors({});
     setServerError(null);
   };
@@ -175,8 +168,8 @@ export default function ClientRegistration({ onNavigate }) {
   React.useEffect(() => () => { dispatch(clearError()); }, []);
 
   // ── Reusable field components ─────────────────────────────────────────────
-  const Field = ({ label, required, error, children }) => (
-    <View style={styles.inputGroup}>
+  const Field = ({ label, required, error, children, style }) => (
+    <View style={[styles.inputGroup, style]}>
       <Text style={styles.label}>
         {label}{required && <Text style={styles.required}> *</Text>}
       </Text>
@@ -193,7 +186,7 @@ export default function ClientRegistration({ onNavigate }) {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
       {/* Terms and Conditions Modal */}
       <Modal
@@ -295,14 +288,14 @@ export default function ClientRegistration({ onNavigate }) {
             onPress={() => onNavigate('RoleSelection')}
           >
             <View style={styles.backIconWrap}>
-              <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+              <Ionicons name="arrow-back" size={18} color={BLUE} />
             </View>
           </TouchableOpacity>
 
           {/* ── Header ── */}
           <View style={styles.header}>
             <View style={styles.roleBadge}>
-              <Ionicons name="people-outline" size={16} color={GREEN_DARK} />
+              <Ionicons name="people-outline" size={16} color={BLUE} />
               <Text style={styles.roleBadgeText}>Client Registration</Text>
             </View>
             <Text style={styles.title}>Create Business{'\n'}Account</Text>
@@ -314,7 +307,9 @@ export default function ClientRegistration({ onNavigate }) {
           {/* ── Server error ── */}
           {serverError && (
             <View style={styles.serverErrorBox}>
-              <Ionicons name="alert-circle" size={16} color={ERROR} />
+              <View style={styles.serverErrorIcon}>
+                <Ionicons name="alert-circle" size={18} color={ERROR} />
+              </View>
               <Text style={styles.serverErrorText}>{serverError}</Text>
             </View>
           )}
@@ -322,53 +317,25 @@ export default function ClientRegistration({ onNavigate }) {
           {/* ── Form ── */}
           <View style={styles.form}>
 
-            {/* Section: Profile Photo */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Profile Photo</Text>
-              <View style={styles.photoRow}>
-                <TouchableOpacity onPress={handleImagePick} style={styles.photoButton} activeOpacity={0.8}>
-                  {profilePicture ? (
-                    <Image source={{ uri: profilePicture.uri }} style={styles.photoImage} />
-                  ) : (
-                    <View style={styles.photoPlaceholder}>
-                      <Ionicons name="camera-outline" size={26} color={GREEN_DARK} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-                <View style={styles.photoMeta}>
-                  <Text style={styles.photoTitle}>
-                    {profilePicture ? 'Photo selected' : 'Add a profile photo'}
-                  </Text>
-                  <Text style={styles.photoHint}>Optional · JPG or PNG</Text>
-                  {profilePicture && (
-                    <TouchableOpacity onPress={() => setProfilePicture(null)}>
-                      <Text style={styles.photoRemove}>Remove</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            </View>
-
             {/* Section: Personal Info */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Personal Info</Text>
+              <Text style={styles.sectionLabel}>Personal Information</Text>
 
               <View style={styles.row}>
-                <Field label="First Name" required error={errors.first_name} style={{ flex: 1 }}>
+                <Field label="First Name" required error={errors.first_name} style={{ flex: 1, marginRight: 8 }}>
                   <TextInput
-                    style={[styles.input, errors.first_name && styles.inputError, { flex: 1 }]}
+                    style={[styles.input, errors.first_name && styles.inputError]}
                     placeholder="First name"
-                    placeholderTextColor={TEXT_MUTED}
+                    placeholderTextColor={TEXT_LIGHT}
                     value={formData.first_name}
                     onChangeText={t => set('first_name', t)}
                   />
                 </Field>
-                <View style={{ width: 12 }} />
-                <Field label="Last Name" required error={errors.last_name} style={{ flex: 1 }}>
+                <Field label="Last Name" required error={errors.last_name} style={{ flex: 1, marginLeft: 8 }}>
                   <TextInput
-                    style={[styles.input, errors.last_name && styles.inputError, { flex: 1 }]}
+                    style={[styles.input, errors.last_name && styles.inputError]}
                     placeholder="Last name"
-                    placeholderTextColor={TEXT_MUTED}
+                    placeholderTextColor={TEXT_LIGHT}
                     value={formData.last_name}
                     onChangeText={t => set('last_name', t)}
                   />
@@ -379,7 +346,7 @@ export default function ClientRegistration({ onNavigate }) {
                 <TextInput
                   style={[styles.input, errors.email_address && styles.inputError]}
                   placeholder="you@company.com"
-                  placeholderTextColor={TEXT_MUTED}
+                  placeholderTextColor={TEXT_LIGHT}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   value={formData.email_address}
@@ -391,7 +358,7 @@ export default function ClientRegistration({ onNavigate }) {
                 <TextInput
                   style={styles.input}
                   placeholder="+63 (optional)"
-                  placeholderTextColor={TEXT_MUTED}
+                  placeholderTextColor={TEXT_LIGHT}
                   keyboardType="phone-pad"
                   value={formData.phone_number}
                   onChangeText={t => set('phone_number', t)}
@@ -407,28 +374,27 @@ export default function ClientRegistration({ onNavigate }) {
                 <TextInput
                   style={styles.input}
                   placeholder="Your company (optional)"
-                  placeholderTextColor={TEXT_MUTED}
+                  placeholderTextColor={TEXT_LIGHT}
                   value={formData.company_name}
                   onChangeText={t => set('company_name', t)}
                 />
               </Field>
 
               <View style={styles.row}>
-                <Field label="Business Type" style={{ flex: 1 }}>
+                <Field label="Business Type" style={{ flex: 1, marginRight: 8 }}>
                   <TextInput
-                    style={[styles.input, { flex: 1 }]}
+                    style={styles.input}
                     placeholder="e.g. Technology"
-                    placeholderTextColor={TEXT_MUTED}
+                    placeholderTextColor={TEXT_LIGHT}
                     value={formData.business_type}
                     onChangeText={t => set('business_type', t)}
                   />
                 </Field>
-                <View style={{ width: 12 }} />
-                <Field label="Industry" style={{ flex: 1 }}>
+                <Field label="Industry" style={{ flex: 1, marginLeft: 8 }}>
                   <TextInput
-                    style={[styles.input, { flex: 1 }]}
+                    style={styles.input}
                     placeholder="e.g. Finance"
-                    placeholderTextColor={TEXT_MUTED}
+                    placeholderTextColor={TEXT_LIGHT}
                     value={formData.industry}
                     onChangeText={t => set('industry', t)}
                   />
@@ -439,7 +405,7 @@ export default function ClientRegistration({ onNavigate }) {
                 <TextInput
                   style={styles.input}
                   placeholder="https://yourcompany.com"
-                  placeholderTextColor={TEXT_MUTED}
+                  placeholderTextColor={TEXT_LIGHT}
                   autoCapitalize="none"
                   value={formData.website}
                   onChangeText={t => set('website', t)}
@@ -450,7 +416,7 @@ export default function ClientRegistration({ onNavigate }) {
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   placeholder="Briefly describe what your company does…"
-                  placeholderTextColor={TEXT_MUTED}
+                  placeholderTextColor={TEXT_LIGHT}
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
@@ -465,21 +431,20 @@ export default function ClientRegistration({ onNavigate }) {
               <Text style={styles.sectionLabel}>Location</Text>
 
               <View style={styles.row}>
-                <Field label="Country" style={{ flex: 1 }}>
+                <Field label="Country" style={{ flex: 1, marginRight: 8 }}>
                   <TextInput
-                    style={[styles.input, { flex: 1 }]}
+                    style={styles.input}
                     placeholder="Country"
-                    placeholderTextColor={TEXT_MUTED}
+                    placeholderTextColor={TEXT_LIGHT}
                     value={formData.country}
                     onChangeText={t => set('country', t)}
                   />
                 </Field>
-                <View style={{ width: 12 }} />
-                <Field label="City" style={{ flex: 1 }}>
+                <Field label="City" style={{ flex: 1, marginLeft: 8 }}>
                   <TextInput
-                    style={[styles.input, { flex: 1 }]}
+                    style={styles.input}
                     placeholder="City"
-                    placeholderTextColor={TEXT_MUTED}
+                    placeholderTextColor={TEXT_LIGHT}
                     value={formData.city}
                     onChangeText={t => set('city', t)}
                   />
@@ -490,7 +455,7 @@ export default function ClientRegistration({ onNavigate }) {
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   placeholder="Business address (optional)"
-                  placeholderTextColor={TEXT_MUTED}
+                  placeholderTextColor={TEXT_LIGHT}
                   multiline
                   numberOfLines={3}
                   textAlignVertical="top"
@@ -508,7 +473,7 @@ export default function ClientRegistration({ onNavigate }) {
                 <TextInput
                   style={styles.input}
                   placeholder="e.g. ₱10,000 – ₱50,000"
-                  placeholderTextColor={TEXT_MUTED}
+                  placeholderTextColor={TEXT_LIGHT}
                   value={formData.budget_range}
                   onChangeText={t => set('budget_range', t)}
                 />
@@ -518,7 +483,7 @@ export default function ClientRegistration({ onNavigate }) {
                 <TextInput
                   style={styles.input}
                   placeholder="e.g. Email, Phone, Video Call"
-                  placeholderTextColor={TEXT_MUTED}
+                  placeholderTextColor={TEXT_LIGHT}
                   value={formData.preferred_communication_method}
                   onChangeText={t => set('preferred_communication_method', t)}
                 />
@@ -534,7 +499,7 @@ export default function ClientRegistration({ onNavigate }) {
                   <TextInput
                     style={[styles.input, styles.passwordInput, errors.password && styles.inputError]}
                     placeholder="Min. 6 characters"
-                    placeholderTextColor={TEXT_MUTED}
+                    placeholderTextColor={TEXT_LIGHT}
                     secureTextEntry={!showPassword}
                     value={formData.password}
                     onChangeText={t => set('password', t)}
@@ -543,7 +508,7 @@ export default function ClientRegistration({ onNavigate }) {
                     <Ionicons
                       name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                       size={18}
-                      color={TEXT_MUTED}
+                      color={TEXT_LIGHT}
                     />
                   </TouchableOpacity>
                 </View>
@@ -554,7 +519,7 @@ export default function ClientRegistration({ onNavigate }) {
                   <TextInput
                     style={[styles.input, styles.passwordInput, errors.confirm_password && styles.inputError]}
                     placeholder="Repeat password"
-                    placeholderTextColor={TEXT_MUTED}
+                    placeholderTextColor={TEXT_LIGHT}
                     secureTextEntry={!showConfirmPassword}
                     value={formData.confirm_password}
                     onChangeText={t => set('confirm_password', t)}
@@ -563,7 +528,7 @@ export default function ClientRegistration({ onNavigate }) {
                     <Ionicons
                       name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
                       size={18}
-                      color={TEXT_MUTED}
+                      color={TEXT_LIGHT}
                     />
                   </TouchableOpacity>
                 </View>
@@ -618,7 +583,7 @@ export default function ClientRegistration({ onNavigate }) {
 
             {/* Info strip */}
             <View style={styles.infoStrip}>
-              <Ionicons name="shield-checkmark-outline" size={14} color={GREEN_DARK} />
+              <Ionicons name="shield-checkmark-outline" size={14} color={BLUE} />
               <Text style={styles.infoText}>Free to join · No hidden fees · Secure payments</Text>
             </View>
 
@@ -638,7 +603,7 @@ export default function ClientRegistration({ onNavigate }) {
 }
 
 const styles = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: OFF_WHITE },
+  safe:   { flex: 1, backgroundColor: BG },
   flex:   { flex: 1 },
   scroll: { padding: 24, paddingBottom: 48 },
 
@@ -646,7 +611,7 @@ const styles = StyleSheet.create({
   backButton:   { marginBottom: 24, alignSelf: 'flex-start' },
   backIconWrap: {
     width: 38, height: 38,
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderRadius: 11,
     borderWidth: 1, borderColor: BORDER,
     alignItems: 'center', justifyContent: 'center',
@@ -658,29 +623,35 @@ const styles = StyleSheet.create({
   header:       { alignItems: 'center', marginBottom: 28 },
   roleBadge:    {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: GREEN_SOFT,
+    backgroundColor: `${BLUE}10`,
     paddingHorizontal: 14, paddingVertical: 7,
     borderRadius: 999,
-    borderWidth: 1, borderColor: GREEN_MID,
+    borderWidth: 1, borderColor: `${BLUE}20`,
     marginBottom: 16,
   },
-  roleBadgeText: { fontSize: 13, color: GREEN_DARK, fontWeight: '600' },
+  roleBadgeText: { fontSize: 13, color: BLUE, fontWeight: '600' },
   title:   { fontSize: 28, fontWeight: '800', color: TEXT_MAIN, textAlign: 'center', letterSpacing: -0.5, lineHeight: 34, marginBottom: 8 },
   subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center' },
 
   // Server error
   serverErrorBox: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: ERROR_BG,
     borderWidth: 1, borderColor: ERROR_BORDER,
-    borderRadius: 12, padding: 14, marginBottom: 20,
+    borderRadius: 12, padding: 14, marginBottom: 20, gap: 10,
+  },
+  serverErrorIcon: {
+    width: 32, height: 32,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
   },
   serverErrorText: { fontSize: 13, color: ERROR, flex: 1, lineHeight: 18 },
 
   // Form layout
   form:    { gap: 0 },
   section: {
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderRadius: 18,
     borderWidth: 1.5, borderColor: BORDER,
     padding: 18,
@@ -690,34 +661,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04, shadowRadius: 8, elevation: 1,
   },
   sectionLabel: {
-    fontSize: 11, fontWeight: '700', color: GREEN_DARK,
+    fontSize: 11, fontWeight: '700', color: BLUE,
     textTransform: 'uppercase', letterSpacing: 0.8,
     marginBottom: 2,
   },
   row: { flexDirection: 'row' },
-
-  // Photo picker
-  photoRow:        { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  photoButton:     {},
-  photoImage:      { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: GREEN },
-  photoPlaceholder:{
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: GREEN_SOFT,
-    borderWidth: 2, borderColor: GREEN_MID,
-    borderStyle: 'dashed',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  photoMeta:   { flex: 1 },
-  photoTitle:  { fontSize: 14, fontWeight: '600', color: TEXT_MAIN, marginBottom: 2 },
-  photoHint:   { fontSize: 12, color: TEXT_MUTED },
-  photoRemove: { fontSize: 12, color: ERROR, marginTop: 4, fontWeight: '500' },
 
   // Inputs
   inputGroup: { gap: 6 },
   label:      { fontSize: 13, fontWeight: '600', color: TEXT_MAIN },
   required:   { color: ERROR },
   input: {
-    backgroundColor: OFF_WHITE,
+    backgroundColor: BG,
     borderWidth: 1.5, borderColor: BORDER,
     borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 13,
@@ -738,29 +693,29 @@ const styles = StyleSheet.create({
   // Checkbox
   checkboxRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderRadius: 14, borderWidth: 1.5, borderColor: BORDER,
     padding: 14, marginBottom: 6,
   },
   checkbox: {
     width: 22, height: 22, borderRadius: 7,
-    borderWidth: 2, borderColor: GREEN_MID,
+    borderWidth: 2, borderColor: `${BLUE}40`,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: OFF_WHITE,
+    backgroundColor: BG,
   },
-  checkboxChecked: { backgroundColor: GREEN_DARK, borderColor: GREEN_DARK },
+  checkboxChecked: { backgroundColor: BLUE, borderColor: BLUE },
   checkboxLabel:   { fontSize: 14, color: TEXT_MUTED, flex: 1 },
-  checkboxLink:    { color: GREEN_DARK, fontWeight: '700' },
+  checkboxLink:    { color: BLUE, fontWeight: '700' },
 
   // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(7,26,62,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContainer: {
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderRadius: 20,
     width: '90%',
     maxHeight: '85%',
@@ -778,7 +733,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
   },
   modalTitle: {
     fontSize: 20,
@@ -804,7 +759,7 @@ const styles = StyleSheet.create({
   },
   termsEffective: {
     fontSize: 12,
-    color: GREEN_DARK,
+    color: BLUE,
     fontWeight: '600',
     marginTop: 8,
   },
@@ -832,7 +787,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: GREEN_DARK,
+    backgroundColor: BLUE,
     alignItems: 'center',
   },
   modalButtonAcceptText: {
@@ -845,10 +800,10 @@ const styles = StyleSheet.create({
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: GREEN_DARK,
+    backgroundColor: BLUE,
     borderRadius: 14, paddingVertical: 16,
     marginTop: 8, marginBottom: 14,
-    shadowColor: GREEN_DARK,
+    shadowColor: BLUE,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3, shadowRadius: 12, elevation: 4,
   },
@@ -860,13 +815,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, marginBottom: 4,
     paddingVertical: 10, paddingHorizontal: 16,
-    backgroundColor: GREEN_SOFT,
-    borderRadius: 12, borderWidth: 1, borderColor: GREEN_MID,
+    backgroundColor: `${BLUE}08`,
+    borderRadius: 12, borderWidth: 1, borderColor: `${BLUE}20`,
   },
-  infoText: { fontSize: 12, color: GREEN_DARK, fontWeight: '500' },
+  infoText: { fontSize: 12, color: BLUE, fontWeight: '500' },
 
   // Login prompt
   loginPrompt: { flexDirection: 'row', justifyContent: 'center', marginTop: 16, paddingBottom: 8 },
   loginPromptText: { fontSize: 14, color: TEXT_MUTED },
-  loginPromptLink: { fontSize: 14, color: GREEN_DARK, fontWeight: '700' },
+  loginPromptLink: { fontSize: 14, color: BLUE, fontWeight: '700' },
 });

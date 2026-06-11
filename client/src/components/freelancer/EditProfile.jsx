@@ -23,16 +23,29 @@ import * as Sharing from 'expo-sharing';
 import { Directory, File, Paths } from 'expo-file-system';
 import { updateProfile, deleteProfilePicture } from '../../Redux/slices/authSlice';
 
-const GREEN       = '#4ADE80';
-const GREEN_DARK  = '#22C55E';
-const GREEN_SOFT  = '#DCFCE7';
-const GREEN_MID   = '#86EFAC';
-const WHITE       = '#FFFFFF';
-const OFF_WHITE   = '#F0FDF4';
-const BORDER      = 'rgba(74,222,128,0.25)';
-const TEXT_MAIN   = '#0F2417';
-const TEXT_MUTED  = '#6B7280';
-const TEXT_LIGHT  = '#9CA3AF';
+// ── Vantara Design tokens ──────────────────────────────────────────────────────────
+const NAVY       = '#071A3E';
+const NAVY2      = '#0D2151';
+const BLUE       = '#0055A5';
+const BLUE_MD    = '#0073CF';
+const BLUE_LT    = '#1E90FF';
+const GOLD       = '#C89520';
+const GOLD_LT    = '#E8B84B';
+const GOLD_DK    = '#8A6410';
+const SILVER     = '#8899B0';
+const SILVER2    = '#B8C8D8';
+const WHITE      = '#FFFFFF';
+const BG         = '#EEF4FA';
+const CARD       = '#FFFFFF';
+const TEXT_MAIN  = '#071A3E';
+const TEXT_MUTED = '#3A5070';
+const TEXT_LIGHT = '#7A90A8';
+const BORDER     = '#C8D8E8';
+const GREEN      = '#059669';
+const GREEN_SOFT = '#D1FAE5';
+const GREEN_MID  = '#86EFAC';
+const GREEN_DARK = '#059669';
+// ─────────────────────────────────────────────────────────────────────────────────
 
 const EXPERIENCE_LEVELS = ['Entry', 'Intermediate', 'Expert', 'Senior'];
 
@@ -441,7 +454,7 @@ export default function FreelancerProfile({ onNavigate }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" backgroundColor={OFF_WHITE} />
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -454,7 +467,7 @@ export default function FreelancerProfile({ onNavigate }) {
             activeOpacity={0.7}
           >
             <View style={styles.iconWrap}>
-              <Ionicons name="arrow-back" size={18} color={GREEN_DARK} />
+              <Ionicons name="arrow-back" size={18} color={WHITE} />
             </View>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -468,7 +481,7 @@ export default function FreelancerProfile({ onNavigate }) {
             activeOpacity={0.8}
           >
             {isLoading ? (
-              <ActivityIndicator size="small" color={TEXT_MAIN} />
+              <ActivityIndicator size="small" color={WHITE} />
             ) : (
               <Text style={styles.saveBtnText}>Save</Text>
             )}
@@ -507,7 +520,7 @@ export default function FreelancerProfile({ onNavigate }) {
           {/* BASIC INFO */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="person-outline" size={16} color={GREEN_DARK} />
+              <Ionicons name="person-outline" size={16} color={BLUE} />
               <Text style={styles.sectionTitle}>Basic Information</Text>
             </View>
 
@@ -595,7 +608,7 @@ export default function FreelancerProfile({ onNavigate }) {
           {/* SKILLS */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="code-slash-outline" size={16} color={GREEN_DARK} />
+              <Ionicons name="code-slash-outline" size={16} color={BLUE} />
               <Text style={styles.sectionTitle}>Skills</Text>
             </View>
 
@@ -633,7 +646,7 @@ export default function FreelancerProfile({ onNavigate }) {
                   onPress={() => addSkill(s)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="add" size={12} color={TEXT_MUTED} />
+                  <Ionicons name="add" size={12} color={BLUE} />
                   <Text style={styles.suggestionText}>{s}</Text>
                 </TouchableOpacity>
               ))}
@@ -648,7 +661,7 @@ export default function FreelancerProfile({ onNavigate }) {
                       onPress={() => removeSkill(skill)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Ionicons name="close" size={14} color={GREEN_DARK} />
+                      <Ionicons name="close" size={14} color={BLUE} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -659,7 +672,7 @@ export default function FreelancerProfile({ onNavigate }) {
           {/* CV UPLOAD SECTION - Local Storage Only */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="document-text-outline" size={16} color={GREEN_DARK} />
+              <Ionicons name="document-text-outline" size={16} color={BLUE} />
               <Text style={styles.sectionTitle}>Resume / CV</Text>
             </View>
 
@@ -667,7 +680,7 @@ export default function FreelancerProfile({ onNavigate }) {
               {savedCV ? (
                 <View style={styles.cvInfoContainer}>
                   <View style={styles.cvFileInfo}>
-                    <Ionicons name="document-text" size={32} color={GREEN_DARK} />
+                    <Ionicons name="document-text" size={32} color={BLUE} />
                     <View style={styles.cvFileDetails}>
                       <Text style={styles.cvFileName} numberOfLines={1}>
                         {savedCV.name}
@@ -684,7 +697,7 @@ export default function FreelancerProfile({ onNavigate }) {
                       onPress={viewCV}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="eye-outline" size={16} color={GREEN_DARK} />
+                      <Ionicons name="eye-outline" size={16} color={BLUE} />
                       <Text style={styles.cvViewBtnText}>Open</Text>
                     </TouchableOpacity>
                     
@@ -700,7 +713,7 @@ export default function FreelancerProfile({ onNavigate }) {
                 </View>
               ) : (
                 <View style={styles.cvUploadArea}>
-                  <Ionicons name="cloud-upload-outline" size={48} color={GREEN_DARK} />
+                  <Ionicons name="cloud-upload-outline" size={48} color={BLUE} />
                   <Text style={styles.cvUploadTitle}>Upload your CV/Resume</Text>
                   <Text style={styles.cvUploadSubtitle}>
                     PDF, DOC, or DOCX (Max 5MB)
@@ -731,7 +744,7 @@ export default function FreelancerProfile({ onNavigate }) {
           {/* EXPERIENCE */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="briefcase-outline" size={16} color={GREEN_DARK} />
+              <Ionicons name="briefcase-outline" size={16} color={BLUE} />
               <Text style={styles.sectionTitle}>Experience</Text>
             </View>
 
@@ -771,7 +784,7 @@ export default function FreelancerProfile({ onNavigate }) {
           {/* RATES */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="cash-outline" size={16} color={GREEN_DARK} />
+              <Ionicons name="cash-outline" size={16} color={BLUE} />
               <Text style={styles.sectionTitle}>Rates</Text>
             </View>
             <View style={styles.row}>
@@ -805,7 +818,7 @@ export default function FreelancerProfile({ onNavigate }) {
           {/* LOCATION */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="location-outline" size={16} color={GREEN_DARK} />
+              <Ionicons name="location-outline" size={16} color={BLUE} />
               <Text style={styles.sectionTitle}>Location</Text>
             </View>
             <View style={styles.row}>
@@ -839,7 +852,7 @@ export default function FreelancerProfile({ onNavigate }) {
           {/* PORTFOLIO LINK */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="link-outline" size={16} color={GREEN_DARK} />
+              <Ionicons name="link-outline" size={16} color={BLUE} />
               <Text style={styles.sectionTitle}>Portfolio</Text>
             </View>
 
@@ -870,10 +883,10 @@ export default function FreelancerProfile({ onNavigate }) {
             activeOpacity={0.85}
           >
             {isLoading ? (
-              <ActivityIndicator size="small" color={TEXT_MAIN} />
+              <ActivityIndicator size="small" color={WHITE} />
             ) : (
               <>
-                <Ionicons name="checkmark-circle-outline" size={18} color={TEXT_MAIN} />
+                <Ionicons name="checkmark-circle-outline" size={18} color={WHITE} />
                 <Text style={styles.bottomSaveBtnText}>Save Profile</Text>
               </>
             )}
@@ -898,12 +911,12 @@ export default function FreelancerProfile({ onNavigate }) {
             </View>
 
             <TouchableOpacity style={styles.modalOption} onPress={pickImage}>
-              <Ionicons name="images-outline" size={24} color={GREEN_DARK} />
+              <Ionicons name="images-outline" size={24} color={BLUE} />
               <Text style={styles.modalOptionText}>Choose from Gallery</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.modalOption} onPress={takePhoto}>
-              <Ionicons name="camera-outline" size={24} color={GREEN_DARK} />
+              <Ionicons name="camera-outline" size={24} color={BLUE} />
               <Text style={styles.modalOptionText}>Take Photo</Text>
             </TouchableOpacity>
 
@@ -919,7 +932,7 @@ export default function FreelancerProfile({ onNavigate }) {
 
             {uploadingImage && (
               <View style={styles.uploadingContainer}>
-                <ActivityIndicator size="large" color={GREEN_DARK} />
+                <ActivityIndicator size="large" color={BLUE} />
                 <Text style={styles.uploadingText}>Updating profile picture...</Text>
               </View>
             )}
@@ -931,7 +944,7 @@ export default function FreelancerProfile({ onNavigate }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: OFF_WHITE },
+  safe: { flex: 1, backgroundColor: BG },
   flex: { flex: 1 },
 
   header: {
@@ -939,65 +952,63 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
+    borderBottomWidth: 1.5,
     borderBottomColor: BORDER,
     gap: 12,
-    backgroundColor: WHITE,
+    backgroundColor: NAVY,
   },
   backBtn: { alignSelf: 'flex-start' },
   iconWrap: {
     width: 38, height: 38,
-    backgroundColor: WHITE,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: 11,
-    borderWidth: 1, borderColor: BORDER,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
   headerCenter: { flex: 1 },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: TEXT_MAIN },
-  headerSub: { fontSize: 11, color: TEXT_MUTED, marginTop: 1 },
+  headerTitle: { fontSize: 16, fontWeight: '600', color: WHITE },
+  headerSub: { fontSize: 11, color: GOLD_LT, marginTop: 1 },
   saveBtn: {
     paddingHorizontal: 18, paddingVertical: 8,
-    backgroundColor: GREEN_DARK,
+    backgroundColor: GOLD,
     borderRadius: 10,
     minWidth: 60,
     alignItems: 'center',
   },
   saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { fontSize: 13, fontWeight: '600', color: WHITE },
+  saveBtnText: { fontSize: 13, fontWeight: '600', color: NAVY },
 
   scroll: { paddingBottom: 60 },
 
   avatarSection: {
     alignItems: 'center',
     paddingVertical: 28,
-    borderBottomWidth: 1,
+    borderBottomWidth: 1.5,
     borderBottomColor: BORDER,
     marginBottom: 8,
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
   },
   avatarWrap: { position: 'relative', marginBottom: 12 },
   avatar: {
     width: 90, height: 90,
     borderRadius: 45,
-    borderWidth: 2, borderColor: GREEN_DARK,
+    borderWidth: 2, borderColor: GOLD,
   },
   avatarPlaceholder: {
     width: 90, height: 90,
     borderRadius: 45,
-    backgroundColor: GREEN_DARK,
+    backgroundColor: GOLD,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: GREEN_DARK,
+    borderWidth: 2, borderColor: GOLD,
   },
-  avatarInitials: { fontSize: 32, fontWeight: '700', color: WHITE },
+  avatarInitials: { fontSize: 32, fontWeight: '700', color: NAVY },
   avatarEditBtn: {
     position: 'absolute', bottom: 0, right: 0,
     width: 28, height: 28,
     borderRadius: 14,
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: WHITE,
+    borderWidth: 2, borderColor: CARD,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
   },
@@ -1005,7 +1016,7 @@ const styles = StyleSheet.create({
   avatarUsername: { fontSize: 13, color: TEXT_MUTED },
   changePhotoText: {
     fontSize: 12,
-    color: GREEN_DARK,
+    color: BLUE,
     marginTop: 8,
     opacity: 0.7,
   },
@@ -1013,10 +1024,10 @@ const styles = StyleSheet.create({
   section: {
     marginHorizontal: 16,
     marginTop: 16,
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderRadius: 16,
     padding: 16,
-    borderWidth: 1, borderColor: BORDER,
+    borderWidth: 1.5, borderColor: BORDER,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
   },
@@ -1026,17 +1037,17 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
     paddingBottom: 12,
-    borderBottomWidth: 1,
+    borderBottomWidth: 1.5,
     borderBottomColor: BORDER,
   },
   sectionTitle: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN },
 
   fieldGroup: { marginBottom: 14 },
   label: { fontSize: 12, fontWeight: '500', color: TEXT_MUTED, marginBottom: 6 },
-  labelRequired: { color: GREEN_DARK },
+  labelRequired: { color: BLUE },
   input: {
-    backgroundColor: OFF_WHITE,
-    borderWidth: 1, borderColor: BORDER,
+    backgroundColor: BG,
+    borderWidth: 1.5, borderColor: BORDER,
     borderRadius: 10,
     paddingHorizontal: 14, paddingVertical: 11,
     fontSize: 14, color: TEXT_MAIN,
@@ -1049,8 +1060,8 @@ const styles = StyleSheet.create({
   skillInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   skillInput: {
     flex: 1,
-    backgroundColor: OFF_WHITE,
-    borderWidth: 1, borderColor: BORDER,
+    backgroundColor: BG,
+    borderWidth: 1.5, borderColor: BORDER,
     borderRadius: 10,
     paddingHorizontal: 14, paddingVertical: 10,
     fontSize: 14, color: TEXT_MAIN,
@@ -1058,7 +1069,7 @@ const styles = StyleSheet.create({
   skillAddBtn: {
     width: 42, height: 42,
     borderRadius: 10,
-    backgroundColor: GREEN_DARK,
+    backgroundColor: BLUE,
     alignItems: 'center', justifyContent: 'center',
   },
   suggestionRow: { paddingBottom: 10, gap: 6 },
@@ -1067,43 +1078,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10, paddingVertical: 6,
-    backgroundColor: OFF_WHITE,
+    backgroundColor: BG,
     borderRadius: 999,
     borderWidth: 0.5, borderColor: BORDER,
   },
-  suggestionText: { fontSize: 11, color: TEXT_MUTED },
+  suggestionText: { fontSize: 11, color: BLUE },
   skillsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   skillChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 12, paddingVertical: 7,
-    backgroundColor: GREEN_SOFT,
+    backgroundColor: 'rgba(0,104,181,0.08)',
     borderRadius: 999,
-    borderWidth: 1, borderColor: GREEN_MID,
+    borderWidth: 1.5, borderColor: 'rgba(0,104,181,0.2)',
   },
-  skillChipText: { fontSize: 12, color: GREEN_DARK, fontWeight: '500' },
+  skillChipText: { fontSize: 12, color: BLUE, fontWeight: '500' },
 
   pillRow: { flexDirection: 'row', gap: 8, marginBottom: 14, marginTop: 6 },
   pill: {
     flex: 1, paddingVertical: 9,
     borderRadius: 10,
-    backgroundColor: OFF_WHITE,
+    backgroundColor: BG,
     alignItems: 'center',
-    borderWidth: 1, borderColor: BORDER,
+    borderWidth: 1.5, borderColor: BORDER,
   },
   pillActive: {
-    backgroundColor: GREEN_SOFT,
-    borderColor: GREEN_DARK,
+    backgroundColor: 'rgba(0,104,181,0.08)',
+    borderColor: BLUE,
   },
   pillText: { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
-  pillTextActive: { color: GREEN_DARK },
+  pillTextActive: { color: BLUE },
 
   linkInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: OFF_WHITE,
-    borderWidth: 1, borderColor: BORDER,
+    backgroundColor: BG,
+    borderWidth: 1.5, borderColor: BORDER,
     borderRadius: 10,
     paddingHorizontal: 12,
   },
@@ -1119,8 +1130,10 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 20,
     paddingVertical: 15,
-    backgroundColor: GREEN_DARK,
+    backgroundColor: BLUE,
     borderRadius: 14,
+    shadowColor: BLUE, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28, shadowRadius: 20, elevation: 3,
   },
   bottomSaveBtnText: { fontSize: 15, fontWeight: '600', color: WHITE },
   
@@ -1141,9 +1154,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 24,
     paddingHorizontal: 20,
-    backgroundColor: OFF_WHITE,
+    backgroundColor: BG,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: BORDER,
     borderStyle: 'dashed',
   },
@@ -1161,7 +1174,7 @@ const styles = StyleSheet.create({
   },
   cvLocalNote: {
     fontSize: 10,
-    color: GREEN_DARK,
+    color: BLUE,
     marginBottom: 16,
     fontStyle: 'italic',
   },
@@ -1169,23 +1182,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: GREEN_SOFT,
+    backgroundColor: 'rgba(0,104,181,0.08)',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: GREEN_MID,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,104,181,0.2)',
   },
   cvUploadBtnText: {
     fontSize: 13,
     fontWeight: '600',
-    color: GREEN_DARK,
+    color: BLUE,
   },
   cvInfoContainer: {
-    backgroundColor: OFF_WHITE,
+    backgroundColor: BG,
     borderRadius: 12,
     padding: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: BORDER,
   },
   cvFileInfo: {
@@ -1205,12 +1218,12 @@ const styles = StyleSheet.create({
   },
   cvFileStatus: {
     fontSize: 10,
-    color: GREEN_DARK,
+    color: BLUE,
   },
   cvActions: {
     flexDirection: 'row',
     gap: 10,
-    borderTopWidth: 1,
+    borderTopWidth: 1.5,
     borderTopColor: BORDER,
     paddingTop: 12,
   },
@@ -1224,18 +1237,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   cvViewBtn: {
-    backgroundColor: GREEN_SOFT,
-    borderWidth: 1,
-    borderColor: GREEN_MID,
+    backgroundColor: 'rgba(0,104,181,0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,104,181,0.2)',
   },
   cvViewBtnText: {
     fontSize: 12,
     fontWeight: '500',
-    color: GREEN_DARK,
+    color: BLUE,
   },
   cvDeleteBtn: {
     backgroundColor: '#ff444415',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#ff444430',
   },
   cvDeleteBtnText: {
@@ -1247,15 +1260,15 @@ const styles = StyleSheet.create({
   // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(7,26,62,0.55)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
-    borderTopWidth: 1,
+    borderTopWidth: 1.5,
     borderTopColor: BORDER,
   },
   modalHeader: {
@@ -1264,7 +1277,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
     paddingBottom: 15,
-    borderBottomWidth: 1,
+    borderBottomWidth: 1.5,
     borderBottomColor: BORDER,
   },
   modalTitle: {
@@ -1277,7 +1290,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     gap: 12,
-    borderBottomWidth: 1,
+    borderBottomWidth: 1.5,
     borderBottomColor: BORDER,
   },
   modalOptionDanger: {

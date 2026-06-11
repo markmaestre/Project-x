@@ -1,22 +1,40 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, Text, TouchableOpacity, StyleSheet, ScrollView, 
-  Modal, Alert, FlatList, RefreshControl, ActivityIndicator 
+  Modal, Alert, FlatList, RefreshControl, ActivityIndicator, StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { getReceivedOffers, updateOfferStatus } from '../../Redux/slices/offerSlice';
 
-const BG = '#0a0a0a';
-const GOLD = '#D4AF37';
-const CARD_BG = '#141414';
-const BORDER = 'rgba(255,255,255,0.07)';
-const INPUT_BG = '#111111';
-const STATUS_PENDING = '#f59e0b';
-const STATUS_ACCEPTED = '#4ade80';
-const STATUS_DECLINED = '#ef4444';
-const STATUS_EXPIRED = '#6b7280';
+// ── Vantara Design tokens ──────────────────────────────────────────────────────────
+const NAVY       = '#071A3E';
+const NAVY2      = '#0D2151';
+const BLUE       = '#0055A5';
+const BLUE_MD    = '#0073CF';
+const BLUE_LT    = '#1E90FF';
+const GOLD       = '#C89520';
+const GOLD_LT    = '#E8B84B';
+const GOLD_DK    = '#8A6410';
+const SILVER     = '#8899B0';
+const SILVER2    = '#B8C8D8';
+const WHITE      = '#FFFFFF';
+const BG         = '#EEF4FA';
+const CARD       = '#FFFFFF';
+const TEXT_MAIN  = '#071A3E';
+const TEXT_MUTED = '#3A5070';
+const TEXT_LIGHT = '#7A90A8';
+const BORDER     = '#C8D8E8';
+const GREEN      = '#059669';
+const ORANGE     = '#F97316';
+const RED        = '#EF4444';
+// ─────────────────────────────────────────────────────────────────────────────────
+
+const STATUS_PENDING = GOLD;
+const STATUS_ACCEPTED = GREEN;
+const STATUS_DECLINED = RED;
+const STATUS_EXPIRED = TEXT_LIGHT;
 
 export default function ReceivedOffers({ onNavigate }) {
   const dispatch = useDispatch();
@@ -52,7 +70,7 @@ export default function ReceivedOffers({ onNavigate }) {
       case 'accepted': return STATUS_ACCEPTED;
       case 'declined': return STATUS_DECLINED;
       case 'expired': return STATUS_EXPIRED;
-      default: return '#fff';
+      default: return TEXT_MAIN;
     }
   };
 
@@ -79,7 +97,7 @@ export default function ReceivedOffers({ onNavigate }) {
   const formatDate = (dateString) => {
     if (!dateString) return 'Unknown';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const getInitials = (firstName, lastName) => {
@@ -154,27 +172,30 @@ export default function ReceivedOffers({ onNavigate }) {
   const OfferCard = ({ offer, onPress }) => {
     const statusColor = getStatusColor(offer.status);
     const initials = getInitials(offer.client_first_name, offer.client_last_name);
+    const isExpired = offer.expiry_date && new Date(offer.expiry_date) < new Date();
     
     return (
       <TouchableOpacity 
         style={styles.offerCard}
         onPress={() => onPress(offer)}
-        activeOpacity={0.7}
+        activeOpacity={0.85}
       >
         <View style={styles.offerHeader}>
-          <View style={styles.clientInfo}>
-            <View style={styles.clientAvatar}>
+          <View style={styles.clientSection}>
+            <View style={[styles.clientAvatar, { backgroundColor: BLUE }]}>
               <Text style={styles.clientInitials}>{initials}</Text>
             </View>
-            <View>
+            <View style={styles.clientDetails}>
               <Text style={styles.clientName}>{offer.client_name}</Text>
-              <View style={styles.ratingContainer}>
+              <View style={styles.ratingRow}>
                 <Ionicons name="star" size={12} color={GOLD} />
                 <Text style={styles.ratingText}>{offer.client_rating || '4.5'}</Text>
+                <View style={styles.dot} />
+                <Text style={styles.dateText}>{formatDate(offer.created_at)}</Text>
               </View>
             </View>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
             <Ionicons name={getStatusIcon(offer.status)} size={12} color={statusColor} />
             <Text style={[styles.statusText, { color: statusColor }]}>
               {getStatusText(offer.status)}
@@ -182,25 +203,30 @@ export default function ReceivedOffers({ onNavigate }) {
           </View>
         </View>
 
-        <Text style={styles.projectTitle}>{offer.job_title}</Text>
+        <Text style={styles.projectTitle} numberOfLines={1}>{offer.job_title}</Text>
+        
         {offer.message && (
-          <Text style={styles.offerMessage} numberOfLines={2}>
-            "{offer.message}"
-          </Text>
+          <View style={styles.messagePreview}>
+            <Ionicons name="chatbubble-outline" size={14} color={TEXT_LIGHT} />
+            <Text style={styles.offerMessage} numberOfLines={2}>
+              {offer.message}
+            </Text>
+          </View>
         )}
 
         <View style={styles.offerDetails}>
           <View style={styles.detailItem}>
-            <Ionicons name="cash-outline" size={14} color={GOLD} />
+            <View style={styles.detailIconBox}>
+              <Ionicons name="cash-outline" size={14} color={BLUE} />
+            </View>
             <Text style={styles.detailText}>₱{offer.amount?.toLocaleString()}</Text>
           </View>
-          <View style={styles.detailItem}>
-            <Ionicons name="calendar-outline" size={14} color={GOLD} />
-            <Text style={styles.detailText}>{formatDate(offer.created_at)}</Text>
-          </View>
+          
           {offer.expiry_date && new Date(offer.expiry_date) > new Date() && offer.status === 'pending' && (
             <View style={styles.detailItem}>
-              <Ionicons name="time-outline" size={14} color={STATUS_PENDING} />
+              <View style={[styles.detailIconBox, { backgroundColor: `${STATUS_PENDING}10` }]}>
+                <Ionicons name="time-outline" size={14} color={STATUS_PENDING} />
+              </View>
               <Text style={[styles.detailText, { color: STATUS_PENDING }]}>
                 Expires: {formatDate(offer.expiry_date)}
               </Text>
@@ -208,22 +234,29 @@ export default function ReceivedOffers({ onNavigate }) {
           )}
         </View>
 
-        {offer.status === 'pending' && (
+        {offer.status === 'pending' && !isExpired && (
           <View style={styles.offerActions}>
             <TouchableOpacity 
               style={[styles.actionBtn, styles.acceptBtn]}
               onPress={() => handleAcceptOffer(offer)}
             >
-              <Ionicons name="checkmark" size={16} color="#0a0a0a" />
+              <Ionicons name="checkmark" size={16} color={WHITE} />
               <Text style={styles.acceptBtnText}>Accept</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.actionBtn, styles.declineBtn]}
               onPress={() => handleDeclineOffer(offer)}
             >
-              <Ionicons name="close" size={16} color="#ef4444" />
+              <Ionicons name="close" size={16} color={RED} />
               <Text style={styles.declineBtnText}>Decline</Text>
             </TouchableOpacity>
+          </View>
+        )}
+        
+        {offer.status === 'pending' && isExpired && (
+          <View style={styles.expiredBadge}>
+            <Ionicons name="alert-circle" size={14} color={STATUS_EXPIRED} />
+            <Text style={styles.expiredBadgeText}>Offer Expired</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -247,30 +280,32 @@ export default function ReceivedOffers({ onNavigate }) {
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={styles.modalBackdrop} onPress={onClose} activeOpacity={1} />
           <View style={styles.modalContainer}>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
-                  <Ionicons name="close" size={24} color="#fff" />
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>Offer Details</Text>
-                <View style={{ width: 40 }} />
-              </View>
+            <View style={styles.modalHandle} />
+            
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={20} color={TEXT_MUTED} />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Offer Details</Text>
+              <View style={{ width: 36 }} />
+            </View>
 
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
               <View style={styles.modalContent}>
-                {/* Client Info */}
+                {/* Client Info Section */}
                 <View style={styles.modalClientSection}>
-                  <View style={styles.modalClientAvatar}>
+                  <View style={[styles.modalClientAvatar, { backgroundColor: BLUE }]}>
                     <Text style={styles.modalClientInitials}>{initials}</Text>
                   </View>
                   <View style={styles.modalClientInfo}>
                     <Text style={styles.modalClientName}>{offer.client_name}</Text>
-                    <View style={styles.modalRating}>
+                    <View style={styles.modalRatingRow}>
                       <Ionicons name="star" size={14} color={GOLD} />
                       <Text style={styles.modalRatingText}>{offer.client_rating || '4.5'}</Text>
-                      <Text style={styles.modalReviewCount}>(from offers)</Text>
+                      <Text style={styles.modalReviewCount}>(Client)</Text>
                     </View>
                   </View>
-                  <View style={[styles.modalStatusBadge, { backgroundColor: statusColor + '20' }]}>
+                  <View style={[styles.modalStatusBadge, { backgroundColor: statusColor + '15' }]}>
                     <Ionicons name={getStatusIcon(offer.status)} size={14} color={statusColor} />
                     <Text style={[styles.modalStatusText, { color: statusColor }]}>
                       {getStatusText(offer.status)}
@@ -278,41 +313,48 @@ export default function ReceivedOffers({ onNavigate }) {
                   </View>
                 </View>
 
-                {/* Job Details */}
+                {/* Job Title */}
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Job Title</Text>
+                  <Text style={styles.modalSectionTitle}>Project</Text>
                   <Text style={styles.modalProjectTitle}>{offer.job_title}</Text>
                 </View>
 
+                {/* Client Message */}
                 {offer.message && (
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Client Message</Text>
-                    <View style={styles.messageBubble}>
-                      <Ionicons name="chatbubble-outline" size={16} color={GOLD} />
-                      <Text style={styles.messageText}>"{offer.message}"</Text>
+                    <Text style={styles.modalSectionTitle}>Message from Client</Text>
+                    <View style={styles.messageCard}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={18} color={BLUE} />
+                      <Text style={styles.messageText}>{offer.message}</Text>
                     </View>
                   </View>
                 )}
 
-                {/* Offer Details */}
+                {/* Offer Details Grid */}
                 <View style={styles.modalSection}>
                   <Text style={styles.modalSectionTitle}>Offer Details</Text>
-                  <View style={styles.modalDetailsGrid}>
-                    <View style={styles.modalDetailCard}>
-                      <Ionicons name="cash-outline" size={20} color={GOLD} />
-                      <Text style={styles.modalDetailLabel}>Amount</Text>
-                      <Text style={styles.modalDetailValue}>₱{offer.amount?.toLocaleString()}</Text>
+                  <View style={styles.detailsGrid}>
+                    <View style={styles.gridCard}>
+                      <View style={styles.gridIconBox}>
+                        <Ionicons name="cash-outline" size={22} color={BLUE} />
+                      </View>
+                      <Text style={styles.gridLabel}>Amount</Text>
+                      <Text style={styles.gridValue}>₱{offer.amount?.toLocaleString()}</Text>
                     </View>
-                    <View style={styles.modalDetailCard}>
-                      <Ionicons name="calendar-outline" size={20} color={GOLD} />
-                      <Text style={styles.modalDetailLabel}>Received</Text>
-                      <Text style={styles.modalDetailValue}>{formatDate(offer.created_at)}</Text>
+                    <View style={styles.gridCard}>
+                      <View style={styles.gridIconBox}>
+                        <Ionicons name="calendar-outline" size={22} color={BLUE} />
+                      </View>
+                      <Text style={styles.gridLabel}>Received</Text>
+                      <Text style={styles.gridValue}>{formatDate(offer.created_at)}</Text>
                     </View>
                     {offer.expiry_date && (
-                      <View style={styles.modalDetailCard}>
-                        <Ionicons name="time-outline" size={20} color={isExpired ? STATUS_EXPIRED : STATUS_PENDING} />
-                        <Text style={styles.modalDetailLabel}>Expires</Text>
-                        <Text style={[styles.modalDetailValue, { color: isExpired ? STATUS_EXPIRED : STATUS_PENDING, fontSize: 12 }]}>
+                      <View style={styles.gridCard}>
+                        <View style={[styles.gridIconBox, { backgroundColor: isExpired ? `${STATUS_EXPIRED}10` : `${STATUS_PENDING}10` }]}>
+                          <Ionicons name="time-outline" size={22} color={isExpired ? STATUS_EXPIRED : STATUS_PENDING} />
+                        </View>
+                        <Text style={styles.gridLabel}>Expires</Text>
+                        <Text style={[styles.gridValue, { color: isExpired ? STATUS_EXPIRED : STATUS_PENDING, fontSize: 12 }]}>
                           {formatDate(offer.expiry_date)}
                         </Text>
                       </View>
@@ -320,28 +362,30 @@ export default function ReceivedOffers({ onNavigate }) {
                   </View>
                 </View>
 
-                {/* Job Skills */}
+                {/* Required Skills */}
                 {offer.job_skills && offer.job_skills.length > 0 && (
                   <View style={styles.modalSection}>
                     <Text style={styles.modalSectionTitle}>Required Skills</Text>
-                    <View style={styles.skillsContainer}>
+                    <View style={styles.skillsGrid}>
                       {offer.job_skills.map((skill, index) => (
-                        <View key={index} style={styles.modalSkillChip}>
-                          <Text style={styles.modalSkillText}>{skill}</Text>
+                        <View key={index} style={styles.skillChip}>
+                          <Ionicons name="code-slash-outline" size={12} color={BLUE} />
+                          <Text style={styles.skillText}>{skill}</Text>
                         </View>
                       ))}
                     </View>
                   </View>
                 )}
 
-                {/* Freelancer Skills (from profile) */}
+                {/* Matched Skills */}
                 {offer.freelancer_skills && offer.freelancer_skills.length > 0 && (
                   <View style={styles.modalSection}>
                     <Text style={styles.modalSectionTitle}>Your Matched Skills</Text>
-                    <View style={styles.skillsContainer}>
+                    <View style={styles.skillsGrid}>
                       {offer.freelancer_skills.map((skill, index) => (
-                        <View key={index} style={[styles.modalSkillChip, { backgroundColor: 'rgba(212,175,55,0.2)' }]}>
-                          <Text style={styles.modalSkillText}>{skill}</Text>
+                        <View key={index} style={[styles.skillChip, styles.matchedChip]}>
+                          <Ionicons name="checkmark-circle" size={12} color={GREEN} />
+                          <Text style={[styles.skillText, styles.matchedText]}>{skill}</Text>
                         </View>
                       ))}
                     </View>
@@ -355,7 +399,7 @@ export default function ReceivedOffers({ onNavigate }) {
                       style={[styles.modalActionBtn, styles.modalAcceptBtn]}
                       onPress={() => handleAcceptOffer(offer)}
                     >
-                      <Ionicons name="checkmark-circle" size={20} color="#0a0a0a" />
+                      <Ionicons name="checkmark-circle" size={20} color={WHITE} />
                       <Text style={styles.modalAcceptText}>Accept Offer</Text>
                     </TouchableOpacity>
                     
@@ -363,7 +407,7 @@ export default function ReceivedOffers({ onNavigate }) {
                       style={[styles.modalActionBtn, styles.modalCounterBtn]}
                       onPress={() => handleCounterOffer(offer)}
                     >
-                      <Ionicons name="chatbubble" size={20} color={GOLD} />
+                      <Ionicons name="chatbubble-outline" size={20} color={BLUE} />
                       <Text style={styles.modalCounterText}>Counter</Text>
                     </TouchableOpacity>
                     
@@ -371,38 +415,42 @@ export default function ReceivedOffers({ onNavigate }) {
                       style={[styles.modalActionBtn, styles.modalDeclineBtn]}
                       onPress={() => handleDeclineOffer(offer)}
                     >
-                      <Ionicons name="close-circle" size={20} color="#ef4444" />
+                      <Ionicons name="close-circle" size={20} color={RED} />
                       <Text style={styles.modalDeclineText}>Decline</Text>
                     </TouchableOpacity>
                   </View>
                 )}
 
                 {offer.status === 'pending' && isExpired && (
-                  <View style={styles.expiredMessage}>
-                    <Ionicons name="alert-circle" size={48} color={STATUS_EXPIRED} />
+                  <View style={styles.expiredContainer}>
+                    <Ionicons name="alert-circle" size={56} color={STATUS_EXPIRED} />
                     <Text style={styles.expiredTitle}>Offer Expired</Text>
-                    <Text style={styles.expiredText}>
+                    <Text style={styles.expiredDescription}>
                       This offer expired on {formatDate(offer.expiry_date)} and is no longer available.
                     </Text>
                   </View>
                 )}
 
                 {offer.status === 'accepted' && (
-                  <View style={styles.modalAcceptedMessage}>
-                    <Ionicons name="checkmark-circle" size={48} color={STATUS_ACCEPTED} />
-                    <Text style={styles.modalAcceptedTitle}>Offer Accepted!</Text>
-                    <Text style={styles.modalAcceptedText}>
+                  <View style={styles.acceptedContainer}>
+                    <Ionicons name="checkmark-circle" size={56} color={STATUS_ACCEPTED} />
+                    <Text style={styles.acceptedTitle}>Offer Accepted!</Text>
+                    <Text style={styles.acceptedDescription}>
                       You have accepted this offer. The client will contact you soon with next steps.
                     </Text>
                     <TouchableOpacity 
-                      style={styles.modalMessageBtn}
+                      style={styles.messageClientBtn}
                       onPress={() => {
                         onClose();
-                        onNavigate('Messages', { userId: offer.client_id });
+                        onNavigate('Messages', { 
+                          userId: offer.client_id,
+                          userName: offer.client_name,
+                          userRole: 'client'
+                        });
                       }}
                     >
-                      <Ionicons name="chatbubble" size={20} color="#0a0a0a" />
-                      <Text style={styles.modalMessageBtnText}>Message Client</Text>
+                      <Ionicons name="chatbubble" size={20} color={WHITE} />
+                      <Text style={styles.messageClientText}>Message Client</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -417,15 +465,18 @@ export default function ReceivedOffers({ onNavigate }) {
   if (isLoading && !refreshing) {
     return (
       <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+          <TouchableOpacity onPress={() => onNavigate('MyApplications')} style={styles.backBtn}>
+            <View style={styles.backIconWrap}>
+              <Ionicons name="arrow-back" size={18} color={WHITE} />
+            </View>
           </TouchableOpacity>
           <Text style={styles.title}>Received Offers</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={GOLD} />
+          <ActivityIndicator size="large" color={BLUE} />
           <Text style={styles.loadingText}>Loading offers...</Text>
         </View>
       </SafeAreaView>
@@ -434,15 +485,41 @@ export default function ReceivedOffers({ onNavigate }) {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+      
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+        <TouchableOpacity onPress={() => onNavigate('MyApplications')} style={styles.backBtn}>
+          <View style={styles.backIconWrap}>
+            <Ionicons name="arrow-back" size={18} color={WHITE} />
+          </View>
         </TouchableOpacity>
         <Text style={styles.title}>Received Offers</Text>
-        <TouchableOpacity style={styles.filterBtn} onPress={onRefresh}>
-          <Ionicons name="refresh-outline" size={22} color={GOLD} />
+        <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh}>
+          <View style={styles.refreshIconWrap}>
+            <Ionicons name="refresh-outline" size={18} color={WHITE} />
+          </View>
         </TouchableOpacity>
       </View>
+
+      {/* Stats Summary */}
+      {(receivedOffers?.length > 0) && (
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{getTabCount('pending')}</Text>
+            <Text style={styles.statLabel}>Pending</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{getTabCount('accepted')}</Text>
+            <Text style={styles.statLabel}>Accepted</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{getTabCount('declined')}</Text>
+            <Text style={styles.statLabel}>Declined</Text>
+          </View>
+        </View>
+      )}
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
@@ -453,7 +530,7 @@ export default function ReceivedOffers({ onNavigate }) {
             onPress={() => setActiveTab(tab)}
           >
             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </Text>
             <View style={[styles.tabBadge, activeTab === tab && styles.tabBadgeActive]}>
               <Text style={[styles.tabBadgeText, activeTab === tab && styles.tabBadgeTextActive]}>
@@ -473,11 +550,13 @@ export default function ReceivedOffers({ onNavigate }) {
         contentContainerStyle={styles.offersList}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
         }
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
-            <Ionicons name="mail-open-outline" size={64} color="rgba(255,255,255,0.1)" />
+            <View style={styles.emptyIconWrap}>
+              <Ionicons name="mail-open-outline" size={56} color={TEXT_LIGHT} />
+            </View>
             <Text style={styles.emptyTitle}>No offers found</Text>
             <Text style={styles.emptyText}>
               {activeTab === 'all' 
@@ -485,10 +564,11 @@ export default function ReceivedOffers({ onNavigate }) {
                 : `No ${activeTab} offers to display`}
             </Text>
             <TouchableOpacity 
-              style={styles.browseJobsBtn}
-              onPress={() => onNavigate('BrowseJobs')}
+              style={styles.browseBtn}
+              onPress={() => onNavigate('FreelancerDashboard')}
             >
-              <Text style={styles.browseJobsText}>Browse Jobs</Text>
+              <Ionicons name="search-outline" size={18} color={WHITE} />
+              <Text style={styles.browseBtnText}>Browse Jobs</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -505,45 +585,83 @@ export default function ReceivedOffers({ onNavigate }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
+  
+  // Header
   header: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     justifyContent: 'space-between', 
     paddingHorizontal: 16, 
     paddingVertical: 12,
+    backgroundColor: NAVY,
+  },
+  backBtn: { alignSelf: 'flex-start' },
+  backIconWrap: {
+    width: 40, height: 40,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    borderWidth: 1, 
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', 
+    justifyContent: 'center',
+  },
+  title: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: WHITE, 
+    letterSpacing: -0.3,
+  },
+  refreshBtn: { alignSelf: 'flex-start' },
+  refreshIconWrap: {
+    width: 40, height: 40,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    borderWidth: 1, 
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', 
+    justifyContent: 'center',
+  },
+
+  // Stats Summary
+  statsContainer: {
+    flexDirection: 'row',
+    backgroundColor: CARD,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
-  backBtn: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 10, 
-    backgroundColor: CARD_BG, 
-    alignItems: 'center', 
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  title: { fontSize: 18, fontWeight: '600', color: '#fff' },
-  filterBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: CARD_BG,
+  statCard: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
   },
+  statNumber: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: TEXT_MAIN,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: BORDER,
+  },
+
+  // Loading
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: BG,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
+    color: TEXT_MUTED,
   },
 
   // Tabs
@@ -552,6 +670,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
+    backgroundColor: CARD,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
@@ -562,91 +681,112 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: CARD_BG,
+    borderRadius: 10,
+    backgroundColor: BG,
     borderWidth: 1,
     borderColor: BORDER,
   },
   tabActive: {
-    backgroundColor: 'rgba(212,175,55,0.1)',
-    borderColor: GOLD,
+    backgroundColor: `${BLUE}08`,
+    borderColor: BLUE,
   },
   tabText: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
+    color: TEXT_MUTED,
+    fontWeight: '500',
   },
   tabTextActive: {
-    color: GOLD,
-    fontWeight: '500',
+    color: BLUE,
+    fontWeight: '600',
   },
   tabBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 8,
+    backgroundColor: BORDER,
   },
   tabBadgeActive: {
-    backgroundColor: GOLD,
+    backgroundColor: BLUE,
   },
   tabBadgeText: {
     fontSize: 10,
-    color: 'rgba(255,255,255,0.7)',
+    color: TEXT_MUTED,
+    fontWeight: '500',
   },
   tabBadgeTextActive: {
-    color: '#0a0a0a',
-    fontWeight: '600',
+    color: WHITE,
+    fontWeight: '700',
   },
 
   // Offer Card
   offersList: {
     padding: 16,
+    paddingBottom: 80,
   },
   offerCard: {
-    backgroundColor: CARD_BG,
+    backgroundColor: CARD,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: BORDER,
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04, 
+    shadowRadius: 8, 
+    elevation: 2,
   },
   offerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
-  clientInfo: {
+  clientSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    flex: 1,
+    gap: 12,
   },
   clientAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: GOLD,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   clientInitials: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#0a0a0a',
+    fontWeight: '700',
+    color: WHITE,
+  },
+  clientDetails: {
+    flex: 1,
   },
   clientName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    marginBottom: 4,
   },
-  ratingContainer: {
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
+    gap: 6,
   },
   ratingText: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.5)',
+    color: TEXT_MUTED,
+  },
+  dot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: TEXT_LIGHT,
+  },
+  dateText: {
+    fontSize: 11,
+    color: TEXT_LIGHT,
   },
   statusBadge: {
     flexDirection: 'row',
@@ -658,19 +798,25 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   projectTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: TEXT_MAIN,
     marginBottom: 8,
   },
-  offerMessage: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
-    fontStyle: 'italic',
+  messagePreview: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
     marginBottom: 12,
+  },
+  offerMessage: {
+    flex: 1,
+    fontSize: 13,
+    color: TEXT_MUTED,
+    lineHeight: 18,
   },
   offerDetails: {
     flexDirection: 'row',
@@ -684,11 +830,20 @@ const styles = StyleSheet.create({
   detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+  },
+  detailIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: `${BLUE}08`,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   detailText: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    color: TEXT_MUTED,
+    fontWeight: '500',
   },
   offerActions: {
     flexDirection: 'row',
@@ -700,63 +855,94 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
   acceptBtn: {
-    backgroundColor: GOLD,
+    backgroundColor: BLUE,
   },
   acceptBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0a0a0a',
+    fontSize: 13,
+    fontWeight: '700',
+    color: WHITE,
   },
   declineBtn: {
-    backgroundColor: 'rgba(239,68,68,0.1)',
+    backgroundColor: `${RED}08`,
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.3)',
+    borderColor: `${RED}20`,
   },
   declineBtnText: {
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: '600',
+    color: RED,
+  },
+  expiredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: `${STATUS_EXPIRED}08`,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  expiredBadgeText: {
+    fontSize: 11,
+    color: STATUS_EXPIRED,
     fontWeight: '500',
-    color: '#ef4444',
   },
 
   // Empty State
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyIconWrap: {
+    width: 96,
+    height: 96,
+    backgroundColor: `${TEXT_LIGHT}08`,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: `${TEXT_LIGHT}15`,
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-    marginTop: 16,
+    fontWeight: '700',
+    color: TEXT_MAIN,
     marginBottom: 8,
+    textAlign: 'center',
   },
   emptyText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
+    color: TEXT_MUTED,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+    lineHeight: 20,
   },
-  browseJobsBtn: {
-    backgroundColor: GOLD,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+  browseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: BLUE,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
-  browseJobsText: {
-    fontSize: 13,
+  browseBtnText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#0a0a0a',
+    color: WHITE,
   },
 
   // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(7,26,62,0.6)',
     justifyContent: 'flex-end',
   },
   modalBackdrop: {
@@ -767,11 +953,18 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   modalContainer: {
-    backgroundColor: CARD_BG,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: CARD,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '90%',
-    minHeight: '70%',
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: BORDER,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -783,16 +976,20 @@ const styles = StyleSheet.create({
     borderBottomColor: BORDER,
   },
   modalCloseBtn: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: BG,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#fff',
+    color: TEXT_MAIN,
+  },
+  modalScroll: {
+    maxHeight: '90%',
   },
   modalContent: {
     padding: 20,
@@ -807,212 +1004,237 @@ const styles = StyleSheet.create({
     borderBottomColor: BORDER,
   },
   modalClientAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: GOLD,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalClientInitials: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#0a0a0a',
+    fontWeight: '700',
+    color: WHITE,
   },
   modalClientInfo: {
     flex: 1,
   },
   modalClientName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: '700',
+    color: TEXT_MAIN,
     marginBottom: 4,
   },
-  modalRating: {
+  modalRatingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   modalRatingText: {
     fontSize: 13,
-    color: '#fff',
+    color: TEXT_MAIN,
+    fontWeight: '500',
   },
   modalReviewCount: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
+    color: TEXT_MUTED,
   },
   modalStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   modalStatusText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   modalSection: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   modalSectionTitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.5)',
-    marginBottom: 8,
+    fontSize: 12,
+    color: TEXT_MUTED,
+    fontWeight: '600',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   modalProjectTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    lineHeight: 24,
   },
-  messageBubble: {
+  messageCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: BG,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: BORDER,
   },
   messageText: {
     flex: 1,
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    fontStyle: 'italic',
+    color: TEXT_MUTED,
+    lineHeight: 20,
   },
-  modalDetailsGrid: {
+  detailsGrid: {
     flexDirection: 'row',
     gap: 12,
   },
-  modalDetailCard: {
+  gridCard: {
     flex: 1,
-    backgroundColor: INPUT_BG,
+    backgroundColor: BG,
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: BORDER,
   },
-  modalDetailLabel: {
+  gridIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: `${BLUE}08`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  gridLabel: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
-    marginTop: 6,
-    marginBottom: 2,
+    color: TEXT_MUTED,
+    marginBottom: 4,
   },
-  modalDetailValue: {
+  gridValue: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: '700',
+    color: TEXT_MAIN,
   },
-  skillsContainer: {
+  skillsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  modalSkillChip: {
-    backgroundColor: 'rgba(212,175,55,0.1)',
+  skillChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: `${BLUE}08`,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.3)',
+    borderColor: `${BLUE}15`,
   },
-  modalSkillText: {
+  skillText: {
     fontSize: 12,
-    color: GOLD,
+    color: BLUE,
+    fontWeight: '500',
+  },
+  matchedChip: {
+    backgroundColor: `${GREEN}08`,
+    borderColor: `${GREEN}20`,
+  },
+  matchedText: {
+    color: GREEN,
   },
   modalActions: {
     flexDirection: 'row',
     gap: 10,
     marginTop: 8,
+    marginBottom: 20,
   },
   modalActionBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   modalAcceptBtn: {
-    backgroundColor: GOLD,
+    backgroundColor: BLUE,
   },
   modalAcceptText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#0a0a0a',
+    fontWeight: '700',
+    color: WHITE,
   },
   modalCounterBtn: {
-    backgroundColor: 'rgba(212,175,55,0.1)',
+    backgroundColor: `${BLUE}08`,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.3)',
+    borderColor: `${BLUE}20`,
   },
   modalCounterText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: GOLD,
+    fontWeight: '600',
+    color: BLUE,
   },
   modalDeclineBtn: {
-    backgroundColor: 'rgba(239,68,68,0.1)',
+    backgroundColor: `${RED}08`,
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.3)',
+    borderColor: `${RED}20`,
   },
   modalDeclineText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#ef4444',
+    fontWeight: '600',
+    color: RED,
   },
-  expiredMessage: {
+  expiredContainer: {
     alignItems: 'center',
-    paddingVertical: 30,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   expiredTitle: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: '700',
+    color: TEXT_MAIN,
     marginTop: 16,
     marginBottom: 8,
   },
-  expiredText: {
+  expiredDescription: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
+    color: TEXT_MUTED,
     textAlign: 'center',
-    marginBottom: 24,
+    lineHeight: 20,
   },
-  modalAcceptedMessage: {
+  acceptedContainer: {
     alignItems: 'center',
-    paddingVertical: 30,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
   },
-  modalAcceptedTitle: {
+  acceptedTitle: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: '700',
+    color: TEXT_MAIN,
     marginTop: 16,
     marginBottom: 8,
   },
-  modalAcceptedText: {
+  acceptedDescription: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
+    color: TEXT_MUTED,
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 20,
   },
-  modalMessageBtn: {
+  messageClientBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: GOLD,
+    backgroundColor: BLUE,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
   },
-  modalMessageBtnText: {
+  messageClientText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0a0a0a',
+    color: WHITE,
   },
 });

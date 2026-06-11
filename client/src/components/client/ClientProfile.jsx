@@ -1,5 +1,3 @@
-
-
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
@@ -18,20 +16,41 @@ import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { getProfile, logout } from '../../Redux/slices/authSlice';
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const GREEN      = '#4ADE80';
-const GREEN_DARK = '#22C55E';
-const GREEN_SOFT = '#DCFCE7';
-const GREEN_MID  = '#86EFAC';
+// ── Vantara Design tokens ──────────────────────────────────────────────────────────
+const NAVY       = '#071A3E';
+const NAVY2      = '#0D2151';
+const BLUE       = '#0055A5';
+const BLUE_MD    = '#0073CF';
+const BLUE_LT    = '#1E90FF';
+const GOLD       = '#C89520';
+const GOLD_LT    = '#E8B84B';
+const GOLD_DK    = '#8A6410';
+const SILVER     = '#8899B0';
+const SILVER2    = '#B8C8D8';
 const WHITE      = '#FFFFFF';
-const OFF_WHITE  = '#F0FDF4';
-const BORDER     = 'rgba(74,222,128,0.25)';
-const TEXT_MAIN  = '#0F2417';
-const TEXT_MUTED = '#6B7280';
-const TEXT_LIGHT = '#9CA3AF';
+const BG         = '#EEF4FA';
+const CARD       = '#FFFFFF';
+const TEXT_MAIN  = '#071A3E';
+const TEXT_MUTED = '#3A5070';
+const TEXT_LIGHT = '#7A90A8';
+const BORDER     = '#C8D8E8';
+const GREEN      = '#059669';
+const GREEN_SOFT = '#D1FAE5';
+const GREEN_MID  = '#86EFAC';
+const GREEN_DARK = '#059669';
 const RED        = '#DC2626';
 const RED_SOFT   = '#FEF2F2';
 const RED_BORDER = '#FECACA';
+// ─────────────────────────────────────────────────────────────────────────────────
+
+// ── Bottom tabs (copied from reference) ───────────────────────────────────────────────
+const TABS = [
+  { key: 'Home',          label: 'Home',     icon: 'home',          iconOutline: 'home-outline'          },
+  { key: 'PostJob',       label: 'Post Job', icon: 'add-circle',    iconOutline: 'add-circle-outline'    },
+  { key: 'Hiredtalents',  label: 'Hired',    icon: 'people',        iconOutline: 'people-outline'        },
+  { key: 'Message',       label: 'Messages', icon: 'chatbubble',    iconOutline: 'chatbubble-outline'    },
+  { key: 'ClientProfile', label: 'Profile',  icon: 'person',        iconOutline: 'person-outline'        },
+];
 
 // ─── Drawer menu items ────────────────────────────────────────────────────────
 const MENU_ITEMS = [
@@ -99,6 +118,7 @@ export default function ClientProfile({ onNavigate }) {
 
   const [refreshing, setRefreshing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeBottomTab, setActiveBottomTab] = useState('ClientProfile');
 
   const slideAnim   = useRef(new Animated.Value(0)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -137,6 +157,16 @@ export default function ClientProfile({ onNavigate }) {
         },
       },
     ]);
+  };
+
+  // Handle bottom tab navigation
+  const handleTabPress = (key) => {
+    setActiveBottomTab(key);
+    if (key === 'Home') onNavigate('ClientDashboard');
+    if (key === 'PostJob') onNavigate('PostJob');
+    if (key === 'Hiredtalents') onNavigate('Hiredtalents');
+    if (key === 'Message') onNavigate('Message');
+    if (key === 'ClientProfile') onNavigate('ClientProfile');
   };
 
   // ── Profile helpers ────────────────────────────────────────────────────────
@@ -179,7 +209,7 @@ export default function ClientProfile({ onNavigate }) {
         <View style={s.topbar}>
           <Text style={s.topbarTitle}>Profile</Text>
           <TouchableOpacity style={s.menuBtn} onPress={openDrawer} activeOpacity={0.7}>
-            <Ionicons name="menu" size={20} color={GREEN_DARK} />
+            <Ionicons name="menu" size={20} color={WHITE} />
           </TouchableOpacity>
         </View>
 
@@ -187,7 +217,7 @@ export default function ClientProfile({ onNavigate }) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={s.scroll}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GREEN_DARK} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
           }
         >
           {/* ── Hero ── */}
@@ -215,7 +245,7 @@ export default function ClientProfile({ onNavigate }) {
             <View style={s.contactList}>
               {user?.email_address ? (
                 <View style={s.contactRow}>
-                  <Ionicons name="mail-outline" size={16} color={GREEN_DARK} />
+                  <Ionicons name="mail-outline" size={16} color={BLUE} />
                   <Text style={s.contactText}>{user.email_address}</Text>
                 </View>
               ) : null}
@@ -226,7 +256,7 @@ export default function ClientProfile({ onNavigate }) {
                   onPress={() => onNavigate('EditClientProfile')}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="call-outline" size={16} color={GREEN_DARK} />
+                  <Ionicons name="call-outline" size={16} color={BLUE} />
                   <Text style={s.contactText}>{user.phone_number}</Text>
                   <Ionicons name="chevron-forward" size={14} color={TEXT_LIGHT} style={{ marginLeft: 'auto' }} />
                 </TouchableOpacity>
@@ -234,14 +264,14 @@ export default function ClientProfile({ onNavigate }) {
 
               {location ? (
                 <View style={s.contactRow}>
-                  <Ionicons name="location-outline" size={16} color={GREEN_DARK} />
+                  <Ionicons name="location-outline" size={16} color={BLUE} />
                   <Text style={s.contactText}>{location}</Text>
                 </View>
               ) : null}
 
               {user?.website ? (
                 <View style={s.contactRow}>
-                  <Ionicons name="globe-outline" size={16} color={GREEN_DARK} />
+                  <Ionicons name="globe-outline" size={16} color={BLUE} />
                   <Text style={s.contactText}>{user.website}</Text>
                 </View>
               ) : null}
@@ -254,9 +284,9 @@ export default function ClientProfile({ onNavigate }) {
             onPress={() => onNavigate('ClientVisibility')}
             activeOpacity={0.8}
           >
-            <Ionicons name="eye-outline" size={16} color={GREEN_DARK} />
+            <Ionicons name="eye-outline" size={16} color={BLUE} />
             <Text style={s.visibilityText}>Freelancers can find you</Text>
-            <Ionicons name="chevron-down" size={14} color={GREEN_DARK} style={{ marginLeft: 'auto' }} />
+            <Ionicons name="chevron-down" size={14} color={BLUE} style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
 
           {/* ── Company Information ── */}
@@ -268,7 +298,7 @@ export default function ClientProfile({ onNavigate }) {
                 onPress={() => onNavigate('EditClientProfile')}
                 activeOpacity={0.7}
               >
-                <Ionicons name="create-outline" size={14} color={GREEN_DARK} />
+                <Ionicons name="create-outline" size={14} color={BLUE} />
                 <Text style={s.editRowBtnText}>Edit</Text>
               </TouchableOpacity>
             </View>
@@ -319,7 +349,7 @@ export default function ClientProfile({ onNavigate }) {
                 onPress={() => onNavigate('EditClientProfile')}
                 activeOpacity={0.7}
               >
-                <Ionicons name="create-outline" size={14} color={GREEN_DARK} />
+                <Ionicons name="create-outline" size={14} color={BLUE} />
                 <Text style={s.editRowBtnText}>Edit</Text>
               </TouchableOpacity>
             </View>
@@ -387,7 +417,7 @@ export default function ClientProfile({ onNavigate }) {
             {/* Drawer header */}
             <View style={s.drawerHeader}>
               <TouchableOpacity style={s.drawerCloseBtn} onPress={closeDrawer} activeOpacity={0.7}>
-                <Ionicons name="close" size={18} color={GREEN_DARK} />
+                <Ionicons name="close" size={18} color={WHITE} />
               </TouchableOpacity>
               {user?.profile_picture ? (
                 <Image source={{ uri: user.profile_picture }} style={s.drawerAvatar} />
@@ -410,7 +440,7 @@ export default function ClientProfile({ onNavigate }) {
                     activeOpacity={0.7}
                   >
                     <View style={s.drawerItemIcon}>
-                      <Ionicons name={item.icon} size={18} color={GREEN_DARK} />
+                      <Ionicons name={item.icon} size={18} color={BLUE} />
                     </View>
                     <View style={s.drawerItemText}>
                       <Text style={s.drawerItemLabel}>{item.label}</Text>
@@ -434,6 +464,46 @@ export default function ClientProfile({ onNavigate }) {
           </SafeAreaView>
         </Animated.View>
       )}
+
+      {/* ── Bottom Tab Bar (copied from reference) ── */}
+      <SafeAreaView edges={['bottom']} style={s.tabSafe}>
+        <View style={s.tabBar}>
+          {TABS.map(tab => {
+            const active = activeBottomTab === tab.key;
+            const isPost = tab.key === 'PostJob';
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={s.tabItem}
+                onPress={() => handleTabPress(tab.key)}
+                activeOpacity={0.7}
+              >
+                {active && <View style={s.tabActiveBar} />}
+                {isPost ? (
+                  <View style={s.tabFab}>
+                    <Ionicons name={active ? tab.icon : tab.iconOutline} size={22} color={WHITE} />
+                  </View>
+                ) : (
+                  <View style={s.tabIconWrap}>
+                    <Ionicons
+                      name={active ? tab.icon : tab.iconOutline}
+                      size={23}
+                      color={active ? BLUE : TEXT_LIGHT}
+                    />
+                  </View>
+                )}
+                <Text style={[
+                  s.tabLabel,
+                  active && s.tabLabelActive,
+                  isPost && s.tabLabelPost,
+                ]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -442,7 +512,7 @@ export default function ClientProfile({ onNavigate }) {
 function InfoRow({ icon, label, value, last }) {
   return (
     <View style={[ir.row, !last && ir.rowBorder]}>
-      <Ionicons name={icon} size={15} color={GREEN_DARK} style={{ marginTop: 1 }} />
+      <Ionicons name={icon} size={15} color={BLUE} style={{ marginTop: 1 }} />
       <View style={ir.content}>
         <Text style={ir.label}>{label}</Text>
         <Text style={ir.value}>{value || 'Not specified'}</Text>
@@ -461,7 +531,7 @@ const ir = StyleSheet.create({
   },
   rowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(74,222,128,0.15)',
+    borderBottomColor: 'rgba(0,104,181,0.15)',
   },
   content: { flex: 1 },
   label: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '600', letterSpacing: 0.4, marginBottom: 2 },
@@ -471,27 +541,26 @@ const ir = StyleSheet.create({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root: { flex: 1 },
-  safe: { flex: 1, backgroundColor: OFF_WHITE },
+  safe: { flex: 1, backgroundColor: BG },
 
   // Top bar
   topbar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 13,
-    backgroundColor: WHITE,
-    borderBottomWidth: 1, borderBottomColor: BORDER,
+    backgroundColor: NAVY,
   },
-  topbarTitle: { fontSize: 15, fontWeight: '600', color: TEXT_MAIN },
+  topbarTitle: { fontSize: 15, fontWeight: '600', color: WHITE },
   menuBtn: {
     width: 36, height: 36,
-    backgroundColor: GREEN_SOFT,
-    borderRadius: 10, borderWidth: 1, borderColor: GREEN_MID,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center',
   },
 
   scroll: { paddingBottom: 40 },
 
   // Hero
-  hero: { backgroundColor: WHITE, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16 },
+  hero: { backgroundColor: CARD, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16, borderBottomWidth: 1.5, borderBottomColor: BORDER },
   heroRow: {
     flexDirection: 'row', alignItems: 'flex-start',
     justifyContent: 'space-between', marginBottom: 16,
@@ -502,7 +571,7 @@ const s = StyleSheet.create({
   avatarImg: { width: 68, height: 68, borderRadius: 34 },
   avatarPlaceholder: {
     width: 68, height: 68, borderRadius: 34,
-    backgroundColor: '#4B5563',
+    backgroundColor: BLUE,
     alignItems: 'center', justifyContent: 'center',
   },
   avatarInitials: { fontSize: 22, fontWeight: '700', color: WHITE },
@@ -514,17 +583,17 @@ const s = StyleSheet.create({
   visibilityBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginHorizontal: 16, marginTop: 12, marginBottom: 4,
-    backgroundColor: GREEN_SOFT,
-    borderWidth: 1, borderColor: GREEN_MID,
+    backgroundColor: 'rgba(0,104,181,0.08)',
+    borderWidth: 1.5, borderColor: 'rgba(0,104,181,0.2)',
     borderRadius: 10,
     paddingHorizontal: 14, paddingVertical: 11,
   },
-  visibilityText: { fontSize: 13, fontWeight: '600', color: GREEN_DARK },
+  visibilityText: { fontSize: 13, fontWeight: '600', color: BLUE },
 
   // Sections
   section: {
     paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4,
-    backgroundColor: WHITE,
+    backgroundColor: CARD,
     marginTop: 10,
   },
   sectionHeader: {
@@ -535,27 +604,27 @@ const s = StyleSheet.create({
   editRowBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 5,
-    backgroundColor: GREEN_SOFT,
-    borderRadius: 8, borderWidth: 1, borderColor: GREEN_MID,
+    backgroundColor: 'rgba(0,104,181,0.08)',
+    borderRadius: 8, borderWidth: 1.5, borderColor: 'rgba(0,104,181,0.2)',
   },
-  editRowBtnText: { fontSize: 12, fontWeight: '600', color: GREEN_DARK },
+  editRowBtnText: { fontSize: 12, fontWeight: '600', color: BLUE },
 
   // Info card
   infoCard: {
-    backgroundColor: OFF_WHITE,
-    borderRadius: 12, borderWidth: 1, borderColor: BORDER,
+    backgroundColor: BG,
+    borderRadius: 12, borderWidth: 1.5, borderColor: BORDER,
     overflow: 'hidden', marginBottom: 10,
   },
 
   // About card
   aboutCard: {
-    backgroundColor: OFF_WHITE,
-    borderRadius: 12, borderWidth: 1, borderColor: BORDER,
+    backgroundColor: BG,
+    borderRadius: 12, borderWidth: 1.5, borderColor: BORDER,
     padding: 14, marginBottom: 10,
   },
   aboutText: { fontSize: 14, color: TEXT_MUTED, lineHeight: 21 },
 
-  divider: { height: 1, backgroundColor: BORDER },
+  divider: { height: 1.5, backgroundColor: BORDER },
 
   // Improve section
   improveSectionTitle: { fontSize: 18, fontWeight: '700', color: TEXT_MAIN, marginBottom: 4 },
@@ -563,9 +632,9 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14,
-    backgroundColor: WHITE, gap: 12,
+    backgroundColor: CARD, gap: 12,
   },
-  improveRowAlt: { backgroundColor: OFF_WHITE },
+  improveRowAlt: { backgroundColor: BG },
   improveInfo: { flex: 1 },
   improveTitle: { fontSize: 14, fontWeight: '700', color: TEXT_MAIN, marginBottom: 3 },
   improveDesc: { fontSize: 13, color: TEXT_MUTED, lineHeight: 18 },
@@ -574,46 +643,46 @@ const s = StyleSheet.create({
   footer: {
     paddingVertical: 20, paddingHorizontal: 16,
     alignItems: 'center',
-    borderTopWidth: 1, borderTopColor: BORDER,
-    marginTop: 16, backgroundColor: WHITE,
+    borderTopWidth: 1.5, borderTopColor: BORDER,
+    marginTop: 16, backgroundColor: CARD,
   },
   footerText: { fontSize: 11, color: TEXT_MUTED },
-  footerLink: { color: GREEN_DARK, textDecorationLine: 'underline' },
+  footerLink: { color: BLUE, textDecorationLine: 'underline' },
 
   // Overlay
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(7,26,62,0.55)',
     zIndex: 10,
   },
 
   // Drawer
   drawer: {
     position: 'absolute', top: 0, right: 0, bottom: 0,
-    width: '78%', backgroundColor: WHITE, zIndex: 20,
-    borderLeftWidth: 1, borderLeftColor: BORDER,
+    width: '78%', backgroundColor: CARD, zIndex: 20,
+    borderLeftWidth: 1.5, borderLeftColor: BORDER,
     shadowColor: '#000', shadowOffset: { width: -4, height: 0 },
     shadowOpacity: 0.12, shadowRadius: 12, elevation: 16,
   },
   drawerInner: { flex: 1 },
   drawerHeader: {
     paddingHorizontal: 18, paddingTop: 16, paddingBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: BORDER,
-    backgroundColor: OFF_WHITE,
+    borderBottomWidth: 1.5, borderBottomColor: BORDER,
+    backgroundColor: BG,
   },
   drawerCloseBtn: {
     alignSelf: 'flex-end',
     width: 30, height: 30, borderRadius: 8,
-    backgroundColor: GREEN_SOFT, borderWidth: 1, borderColor: GREEN_MID,
+    backgroundColor: NAVY, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
   drawerAvatar: { width: 52, height: 52, borderRadius: 26, marginBottom: 10 },
   drawerAvatarPlaceholder: {
     width: 52, height: 52, borderRadius: 26,
-    backgroundColor: GREEN,
+    backgroundColor: BLUE,
     alignItems: 'center', justifyContent: 'center', marginBottom: 10,
   },
-  drawerAvatarInitials: { fontSize: 18, fontWeight: '700', color: TEXT_MAIN },
+  drawerAvatarInitials: { fontSize: 18, fontWeight: '700', color: WHITE },
   drawerName: { fontSize: 15, fontWeight: '700', color: TEXT_MAIN },
   drawerRole: { fontSize: 12, color: TEXT_MUTED, marginTop: 2 },
   drawerBody: { flex: 1, paddingTop: 6 },
@@ -623,21 +692,53 @@ const s = StyleSheet.create({
   },
   drawerItemIcon: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: GREEN_SOFT, borderWidth: 1, borderColor: GREEN_MID,
+    backgroundColor: 'rgba(0,104,181,0.08)', borderWidth: 1.5, borderColor: 'rgba(0,104,181,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
   drawerItemText: { flex: 1 },
   drawerItemLabel: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN },
   drawerItemSub: { fontSize: 11, color: TEXT_LIGHT, marginTop: 1 },
-  drawerDivider: { height: 1, backgroundColor: BORDER, marginHorizontal: 18 },
+  drawerDivider: { height: 1.5, backgroundColor: BORDER, marginHorizontal: 18 },
   drawerFooter: {
     paddingHorizontal: 18, paddingVertical: 16,
-    borderTopWidth: 1, borderTopColor: BORDER,
+    borderTopWidth: 1.5, borderTopColor: BORDER,
   },
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, paddingVertical: 13, borderRadius: 12,
-    backgroundColor: RED_SOFT, borderWidth: 1, borderColor: RED_BORDER,
+    backgroundColor: RED_SOFT, borderWidth: 1.5, borderColor: RED_BORDER,
   },
   signOutText: { fontSize: 14, fontWeight: '700', color: RED },
+
+  // ── Bottom Tab Bar (copied from reference) ──
+  tabSafe: { backgroundColor: WHITE },
+  tabBar: {
+    flexDirection: 'row', backgroundColor: WHITE,
+    borderTopWidth: 1.5, borderTopColor: BORDER,
+    paddingTop: 6, paddingBottom: 4, paddingHorizontal: 8,
+  },
+  tabItem: {
+    flex: 1, alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingVertical: 4, position: 'relative',
+  },
+  tabActiveBar: {
+    position: 'absolute', top: 0,
+    width: 24, height: 3,
+    backgroundColor: BLUE, borderRadius: 999,
+  },
+  tabIconWrap: { position: 'relative', marginBottom: 3, marginTop: 6 },
+  tabFab: {
+    width: 44, height: 36, borderRadius: 12,
+    backgroundColor: GOLD,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 3, marginTop: 2,
+    shadowColor: GOLD_DK,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.28, shadowRadius: 5, elevation: 3,
+    borderWidth: 1, borderColor: GOLD_LT,
+  },
+  tabLabel: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500' },
+  tabLabelActive: { color: BLUE, fontWeight: '700' },
+  tabLabelPost: { color: GOLD, fontWeight: '700' },
 });

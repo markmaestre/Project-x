@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import Home from './components/dashboard/Home';
 import Login from './components/dashboard/Login';
 import RoleSelection from './components/dashboard/RoleSelection';
+import OnboardingScreen from './components/dashboard/OnboardingScreen';
 import ClientRegistration from './components/client/ClientRegistration';
 import FreelancerRegistration from './components/freelancer/FreelancerRegistration';
 
@@ -16,6 +17,7 @@ import ClientProfile from './components/client/ClientProfile';
 import Settings from './components/client/Settings';
 import Message from './components/client/Message';
 import ClientMessagesScreen from './components/client/Message';
+import Notif from './components/client/Notif';
 
 // Freelancer Screens
 import FreelancerScreen from './components/freelancer/FreelancerScreen';
@@ -26,6 +28,8 @@ import ReceivedOffers from './components/freelancer/ReceivedOffers';
 import Messages from './components/freelancer/Messages';
 import MyApplications from './components/freelancer/MyApplications';
 import EditProfile from './components/freelancer/EditProfile';
+import Notifications from './components/freelancer/Notifications';
+
 
 // Client Settings Screen
 import ClientSettingsScreen from './components/client/Settings';
@@ -65,6 +69,8 @@ export default function AppNavigator() {
       return <ClientRegistration onNavigate={handleNavigate} />;
     case 'FreelancerRegistration':
       return <FreelancerRegistration onNavigate={handleNavigate} />;
+    case 'Onboarding':
+      return <OnboardingScreen onNavigate={handleNavigate} />;
 
     // ── Client ─────────────────────────────────────
     case 'Client':
@@ -82,6 +88,8 @@ export default function AppNavigator() {
       return <ClientProfile onNavigate={handleNavigate} />; 
     case 'Message':
       return <Message onNavigate={handleNavigate} />;  
+    case 'Notif':
+      return <Notif onNavigate={handleNavigate} />;  
 
     // ── Shared screens — role-aware ────────────────────────
     case 'Messages':
@@ -105,6 +113,8 @@ export default function AppNavigator() {
       return <MyApplications onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
     case 'EditProfile':
       return <EditProfile onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
+    case 'Notifications':
+      return <Notifications onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
 
     // ── Home ───────────────────────────────────────────────
     case 'Home':
