@@ -87,8 +87,8 @@ const formatPayInformation = (payInfo, budgetAmount) => {
 // ── Bottom tabs ───────────────────────────────────────────────────────────────
 const TABS = [
   { key: 'Home',          label: 'Home',     icon: 'home',          iconOutline: 'home-outline'          },
-  { key: 'PostJob',       label: 'Post Job', icon: 'add-circle',    iconOutline: 'add-circle-outline'    },
   { key: 'Hiredtalents',   label: 'Hired',    icon: 'people',        iconOutline: 'people-outline'        },
+   { key: 'PostJob',       label: 'Post Job', icon: 'add-circle',    iconOutline: 'add-circle-outline'    },
   { key: 'Message',       label: 'Messages', icon: 'chatbubble',    iconOutline: 'chatbubble-outline'    },
   { key: 'ClientProfile', label: 'Profile',  icon: 'person',        iconOutline: 'person-outline'        },
 ];

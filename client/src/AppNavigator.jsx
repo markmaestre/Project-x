@@ -1,11 +1,12 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useSelector } from 'react-redux';
+import { View, ActivityIndicator } from 'react-native';
 import Home from './components/dashboard/Home';
 import Login from './components/dashboard/Login';
 import RoleSelection from './components/dashboard/RoleSelection';
-import OnboardingScreen from './components/dashboard/OnboardingScreen';
 import ClientRegistration from './components/client/ClientRegistration';
 import FreelancerRegistration from './components/freelancer/FreelancerRegistration';
+import OnboardingScreen from './components/dashboard/OnboardingScreen';
 
 // Client Screens
 import ClientScreen from './components/client/ClientScreen';
@@ -17,7 +18,6 @@ import ClientProfile from './components/client/ClientProfile';
 import Settings from './components/client/Settings';
 import Message from './components/client/Message';
 import ClientMessagesScreen from './components/client/Message';
-import Notif from './components/client/Notif';
 
 // Freelancer Screens
 import FreelancerScreen from './components/freelancer/FreelancerScreen';
@@ -28,22 +28,60 @@ import ReceivedOffers from './components/freelancer/ReceivedOffers';
 import Messages from './components/freelancer/Messages';
 import MyApplications from './components/freelancer/MyApplications';
 import EditProfile from './components/freelancer/EditProfile';
-import Notifications from './components/freelancer/Notifications';
-
 
 // Client Settings Screen
 import ClientSettingsScreen from './components/client/Settings';
 
+// Flag to track if onboarding has been shown in this session
+let onboardingShownThisSession = false;
+
 export default function AppNavigator() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const [route, setRoute] = useState('Home');
+  const [isLoading, setIsLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    // Reset onboarding flag when component mounts
+    const timer = setTimeout(() => {
+      // IMPORTANT: Only show onboarding if:
+      // 1. User is NOT authenticated (not logged in)
+      // 2. AND onboarding hasn't been shown in this session yet
+      // 3. AND we're not already showing onboarding
+      if (!isAuthenticated && !onboardingShownThisSession && !showOnboarding) {
+        console.log('Showing onboarding screen');
+        setShowOnboarding(true);
+        setRoute('Onboarding');
+        onboardingShownThisSession = true;
+      } else {
+        console.log('Skipping onboarding - isAuthenticated:', isAuthenticated, 'onboardingShown:', onboardingShownThisSession);
+      }
+      setIsLoading(false);
+    }, 500); // Short delay to ensure auth state is loaded
+    
+    return () => clearTimeout(timer);
+  }, [isAuthenticated]);
 
   const handleNavigate = useCallback((screen, params) => {
     console.log('==> Navigating to:', screen, params);
     setRoute(screen);
   }, []);
 
+  const handleOnboardingComplete = () => {
+    console.log('Onboarding completed');
+    setShowOnboarding(false);
+    setRoute('Home');
+  };
+
   const getScreen = () => {
+    if (isLoading) {
+      return 'Loading';
+    }
+
+    if (showOnboarding) {
+      return 'Onboarding';
+    }
+
     if (isAuthenticated && user) {
       const role = user.role?.toLowerCase();
       if (route === 'Home' || route === 'Login') {
@@ -58,6 +96,24 @@ export default function AppNavigator() {
   const isClient = user?.role?.toLowerCase() === 'client';
 
   console.log('Active route:', activeRoute);
+  console.log('Show onboarding:', showOnboarding);
+  console.log('Is loading:', isLoading);
+  console.log('Is authenticated:', isAuthenticated);
+  console.log('Has user:', !!user);
+
+  // Loading screen
+  if (activeRoute === 'Loading') {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#071A3E' }}>
+        <ActivityIndicator size="large" color="#C89520" />
+      </View>
+    );
+  }
+
+  // Onboarding Screen
+  if (activeRoute === 'Onboarding') {
+    return <OnboardingScreen onComplete={handleOnboardingComplete} />;
+  }
 
   switch (activeRoute) {
     // ── Auth & Public ──────────────────────────────────────
@@ -69,27 +125,23 @@ export default function AppNavigator() {
       return <ClientRegistration onNavigate={handleNavigate} />;
     case 'FreelancerRegistration':
       return <FreelancerRegistration onNavigate={handleNavigate} />;
-    case 'Onboarding':
-      return <OnboardingScreen onNavigate={handleNavigate} />;
 
     // ── Client ─────────────────────────────────────
     case 'Client':
     case 'ClientDashboard':
       return <ClientScreen onNavigate={handleNavigate} />;
     case 'PostJob':
-      return <PostJob onNavigate={handleNavigate} />; 
+      return <PostJob onNavigate={handleNavigate} />;
     case 'Mypostings':
-      return <Mypostings onNavigate={handleNavigate} />;  
+      return <Mypostings onNavigate={handleNavigate} />;
     case 'Sentoffers':
-      return <Sentoffers onNavigate={handleNavigate} />;  
+      return <Sentoffers onNavigate={handleNavigate} />;
     case 'Hiredtalents':
       return <Hiredtalents onNavigate={handleNavigate} />;
     case 'ClientProfile':
-      return <ClientProfile onNavigate={handleNavigate} />; 
+      return <ClientProfile onNavigate={handleNavigate} />;
     case 'Message':
-      return <Message onNavigate={handleNavigate} />;  
-    case 'Notif':
-      return <Notif onNavigate={handleNavigate} />;  
+      return <Message onNavigate={handleNavigate} />;
 
     // ── Shared screens — role-aware ────────────────────────
     case 'Messages':
@@ -109,12 +161,10 @@ export default function AppNavigator() {
       return <MyJobs onNavigate={handleNavigate} />;
     case 'ReceivedOffers':
       return <ReceivedOffers onNavigate={handleNavigate} />;
-    case 'MyApplications':  // IMPORTANT: Capital M and Capital A
+    case 'MyApplications':
       return <MyApplications onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
     case 'EditProfile':
       return <EditProfile onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
-    case 'Notifications':
-      return <Notifications onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
 
     // ── Home ───────────────────────────────────────────────
     case 'Home':

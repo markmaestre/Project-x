@@ -78,10 +78,20 @@ export default function OnboardingScreen({ onComplete }) {
 
   const handleComplete = async () => {
     try {
-      await AsyncStorage.setItem('hasSeenOnboarding', 'true');
+      // Check if AsyncStorage is available
+      if (AsyncStorage && typeof AsyncStorage.setItem === 'function') {
+        await AsyncStorage.setItem('hasSeenOnboarding', 'true');
+      } else {
+        // Fallback for when AsyncStorage is not available
+        console.warn('AsyncStorage not available, using localStorage fallback');
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem('hasSeenOnboarding', 'true');
+        }
+      }
       if (onComplete) onComplete();
     } catch (error) {
-      console.error('Error saving onboarding status:', error);
+      console.warn('Failed to save onboarding status, proceeding anyway:', error.message);
+      // Still call onComplete even if storage fails
       if (onComplete) onComplete();
     }
   };
