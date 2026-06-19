@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,13 @@ import {
   Image,
   Alert,
   StatusBar,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector, useDispatch } from 'react-redux';
 import { Directory, File, Paths } from 'expo-file-system';
-import { logout } from '../../Redux/slices/authSlice';
+import { getProfile, logout } from '../../Redux/slices/authSlice';
 
 // ── Vantara Design tokens ─────────────────────────────────────────────────────
 const NAVY        = '#071A3E';
@@ -36,6 +37,8 @@ const BORDER      = '#C8D8E8';
 const RED         = '#DC2626';
 const RED_SOFT    = '#FEF2F2';
 const RED_BORDER  = '#FECACA';
+const GREEN       = '#059669';
+const GREEN_SOFT  = '#D1FAE5';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CV_DIRECTORY = new Directory(Paths.document, 'cvs');
@@ -57,7 +60,7 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
           const isActive = activeTab === tab.key;
           const isMyJobs = tab.key === 'MyJobs';
           const hasBadge = tab.key === 'Messages' && pendingOffers > 0;
-          
+
           return (
             <TouchableOpacity
               key={tab.key}
@@ -100,11 +103,49 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   );
 }
 
+// ── InfoRow sub-component (label/value line, same pattern as ClientProfile) ──
+function InfoRow({ icon, label, value, last }) {
+  return (
+    <View style={[ir.row, !last && ir.rowBorder]}>
+      <Ionicons name={icon} size={15} color={BLUE} style={{ marginTop: 1 }} />
+      <View style={ir.content}>
+        <Text style={ir.label}>{label}</Text>
+        <Text style={ir.value}>{value || 'Not specified'}</Text>
+      </View>
+    </View>
+  );
+}
+
+const ir = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 11, paddingHorizontal: 14 },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: 'rgba(0,85,165,0.15)' },
+  content: { flex: 1 },
+  label: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '600', letterSpacing: 0.4, marginBottom: 2 },
+  value: { fontSize: 14, color: TEXT_MAIN },
+});
+
+// ── Read-only chip list (skills / languages / certifications) ────────────────
+function ChipList({ items }) {
+  if (!items || items.length === 0) {
+    return <Text style={styles.emptyChipText}>None added yet</Text>;
+  }
+  return (
+    <View style={styles.chipListWrap}>
+      {items.map((item, i) => (
+        <View key={`${item}-${i}`} style={styles.chipReadOnly}>
+          <Text style={styles.chipReadOnlyText}>{item}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function Profile({ onNavigate, route }) {
   const { user } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
   const [savedCV, setSavedCV] = useState(null);
   const [activeTab, setActiveTab] = useState('Profile');
+  const [refreshing, setRefreshing] = useState(false);
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`.toUpperCase();
 
@@ -118,6 +159,22 @@ export default function Profile({ onNavigate, route }) {
   useEffect(() => {
     loadLocalCV();
   }, []);
+
+  // ── Refresh profile from server ─────────────────────────────────────────
+  const fetchProfile = useCallback(async () => {
+    try {
+      await dispatch(getProfile()).unwrap();
+    } catch {
+      Alert.alert('Error', 'Failed to load profile.');
+    }
+  }, [dispatch]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchProfile();
+    await loadLocalCV();
+    setRefreshing(false);
+  }, [fetchProfile]);
 
   const loadLocalCV = async () => {
     try {
@@ -170,7 +227,6 @@ export default function Profile({ onNavigate, route }) {
           onPress: async () => {
             try {
               await dispatch(logout()).unwrap();
-              // Navigate to Login screen
               onNavigate('Login');
             } catch (error) {
               Alert.alert('Error', 'Failed to log out. Please try again.');
@@ -245,6 +301,19 @@ export default function Profile({ onNavigate, route }) {
 
   const pendingOffers = 0; // You can calculate this from user data if needed
 
+  // ── Derived professional info ─────────────────────────────────────────────
+  const rateText = user?.hourly_rate
+    ? `₱${user.hourly_rate} / hour`
+    : user?.fixed_rate
+    ? `₱${user.fixed_rate} (fixed rate)`
+    : null;
+
+  const experienceText = user?.years_of_experience
+    ? `${user.years_of_experience} year${Number(user.years_of_experience) === 1 ? '' : 's'}`
+    : null;
+
+  const isAvailable = user?.is_available ?? true;
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -254,6 +323,9 @@ export default function Profile({ onNavigate, route }) {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scroll}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
+          }
         >
           {/* ── Header ── */}
           <View style={styles.header}>
@@ -296,6 +368,14 @@ export default function Profile({ onNavigate, route }) {
             {user?.username ? (
               <Text style={styles.profileUsername}>@{user.username}</Text>
             ) : null}
+
+            {/* Availability badge */}
+            <View style={[styles.availabilityBadge, isAvailable ? styles.availabilityBadgeOn : styles.availabilityBadgeOff]}>
+              <View style={[styles.availabilityDot, { backgroundColor: isAvailable ? GREEN : TEXT_LIGHT }]} />
+              <Text style={[styles.availabilityBadgeText, isAvailable && { color: GREEN }]}>
+                {isAvailable ? 'Available for work' : 'Not available'}
+              </Text>
+            </View>
 
             {/* Stats row */}
             <View style={styles.statsRow}>
@@ -354,6 +434,85 @@ export default function Profile({ onNavigate, route }) {
                 </TouchableOpacity>
               </View>
             )}
+          </View>
+
+          {/* ── About ── */}
+          {user?.bio_about ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="person-outline" size={16} color={BLUE} />
+                  <Text style={styles.sectionTitle}>About</Text>
+                </View>
+              </View>
+              <Text style={styles.aboutText}>{user.bio_about}</Text>
+            </View>
+          ) : null}
+
+          {/* ── Professional Details ── */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="briefcase-outline" size={16} color={BLUE} />
+                <Text style={styles.sectionTitle}>Professional Details</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.editRowBtn}
+                onPress={() => onNavigate('EditProfile')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="create-outline" size={14} color={BLUE} />
+                <Text style={styles.editRowBtnText}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.infoCard}>
+              <InfoRow icon="time-outline" label="Years of Experience" value={experienceText} />
+              <InfoRow icon="cash-outline" label="Rate" value={rateText} last />
+            </View>
+          </View>
+
+          {/* ── Skills ── */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="star-outline" size={16} color={BLUE} />
+                <Text style={styles.sectionTitle}>Skills</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.editRowBtn}
+                onPress={() => onNavigate('EditProfile')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="create-outline" size={14} color={BLUE} />
+                <Text style={styles.editRowBtnText}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+            <ChipList items={user?.skills} />
+          </View>
+
+          {/* ── Languages & Certifications ── */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="ribbon-outline" size={16} color={BLUE} />
+                <Text style={styles.sectionTitle}>Languages & Certifications</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.editRowBtn}
+                onPress={() => onNavigate('EditProfile')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="create-outline" size={14} color={BLUE} />
+                <Text style={styles.editRowBtnText}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.subLabel}>Languages</Text>
+            <ChipList items={user?.languages} />
+
+            <Text style={[styles.subLabel, { marginTop: 14 }]}>Certifications</Text>
+            <ChipList items={user?.certifications} />
           </View>
 
           {/* ── Improve matches ── */}
@@ -437,9 +596,9 @@ export default function Profile({ onNavigate, route }) {
       </View>
 
       {/* ── Bottom Tab Bar ── */}
-      <BottomTabBar 
-        activeTab="Profile" 
-        onTabPress={handleTabBarPress} 
+      <BottomTabBar
+        activeTab="Profile"
+        onTabPress={handleTabBarPress}
         pendingOffers={pendingOffers}
       />
     </SafeAreaView>
@@ -518,7 +677,23 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
     marginBottom: 3,
   },
-  profileUsername: { fontSize: 13, color: TEXT_LIGHT, marginBottom: 20 },
+  profileUsername: { fontSize: 13, color: TEXT_LIGHT, marginBottom: 10 },
+
+  // Availability badge
+  availabilityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    marginBottom: 16,
+    borderWidth: 1.5,
+  },
+  availabilityBadgeOn: { backgroundColor: GREEN_SOFT, borderColor: 'rgba(5,150,105,0.3)' },
+  availabilityBadgeOff: { backgroundColor: BG, borderColor: BORDER },
+  availabilityDot: { width: 7, height: 7, borderRadius: 3.5 },
+  availabilityBadgeText: { fontSize: 12, fontWeight: '600', color: TEXT_MUTED },
 
   // Stats row
   statsRow: {
@@ -570,10 +745,43 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 8,
     marginBottom: 2,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderBottomWidth: 1.5,
     borderBottomColor: BORDER,
   },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: TEXT_MAIN, letterSpacing: 0.3, textTransform: 'uppercase' },
+  editRowBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    backgroundColor: 'rgba(0,85,165,0.08)',
+    borderRadius: 8, borderWidth: 1.5, borderColor: 'rgba(0,85,165,0.2)',
+  },
+  editRowBtnText: { fontSize: 12, fontWeight: '600', color: BLUE },
+
+  // Info card (Professional Details)
+  infoCard: {
+    backgroundColor: BG,
+    borderRadius: 12, borderWidth: 1.5, borderColor: BORDER,
+    overflow: 'hidden', marginTop: 10, marginBottom: 10,
+  },
+
+  // About text
+  aboutText: { fontSize: 14, color: TEXT_MUTED, lineHeight: 21, paddingVertical: 12 },
+
+  // Chips (read-only)
+  subLabel: { fontSize: 11, fontWeight: '600', color: TEXT_LIGHT, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 10, marginBottom: 8 },
+  chipListWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4, marginBottom: 12 },
+  chipReadOnly: {
+    backgroundColor: 'rgba(0,85,165,0.08)',
+    borderWidth: 1.5, borderColor: 'rgba(0,85,165,0.2)',
+    borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7,
+  },
+  chipReadOnlyText: { fontSize: 12.5, fontWeight: '600', color: BLUE },
+  emptyChipText: { fontSize: 13, color: TEXT_LIGHT, paddingVertical: 12, marginBottom: 4 },
 
   // ── Menu Item ────────────────────────────────────────────────────────────────
   menuItem: {
@@ -663,8 +871,8 @@ const styles = StyleSheet.create({
   footer: { alignItems: 'center', paddingVertical: 22, paddingHorizontal: 16 },
   footerText: { fontSize: 11, color: TEXT_LIGHT, textAlign: 'center' },
 
-  // ── Bottom Tab Bar Styles (Balanced - hindi masyadong baba, hindi nakalutang) ──
-  tabSafe: { 
+  // ── Bottom Tab Bar Styles ──
+  tabSafe: {
     backgroundColor: CARD,
     borderTopWidth: 1,
     borderTopColor: BORDER,

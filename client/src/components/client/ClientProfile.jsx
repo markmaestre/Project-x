@@ -59,7 +59,7 @@ const MENU_ITEMS = [
     label: 'Edit Profile',
     sub: 'Update your info and photo',
     icon: 'person-outline',
-    nav: 'EditClientProfile',
+    nav: 'ClientEditProfile',
   },
   {
     key: 'notifications',
@@ -90,19 +90,19 @@ const IMPROVE_ITEMS = [
     key: 'company',
     title: 'Company details',
     desc: 'Add your business type, industry, and website.',
-    nav: 'EditClientProfile',
+    nav: 'ClientEditProfile',
   },
   {
     key: 'budget',
     title: 'Budget preferences',
     desc: 'Set your typical project budget range.',
-    nav: 'EditClientProfile',
+    nav: 'ClientEditProfile',
   },
   {
     key: 'communication',
     title: 'Communication preferences',
     desc: 'Let freelancers know how you prefer to be contacted.',
-    nav: 'EditClientProfile',
+    nav: 'ClientEditProfile',
   },
   {
     key: 'visibility',
@@ -228,7 +228,7 @@ export default function ClientProfile({ onNavigate }) {
                 {headline ? <Text style={s.heroHeadline}>{headline}</Text> : null}
               </View>
               <TouchableOpacity
-                onPress={() => onNavigate('EditClientProfile')}
+                onPress={() => onNavigate('ClientEditProfile')}
                 activeOpacity={0.8}
               >
                 {user?.profile_picture ? (
@@ -253,7 +253,7 @@ export default function ClientProfile({ onNavigate }) {
               {user?.phone_number ? (
                 <TouchableOpacity
                   style={s.contactRow}
-                  onPress={() => onNavigate('EditClientProfile')}
+                  onPress={() => onNavigate('ClientEditProfile')}
                   activeOpacity={0.7}
                 >
                   <Ionicons name="call-outline" size={16} color={BLUE} />
@@ -295,7 +295,7 @@ export default function ClientProfile({ onNavigate }) {
               <Text style={s.sectionTitle}>Company Information</Text>
               <TouchableOpacity
                 style={s.editRowBtn}
-                onPress={() => onNavigate('EditClientProfile')}
+                onPress={() => onNavigate('ClientEditProfile')}
                 activeOpacity={0.7}
               >
                 <Ionicons name="create-outline" size={14} color={BLUE} />
@@ -346,7 +346,7 @@ export default function ClientProfile({ onNavigate }) {
               <Text style={s.sectionTitle}>Preferences</Text>
               <TouchableOpacity
                 style={s.editRowBtn}
-                onPress={() => onNavigate('EditClientProfile')}
+                onPress={() => onNavigate('ClientEditProfile')}
                 activeOpacity={0.7}
               >
                 <Ionicons name="create-outline" size={14} color={BLUE} />

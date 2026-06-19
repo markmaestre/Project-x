@@ -18,6 +18,7 @@ import ClientProfile from './components/client/ClientProfile';
 import Settings from './components/client/Settings';
 import Message from './components/client/Message';
 import ClientMessagesScreen from './components/client/Message';
+import ClientEditProfile from './components/client/ClientEditProfile';
 
 // Freelancer Screens
 import FreelancerScreen from './components/freelancer/FreelancerScreen';
@@ -42,12 +43,9 @@ export default function AppNavigator() {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
-    // Reset onboarding flag when component mounts
+    
     const timer = setTimeout(() => {
-      // IMPORTANT: Only show onboarding if:
-      // 1. User is NOT authenticated (not logged in)
-      // 2. AND onboarding hasn't been shown in this session yet
-      // 3. AND we're not already showing onboarding
+   
       if (!isAuthenticated && !onboardingShownThisSession && !showOnboarding) {
         console.log('Showing onboarding screen');
         setShowOnboarding(true);
@@ -57,7 +55,7 @@ export default function AppNavigator() {
         console.log('Skipping onboarding - isAuthenticated:', isAuthenticated, 'onboardingShown:', onboardingShownThisSession);
       }
       setIsLoading(false);
-    }, 500); // Short delay to ensure auth state is loaded
+    }, 500); 
     
     return () => clearTimeout(timer);
   }, [isAuthenticated]);
@@ -143,11 +141,13 @@ export default function AppNavigator() {
     case 'Message':
       return <Message onNavigate={handleNavigate} />;
 
-    // ── Shared screens — role-aware ────────────────────────
     case 'Messages':
       return isClient
         ? <ClientMessagesScreen onNavigate={handleNavigate} />
         : <Messages onNavigate={handleNavigate} />;
+    
+    case 'ClientEditProfile':
+      return <ClientEditProfile onNavigate={handleNavigate} />;
 
     // ── Freelancer  ─────────────────────────────────
     case 'Freelancer':
