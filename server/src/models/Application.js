@@ -22,7 +22,7 @@ const applicationSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'reviewed', 'offered', 'rejected', 'accepted'],
+    enum: ['pending', 'reviewed', 'interview', 'offered', 'hired', 'rejected', 'completed'],
     default: 'pending',
   },
   offer_amount: {
@@ -39,6 +39,37 @@ const applicationSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  // Interview data
+  interview_data: {
+    scheduled_date: Date,
+    meeting_link: String,
+    notes: String,
+    sent_at: Date,
+  },
+  // Resume/CV data
+  resume: {
+    name: String,
+    url: String,
+    public_id: String,
+    mime_type: String,
+    size: Number,
+  },
+  // Education data
+  education: {
+    level: String,
+    field_of_study: String,
+    institution: String,
+    graduation_year: String,
+  },
+  // Work experiences
+  experiences: [{
+    job_title: String,
+    company_name: String,
+    start_date: String,
+    end_date: String,
+    currently_working: Boolean,
+    description: String,
+  }],
 }, {
   timestamps: {
     createdAt: 'applied_at',

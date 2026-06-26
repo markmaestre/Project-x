@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { View, ActivityIndicator } from 'react-native';
+
+// ── Dashboard & Auth ──────────────────────────────────────
 import Home from './components/dashboard/Home';
 import Login from './components/dashboard/Login';
 import RoleSelection from './components/dashboard/RoleSelection';
@@ -8,19 +10,19 @@ import ClientRegistration from './components/client/ClientRegistration';
 import FreelancerRegistration from './components/freelancer/FreelancerRegistration';
 import OnboardingScreen from './components/dashboard/OnboardingScreen';
 
-// Client Screens
+// ── Client Screens ──────────────────────────────────────
 import ClientScreen from './components/client/ClientScreen';
 import PostJob from './components/client/Postjob';
 import Mypostings from './components/client/Mypostings';
 import Sentoffers from './components/client/Sentoffers';
 import Hiredtalents from './components/client/Hiredtalents';
 import ClientProfile from './components/client/ClientProfile';
-import Settings from './components/client/Settings';
-import Message from './components/client/Message';
 import ClientMessagesScreen from './components/client/Message';
 import ClientEditProfile from './components/client/ClientEditProfile';
+import RatingClient from './components/client/RatingClient';
+import Settings from './components/client/Settings';
 
-// Freelancer Screens
+// ── Freelancer Screens ──────────────────────────────────
 import FreelancerScreen from './components/freelancer/FreelancerScreen';
 import FreelancerProfile from './components/freelancer/FreelancerProfile';
 import BrowseJobs from './components/freelancer/BrowseJobs';
@@ -29,11 +31,9 @@ import ReceivedOffers from './components/freelancer/ReceivedOffers';
 import Messages from './components/freelancer/Messages';
 import MyApplications from './components/freelancer/MyApplications';
 import EditProfile from './components/freelancer/EditProfile';
+import RatingFreelancer from './components/freelancer/RatingFreelancer';
 
-// Client Settings Screen
-import ClientSettingsScreen from './components/client/Settings';
-
-// Flag to track if onboarding has been shown in this session
+// ── Flag to track if onboarding has been shown ──────────
 let onboardingShownThisSession = false;
 
 export default function AppNavigator() {
@@ -43,9 +43,7 @@ export default function AppNavigator() {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
-    
     const timer = setTimeout(() => {
-   
       if (!isAuthenticated && !onboardingShownThisSession && !showOnboarding) {
         console.log('Showing onboarding screen');
         setShowOnboarding(true);
@@ -55,23 +53,24 @@ export default function AppNavigator() {
         console.log('Skipping onboarding - isAuthenticated:', isAuthenticated, 'onboardingShown:', onboardingShownThisSession);
       }
       setIsLoading(false);
-    }, 500); 
+    }, 500);
     
     return () => clearTimeout(timer);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, showOnboarding]);
 
   const handleNavigate = useCallback((screen, params) => {
     console.log('==> Navigating to:', screen, params);
     setRoute(screen);
   }, []);
 
-  const handleOnboardingComplete = () => {
+  const handleOnboardingComplete = useCallback(() => {
     console.log('Onboarding completed');
     setShowOnboarding(false);
     setRoute('Home');
-  };
+  }, []);
 
-  const getScreen = () => {
+  // ── Get current screen based on auth state ──────────────
+  const getScreen = useCallback(() => {
     if (isLoading) {
       return 'Loading';
     }
@@ -82,24 +81,20 @@ export default function AppNavigator() {
 
     if (isAuthenticated && user) {
       const role = user.role?.toLowerCase();
+      
+      // Home route - redirect to appropriate dashboard
       if (route === 'Home' || route === 'Login') {
         if (role === 'freelancer') return 'Freelancer';
         if (role === 'client') return 'Client';
       }
     }
+    
     return route;
-  };
+  }, [isLoading, showOnboarding, isAuthenticated, user, route]);
 
   const activeRoute = getScreen();
-  const isClient = user?.role?.toLowerCase() === 'client';
 
-  console.log('Active route:', activeRoute);
-  console.log('Show onboarding:', showOnboarding);
-  console.log('Is loading:', isLoading);
-  console.log('Is authenticated:', isAuthenticated);
-  console.log('Has user:', !!user);
-
-  // Loading screen
+  // ── Loading Screen ──────────────────────────────────────
   if (activeRoute === 'Loading') {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#071A3E' }}>
@@ -108,11 +103,12 @@ export default function AppNavigator() {
     );
   }
 
-  // Onboarding Screen
+  // ── Onboarding Screen ──────────────────────────────────
   if (activeRoute === 'Onboarding') {
     return <OnboardingScreen onComplete={handleOnboardingComplete} />;
   }
 
+  // ── Screen Router ──────────────────────────────────────
   switch (activeRoute) {
     // ── Auth & Public ──────────────────────────────────────
     case 'Login':
@@ -124,7 +120,7 @@ export default function AppNavigator() {
     case 'FreelancerRegistration':
       return <FreelancerRegistration onNavigate={handleNavigate} />;
 
-    // ── Client ─────────────────────────────────────
+    // ── Client Screens ──────────────────────────────────────
     case 'Client':
     case 'ClientDashboard':
       return <ClientScreen onNavigate={handleNavigate} />;
@@ -138,18 +134,14 @@ export default function AppNavigator() {
       return <Hiredtalents onNavigate={handleNavigate} />;
     case 'ClientProfile':
       return <ClientProfile onNavigate={handleNavigate} />;
-    case 'Message':
-      return <Message onNavigate={handleNavigate} />;
-
-    case 'Messages':
-      return isClient
-        ? <ClientMessagesScreen onNavigate={handleNavigate} />
-        : <Messages onNavigate={handleNavigate} />;
-    
     case 'ClientEditProfile':
       return <ClientEditProfile onNavigate={handleNavigate} />;
+    case 'RatingClient':
+      return <RatingClient onNavigate={handleNavigate} />;
+    case 'Settings':
+      return <Settings onNavigate={handleNavigate} />;
 
-    // ── Freelancer  ─────────────────────────────────
+    // ── Freelancer Screens ──────────────────────────────────
     case 'Freelancer':
     case 'FreelancerDashboard':
       return <FreelancerScreen onNavigate={handleNavigate} />;
@@ -165,8 +157,24 @@ export default function AppNavigator() {
       return <MyApplications onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
     case 'EditProfile':
       return <EditProfile onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
+    case 'RatingFreelancer':
+      return <RatingFreelancer onNavigate={handleNavigate} />;
 
-    // ── Home ───────────────────────────────────────────────
+    // ── Messages ──────────────────────────────────────────────
+    case 'Message':
+    case 'Messages':
+      // Check if user is client or freelancer
+      if (isAuthenticated && user) {
+        const role = user.role?.toLowerCase();
+        if (role === 'client') {
+          return <ClientMessagesScreen onNavigate={handleNavigate} />;
+        } else {
+          return <Messages onNavigate={handleNavigate} />;
+        }
+      }
+      return <Messages onNavigate={handleNavigate} />;
+
+    // ── Home / Default ──────────────────────────────────────
     case 'Home':
     default:
       return <Home onNavigate={handleNavigate} />;

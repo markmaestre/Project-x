@@ -43,31 +43,28 @@ const GREEN_SOFT  = '#D1FAE5';
 
 const CV_DIRECTORY = new Directory(Paths.document, 'cvs');
 
-// ── Bottom Tab Bar with Centered My Jobs Button ─────────────────────────────────────
+// ── Bottom Tab Bar ────────────────────────────────────────────────────────────
 function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   const tabs = [
-    { key: 'FreelancerDashboard', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
-    { key: 'Messages', label: 'Messages', icon: 'chatbubble-outline', activeIcon: 'chatbubble' },
-    { key: 'MyJobs', label: 'My Jobs', icon: 'briefcase-outline', activeIcon: 'briefcase' },
-    { key: 'MyApplications', label: 'Applications', icon: 'checkmark-circle-outline', activeIcon: 'checkmark-circle' },
-    { key: 'Profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
+    { key: 'FreelancerDashboard', label: 'Home',         icon: 'home-outline',           activeIcon: 'home' },
+    { key: 'Messages',            label: 'Messages',     icon: 'chatbubble-outline',      activeIcon: 'chatbubble' },
+    { key: 'MyJobs',              label: 'My Jobs',      icon: 'briefcase-outline',       activeIcon: 'briefcase' },
+    { key: 'MyApplications',      label: 'Applications', icon: 'checkmark-circle-outline',activeIcon: 'checkmark-circle' },
+    { key: 'Profile',             label: 'Profile',      icon: 'person-outline',          activeIcon: 'person' },
   ];
 
   return (
     <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
       <View style={styles.tabBar}>
-        {tabs.map((tab, index) => {
-          const isActive = activeTab === tab.key;
-          const isMyJobs = tab.key === 'MyJobs';
-          const hasBadge = tab.key === 'Messages' && pendingOffers > 0;
+        {tabs.map((tab) => {
+          const isActive   = activeTab === tab.key;
+          const isMyJobs   = tab.key === 'MyJobs';
+          const hasBadge   = tab.key === 'Messages' && pendingOffers > 0;
 
           return (
             <TouchableOpacity
               key={tab.key}
-              style={[
-                styles.tabItem,
-                isMyJobs && styles.tabItemCenter,
-              ]}
+              style={[styles.tabItem, isMyJobs && styles.tabItemCenter]}
               onPress={() => onTabPress(tab.key)}
               activeOpacity={0.7}
             >
@@ -103,11 +100,11 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   );
 }
 
-// ── InfoRow sub-component (label/value line, same pattern as ClientProfile) ──
+// ── InfoRow ───────────────────────────────────────────────────────────────────
 function InfoRow({ icon, label, value, last }) {
   return (
     <View style={[ir.row, !last && ir.rowBorder]}>
-      <Ionicons name={icon} size={15} color={BLUE} style={{ marginTop: 1 }} />
+      <Ionicons name={icon} size={15} color={BLUE} style={{ marginTop: 2 }} />
       <View style={ir.content}>
         <Text style={ir.label}>{label}</Text>
         <Text style={ir.value}>{value || 'Not specified'}</Text>
@@ -117,14 +114,14 @@ function InfoRow({ icon, label, value, last }) {
 }
 
 const ir = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 11, paddingHorizontal: 14 },
+  row:       { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 11, paddingHorizontal: 14 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: 'rgba(0,85,165,0.15)' },
-  content: { flex: 1 },
-  label: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '600', letterSpacing: 0.4, marginBottom: 2 },
-  value: { fontSize: 14, color: TEXT_MAIN },
+  content:   { flex: 1 },
+  label:     { fontSize: 10, color: TEXT_LIGHT, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 2 },
+  value:     { fontSize: 14, color: TEXT_MAIN },
 });
 
-// ── Read-only chip list (skills / languages / certifications) ────────────────
+// ── ChipList ──────────────────────────────────────────────────────────────────
 function ChipList({ items }) {
   if (!items || items.length === 0) {
     return <Text style={styles.emptyChipText}>None added yet</Text>;
@@ -140,33 +137,74 @@ function ChipList({ items }) {
   );
 }
 
+// ── MenuItem ──────────────────────────────────────────────────────────────────
+function MenuItem({ icon, title, subtitle, onPress }) {
+  return (
+    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.menuLeft}>
+        <View style={styles.menuIconWrap}>
+          <Ionicons name={icon} size={19} color={BLUE} />
+        </View>
+        <View style={styles.menuContent}>
+          <Text style={styles.menuTitle}>{title}</Text>
+          {subtitle ? <Text style={styles.menuSubtitle}>{subtitle}</Text> : null}
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={TEXT_LIGHT} />
+    </TouchableOpacity>
+  );
+}
+
+// ── CVItem ────────────────────────────────────────────────────────────────────
+function CVItem({ name, date, onPress }) {
+  return (
+    <TouchableOpacity style={styles.cvItem} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.cvLeft}>
+        <View style={styles.cvIconWrap}>
+          <Ionicons name="document-text-outline" size={20} color={BLUE} />
+        </View>
+        <View style={styles.cvContent}>
+          <Text style={styles.cvName} numberOfLines={1}>{name}</Text>
+          <Text style={styles.cvDate}>Added {date}</Text>
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={TEXT_LIGHT} />
+    </TouchableOpacity>
+  );
+}
+
+// ── SectionHeader ─────────────────────────────────────────────────────────────
+function SectionHeader({ icon, title, onEdit }) {
+  return (
+    <View style={styles.sectionHeaderRow}>
+      <View style={styles.sectionHeaderLeft}>
+        <Ionicons name={icon} size={16} color={BLUE} />
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      {onEdit && (
+        <TouchableOpacity style={styles.editRowBtn} onPress={onEdit} activeOpacity={0.7}>
+          <Ionicons name="create-outline" size={14} color={BLUE} />
+          <Text style={styles.editRowBtnText}>Edit</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
 export default function Profile({ onNavigate, route }) {
-  const { user } = useSelector((state) => state.auth);
-  const dispatch = useDispatch();
-  const [savedCV, setSavedCV] = useState(null);
-  const [activeTab, setActiveTab] = useState('Profile');
+  const { user }   = useSelector((state) => state.auth);
+  const dispatch   = useDispatch();
+  const [savedCV, setSavedCV]       = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`.toUpperCase();
 
-  // Restore active tab when coming back from other screens
-  useEffect(() => {
-    if (route?.params?.returnState?.activeTab) {
-      setActiveTab(route.params.returnState.activeTab);
-    }
-  }, [route?.params]);
+  useEffect(() => { loadLocalCV(); }, []);
 
-  useEffect(() => {
-    loadLocalCV();
-  }, []);
-
-  // ── Refresh profile from server ─────────────────────────────────────────
   const fetchProfile = useCallback(async () => {
-    try {
-      await dispatch(getProfile()).unwrap();
-    } catch {
-      Alert.alert('Error', 'Failed to load profile.');
-    }
+    try { await dispatch(getProfile()).unwrap(); }
+    catch { Alert.alert('Error', 'Failed to load profile.'); }
   }, [dispatch]);
 
   const onRefresh = useCallback(async () => {
@@ -179,40 +217,31 @@ export default function Profile({ onNavigate, route }) {
   const loadLocalCV = async () => {
     try {
       if (!CV_DIRECTORY.exists) { setSavedCV(null); return; }
-      const files = CV_DIRECTORY.list();
+      const files   = CV_DIRECTORY.list();
       const cvFiles = files.filter(f =>
         f.name.endsWith('.pdf') || f.name.endsWith('.doc') || f.name.endsWith('.docx')
       );
-      if (cvFiles.length > 0) {
-        const latest = cvFiles[0];
-        setSavedCV({ uri: latest.uri, name: latest.name, size: latest.size });
-      } else {
-        setSavedCV(null);
-      }
+      setSavedCV(cvFiles.length > 0
+        ? { uri: cvFiles[0].uri, name: cvFiles[0].name, size: cvFiles[0].size }
+        : null
+      );
     } catch (e) {
       console.error('Error loading local CV:', e);
       setSavedCV(null);
     }
   };
 
-  const formatDate = (timestamp) => {
-    const date = timestamp ? new Date(timestamp) : new Date();
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
+  const formatDate = (timestamp) =>
+    (timestamp ? new Date(timestamp) : new Date())
+      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   const viewCV = async () => {
     if (!savedCV?.uri) return;
     try {
       const file = new File(savedCV.uri);
-      if (file.exists) {
-        await file.open();
-      } else {
-        Alert.alert('Error', 'CV file not found.');
-        setSavedCV(null);
-      }
-    } catch (e) {
-      Alert.alert('Error', 'Cannot open file. Please try again.');
-    }
+      if (file.exists) { await file.open(); }
+      else { Alert.alert('Error', 'CV file not found.'); setSavedCV(null); }
+    } catch { Alert.alert('Error', 'Cannot open file. Please try again.'); }
   };
 
   const handleLogout = () => {
@@ -225,12 +254,8 @@ export default function Profile({ onNavigate, route }) {
           text: 'Log out',
           style: 'destructive',
           onPress: async () => {
-            try {
-              await dispatch(logout()).unwrap();
-              onNavigate('Login');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to log out. Please try again.');
-            }
+            try { await dispatch(logout()).unwrap(); onNavigate('Login'); }
+            catch { Alert.alert('Error', 'Failed to log out. Please try again.'); }
           },
         },
       ]
@@ -239,69 +264,12 @@ export default function Profile({ onNavigate, route }) {
 
   const handleTabBarPress = (key) => {
     const returnState = { activeTab: 'Profile' };
-    if (key === 'FreelancerDashboard') {
-      onNavigate('FreelancerDashboard', { returnState });
-    } else if (key === 'Messages') {
-      onNavigate('Messages', { returnState });
-    } else if (key === 'MyJobs') {
-      onNavigate('MyJobs', { returnState });
-    } else if (key === 'MyApplications') {
-      onNavigate('MyApplications', { returnState });
-    } else if (key === 'Profile') {
-      // Already on Profile
-    }
+    if (key !== 'Profile') onNavigate(key, { returnState });
   };
 
-  // ── Sub-components ──────────────────────────────────────────────────────────
+  const toEdit = () => onNavigate('EditProfile');
 
-  const StatBadge = ({ label, value }) => (
-    <View style={styles.statBadge}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-
-  const MenuItem = ({ icon, title, subtitle, onPress, danger }) => (
-    <TouchableOpacity
-      style={[styles.menuItem, danger && styles.menuItemDanger]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.menuItemLeft}>
-        <View style={[styles.menuIconWrap, danger && styles.menuIconWrapDanger]}>
-          <Ionicons name={icon} size={19} color={danger ? RED : BLUE} />
-        </View>
-        <View style={styles.menuItemContent}>
-          <Text style={[styles.menuItemTitle, danger && styles.menuItemTitleDanger]}>
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text style={styles.menuItemSubtitle}>{subtitle}</Text>
-          ) : null}
-        </View>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={danger ? RED : TEXT_LIGHT} />
-    </TouchableOpacity>
-  );
-
-  const CVItem = ({ name, date, onPress }) => (
-    <TouchableOpacity style={styles.cvItem} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.cvItemLeft}>
-        <View style={styles.cvIconWrap}>
-          <Ionicons name="document-text-outline" size={20} color={BLUE} />
-        </View>
-        <View style={styles.cvItemContent}>
-          <Text style={styles.cvItemName} numberOfLines={1}>{name}</Text>
-          <Text style={styles.cvItemDate}>Added {date}</Text>
-        </View>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={TEXT_LIGHT} />
-    </TouchableOpacity>
-  );
-
-  const pendingOffers = 0; // You can calculate this from user data if needed
-
-  // ── Derived professional info ─────────────────────────────────────────────
+  // ── Derived values ──────────────────────────────────────────────────────────
   const rateText = user?.hourly_rate
     ? `₱${user.hourly_rate} / hour`
     : user?.fixed_rate
@@ -323,34 +291,21 @@ export default function Profile({ onNavigate, route }) {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scroll}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />}
         >
           {/* ── Header ── */}
           <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backBtn}
-              onPress={() => onNavigate('FreelancerDashboard')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.backIconWrap}>
-                <Ionicons name="arrow-back" size={18} color={WHITE} />
-              </View>
+            <TouchableOpacity style={styles.headerBtn} onPress={() => onNavigate('FreelancerDashboard')} activeOpacity={0.7}>
+              <Ionicons name="arrow-back" size={18} color={WHITE} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Profile</Text>
-            <TouchableOpacity
-              style={styles.headerEditBtn}
-              onPress={() => onNavigate('EditProfile')}
-              activeOpacity={0.75}
-            >
+            <TouchableOpacity style={[styles.headerBtn, styles.headerEditBtn]} onPress={toEdit} activeOpacity={0.75}>
               <Ionicons name="pencil-outline" size={16} color={GOLD} />
             </TouchableOpacity>
           </View>
 
           {/* ── Hero card ── */}
           <View style={styles.heroCard}>
-            {/* Avatar */}
             <View style={styles.avatarRing}>
               {user?.profile_picture ? (
                 <Image source={{ uri: user.profile_picture }} style={styles.avatar} />
@@ -361,65 +316,39 @@ export default function Profile({ onNavigate, route }) {
               )}
             </View>
 
-            {/* Name + handle */}
-            <Text style={styles.profileName}>
-              {user?.first_name} {user?.last_name}
-            </Text>
-            {user?.username ? (
-              <Text style={styles.profileUsername}>@{user.username}</Text>
-            ) : null}
+            <Text style={styles.profileName}>{user?.first_name} {user?.last_name}</Text>
+            {user?.username ? <Text style={styles.profileUsername}>@{user.username}</Text> : null}
 
-            {/* Availability badge */}
-            <View style={[styles.availabilityBadge, isAvailable ? styles.availabilityBadgeOn : styles.availabilityBadgeOff]}>
-              <View style={[styles.availabilityDot, { backgroundColor: isAvailable ? GREEN : TEXT_LIGHT }]} />
-              <Text style={[styles.availabilityBadgeText, isAvailable && { color: GREEN }]}>
+            <View style={[styles.availBadge, isAvailable ? styles.availBadgeOn : styles.availBadgeOff]}>
+              <View style={[styles.availDot, { backgroundColor: isAvailable ? GREEN : TEXT_LIGHT }]} />
+              <Text style={[styles.availText, isAvailable && { color: GREEN }]}>
                 {isAvailable ? 'Available for work' : 'Not available'}
               </Text>
             </View>
 
-            {/* Stats row */}
-            <View style={styles.statsRow}>
-              <StatBadge label="Applications" value={user?.applications_count ?? '—'} />
-              <View style={styles.statDivider} />
-              <StatBadge label="Saved jobs" value={user?.saved_jobs_count ?? '—'} />
-              <View style={styles.statDivider} />
-              <StatBadge label="Interviews" value={user?.interviews_count ?? '—'} />
-            </View>
-
-            {/* Contact pills */}
             <View style={styles.contactGrid}>
               <View style={styles.contactPill}>
                 <Ionicons name="mail-outline" size={13} color={BLUE_MD} />
-                <Text style={styles.contactPillText} numberOfLines={1}>
-                  {user?.email_address ?? '—'}
-                </Text>
+                <Text style={styles.contactPillText} numberOfLines={1}>{user?.email_address ?? '—'}</Text>
               </View>
-
               {user?.phone_number ? (
                 <View style={styles.contactPill}>
                   <Ionicons name="call-outline" size={13} color={BLUE_MD} />
                   <Text style={styles.contactPillText}>{user.phone_number}</Text>
                 </View>
               ) : null}
-
               {(user?.city || user?.country) ? (
                 <View style={styles.contactPill}>
                   <Ionicons name="location-outline" size={13} color={BLUE_MD} />
-                  <Text style={styles.contactPillText}>
-                    {[user?.city, user?.country].filter(Boolean).join(', ')}
-                  </Text>
+                  <Text style={styles.contactPillText}>{[user?.city, user?.country].filter(Boolean).join(', ')}</Text>
                 </View>
               ) : null}
             </View>
           </View>
 
-          {/* ── Resumes ── */}
+          {/* ── Resume ── */}
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="document-text-outline" size={16} color={BLUE} />
-              <Text style={styles.sectionTitle}>Resumes</Text>
-            </View>
-
+            <SectionHeader icon="document-text-outline" title="Resume" />
             {savedCV ? (
               <CVItem
                 name={savedCV.name.replace(/^cv_\d+_/, '')}
@@ -429,7 +358,7 @@ export default function Profile({ onNavigate, route }) {
             ) : (
               <View style={styles.emptyRow}>
                 <Text style={styles.emptyText}>No resume uploaded yet</Text>
-                <TouchableOpacity onPress={() => onNavigate('EditProfile')}>
+                <TouchableOpacity onPress={toEdit}>
                   <Text style={styles.linkText}>Add Resume</Text>
                 </TouchableOpacity>
               </View>
@@ -439,321 +368,174 @@ export default function Profile({ onNavigate, route }) {
           {/* ── About ── */}
           {user?.bio_about ? (
             <View style={styles.section}>
-              <View style={styles.sectionHeaderRow}>
-                <View style={styles.sectionHeader}>
-                  <Ionicons name="person-outline" size={16} color={BLUE} />
-                  <Text style={styles.sectionTitle}>About</Text>
-                </View>
-              </View>
+              <SectionHeader icon="person-outline" title="About" onEdit={toEdit} />
               <Text style={styles.aboutText}>{user.bio_about}</Text>
             </View>
           ) : null}
 
           {/* ── Professional Details ── */}
           <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="briefcase-outline" size={16} color={BLUE} />
-                <Text style={styles.sectionTitle}>Professional Details</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.editRowBtn}
-                onPress={() => onNavigate('EditProfile')}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="create-outline" size={14} color={BLUE} />
-                <Text style={styles.editRowBtnText}>Edit</Text>
-              </TouchableOpacity>
-            </View>
-
+            <SectionHeader icon="briefcase-outline" title="Professional Details" onEdit={toEdit} />
             <View style={styles.infoCard}>
-              <InfoRow icon="time-outline" label="Years of Experience" value={experienceText} />
-              <InfoRow icon="cash-outline" label="Rate" value={rateText} last />
+              <InfoRow icon="time-outline"  label="Years of Experience" value={experienceText} />
+              <InfoRow icon="cash-outline"  label="Rate"                value={rateText}       last />
             </View>
           </View>
 
           {/* ── Skills ── */}
           <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="star-outline" size={16} color={BLUE} />
-                <Text style={styles.sectionTitle}>Skills</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.editRowBtn}
-                onPress={() => onNavigate('EditProfile')}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="create-outline" size={14} color={BLUE} />
-                <Text style={styles.editRowBtnText}>Edit</Text>
-              </TouchableOpacity>
+            <SectionHeader icon="star-outline" title="Skills" onEdit={toEdit} />
+            <View style={{ paddingTop: 4 }}>
+              <ChipList items={user?.skills} />
             </View>
-            <ChipList items={user?.skills} />
           </View>
 
           {/* ── Languages & Certifications ── */}
           <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="ribbon-outline" size={16} color={BLUE} />
-                <Text style={styles.sectionTitle}>Languages & Certifications</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.editRowBtn}
-                onPress={() => onNavigate('EditProfile')}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="create-outline" size={14} color={BLUE} />
-                <Text style={styles.editRowBtnText}>Edit</Text>
-              </TouchableOpacity>
-            </View>
-
+            <SectionHeader icon="ribbon-outline" title="Languages & Certifications" onEdit={toEdit} />
             <Text style={styles.subLabel}>Languages</Text>
             <ChipList items={user?.languages} />
-
             <Text style={[styles.subLabel, { marginTop: 14 }]}>Certifications</Text>
             <ChipList items={user?.certifications} />
           </View>
 
-          {/* ── Improve matches ── */}
+          {/* ── Improve Job Matches ── */}
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="trending-up-outline" size={16} color={BLUE} />
-              <Text style={styles.sectionTitle}>Improve your job matches</Text>
-            </View>
-
+            <SectionHeader icon="trending-up-outline" title="Improve Your Job Matches" />
             <MenuItem
               icon="star-outline"
               title="Qualifications"
               subtitle="Highlight your skills and experience"
-              onPress={() => onNavigate('EditProfile')}
+              onPress={toEdit}
             />
             <MenuItem
               icon="options-outline"
               title="Job preferences"
               subtitle="Set minimum pay, schedule, and location"
-              onPress={() => onNavigate('EditProfile')}
+              onPress={toEdit}
             />
             <MenuItem
               icon="eye-off-outline"
               title="Hide jobs with these details"
               subtitle="Manage what gets filtered from your search"
-              onPress={() => onNavigate('EditProfile')}
+              onPress={toEdit}
             />
             <MenuItem
               icon="checkmark-circle-outline"
               title="Ready to work"
               subtitle="Signal employers you're available immediately"
-              onPress={() => onNavigate('EditProfile')}
+              onPress={toEdit}
             />
           </View>
 
           {/* ── Account ── */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="settings-outline" size={16} color={BLUE} />
-              <Text style={styles.sectionTitle}>Account</Text>
-            </View>
-
+          <View style={[styles.section, styles.sectionLast]}>
+            <SectionHeader icon="settings-outline" title="Account" />
             <MenuItem
               icon="shield-checkmark-outline"
               title="Privacy & security"
               subtitle="Manage your data and security settings"
-              onPress={() => onNavigate('Privacy')}
+              onPress={toEdit}
             />
             <MenuItem
               icon="notifications-outline"
               title="Notifications"
               subtitle="Control email and push alerts"
-              onPress={() => onNavigate('Notifications')}
+              onPress={toEdit}
             />
             <MenuItem
               icon="help-circle-outline"
               title="Help & support"
-              onPress={() => onNavigate('Help')}
+              onPress={toEdit}
             />
-
-            {/* Logout — distinct danger styling */}
-            <TouchableOpacity
-              style={styles.logoutRow}
-              onPress={handleLogout}
-              activeOpacity={0.75}
-            >
-              <View style={styles.logoutLeft}>
-                <View style={styles.logoutIconWrap}>
-                  <Ionicons name="log-out-outline" size={19} color={RED} />
-                </View>
-                <Text style={styles.logoutText}>Log out</Text>
+            <TouchableOpacity style={styles.logoutRow} onPress={handleLogout} activeOpacity={0.75}>
+              <View style={styles.logoutIconWrap}>
+                <Ionicons name="log-out-outline" size={19} color={RED} />
               </View>
+              <Text style={styles.logoutText}>Log out</Text>
             </TouchableOpacity>
-          </View>
 
-          {/* ── Footer ── */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>©2026 Taskra · Cookies, Privacy and Terms</Text>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>© 2026 Taskra · Cookies, Privacy and Terms</Text>
+            </View>
           </View>
         </ScrollView>
       </View>
 
-      {/* ── Bottom Tab Bar ── */}
-      <BottomTabBar
-        activeTab="Profile"
-        onTabPress={handleTabBarPress}
-        pendingOffers={pendingOffers}
-      />
+      <BottomTabBar activeTab="Profile" onTabPress={handleTabBarPress} pendingOffers={0} />
     </SafeAreaView>
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: NAVY },
   root:   { flex: 1, backgroundColor: BG },
-  scroll: { paddingBottom: 24 },
+  scroll: { paddingBottom: 0 },
 
-  // ── Header ──────────────────────────────────────────────────────────────────
+  // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: NAVY,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: NAVY,
   },
-  backBtn: { alignSelf: 'flex-start' },
-  backIconWrap: {
-    width: 36,
-    height: 36,
+  headerBtn: {
+    width: 36, height: 36, borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerEditBtn: {
+    backgroundColor: 'rgba(200,149,32,0.15)',
+    borderColor: 'rgba(200,149,32,0.35)',
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: WHITE, letterSpacing: 0.2 },
-  headerEditBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(200,149,32,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(200,149,32,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
-  // ── Hero card ────────────────────────────────────────────────────────────────
+  // Hero
   heroCard: {
-    backgroundColor: CARD,
-    alignItems: 'center',
-    paddingTop: 28,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1.5,
-    borderBottomColor: BORDER,
+    backgroundColor: CARD, alignItems: 'center',
+    paddingTop: 28, paddingBottom: 24, paddingHorizontal: 20,
+    borderBottomWidth: 1.5, borderBottomColor: BORDER,
   },
-  avatarRing: {
-    padding: 3,
-    borderRadius: 50,
-    borderWidth: 2.5,
-    borderColor: GOLD,
-    marginBottom: 14,
-  },
+  avatarRing: { padding: 3, borderRadius: 50, borderWidth: 2.5, borderColor: GOLD, marginBottom: 14 },
   avatar: { width: 78, height: 78, borderRadius: 39 },
   avatarPlaceholder: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    backgroundColor: NAVY2,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 78, height: 78, borderRadius: 39, backgroundColor: NAVY2,
+    alignItems: 'center', justifyContent: 'center',
   },
   avatarInitials: { fontSize: 26, fontWeight: '700', color: GOLD_LT },
+  profileName:    { fontSize: 20, fontWeight: '700', color: TEXT_MAIN, letterSpacing: 0.1, marginBottom: 3 },
+  profileUsername:{ fontSize: 13, color: TEXT_LIGHT, marginBottom: 10 },
 
-  profileName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    letterSpacing: 0.1,
-    marginBottom: 3,
+  availBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999,
+    marginBottom: 16, borderWidth: 1.5,
   },
-  profileUsername: { fontSize: 13, color: TEXT_LIGHT, marginBottom: 10 },
+  availBadgeOn:  { backgroundColor: GREEN_SOFT, borderColor: 'rgba(5,150,105,0.3)' },
+  availBadgeOff: { backgroundColor: BG, borderColor: BORDER },
+  availDot:      { width: 7, height: 7, borderRadius: 3.5 },
+  availText:     { fontSize: 12, fontWeight: '600', color: TEXT_MUTED },
 
-  // Availability badge
-  availabilityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    marginBottom: 16,
-    borderWidth: 1.5,
-  },
-  availabilityBadgeOn: { backgroundColor: GREEN_SOFT, borderColor: 'rgba(5,150,105,0.3)' },
-  availabilityBadgeOff: { backgroundColor: BG, borderColor: BORDER },
-  availabilityDot: { width: 7, height: 7, borderRadius: 3.5 },
-  availabilityBadgeText: { fontSize: 12, fontWeight: '600', color: TEXT_MUTED },
-
-  // Stats row
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: BG,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    width: '100%',
-    marginBottom: 16,
-  },
-  statBadge: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 18, fontWeight: '700', color: NAVY, marginBottom: 2 },
-  statLabel: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5 },
-  statDivider: { width: 1.5, height: 36, backgroundColor: BORDER },
-
-  // Contact pills
   contactGrid: { flexDirection: 'column', gap: 6, width: '100%' },
   contactPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    backgroundColor: BG,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: BG, borderWidth: 1.5, borderColor: BORDER,
+    borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10,
   },
   contactPillText: { fontSize: 13, color: TEXT_MUTED, flex: 1 },
 
-  // ── Section ──────────────────────────────────────────────────────────────────
+  // Section
   section: {
-    backgroundColor: CARD,
-    marginTop: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderTopWidth: 1.5,
-    borderBottomWidth: 1.5,
-    borderColor: BORDER,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingTop: 10,
-    paddingBottom: 8,
-    marginBottom: 2,
+    backgroundColor: CARD, marginTop: 10,
+    borderTopWidth: 1.5, borderBottomWidth: 1.5, borderColor: BORDER,
   },
   sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1.5,
-    borderBottomColor: BORDER,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10,
+    borderBottomWidth: 1.5, borderBottomColor: BORDER,
   },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: TEXT_MAIN, letterSpacing: 0.3, textTransform: 'uppercase' },
+  sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: TEXT_MAIN, letterSpacing: 0.5, textTransform: 'uppercase' },
   editRowBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 5,
@@ -762,192 +544,118 @@ const styles = StyleSheet.create({
   },
   editRowBtnText: { fontSize: 12, fontWeight: '600', color: BLUE },
 
-  // Info card (Professional Details)
+  // Info card
   infoCard: {
-    backgroundColor: BG,
-    borderRadius: 12, borderWidth: 1.5, borderColor: BORDER,
-    overflow: 'hidden', marginTop: 10, marginBottom: 10,
+    margin: 12, backgroundColor: BG,
+    borderRadius: 12, borderWidth: 1.5, borderColor: BORDER, overflow: 'hidden',
   },
 
-  // About text
-  aboutText: { fontSize: 14, color: TEXT_MUTED, lineHeight: 21, paddingVertical: 12 },
+  // About
+  aboutText: { fontSize: 14, color: TEXT_MUTED, lineHeight: 21, padding: 14 },
 
-  // Chips (read-only)
-  subLabel: { fontSize: 11, fontWeight: '600', color: TEXT_LIGHT, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 10, marginBottom: 8 },
-  chipListWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4, marginBottom: 12 },
+  // Chips
+  subLabel: {
+    fontSize: 11, fontWeight: '600', color: TEXT_LIGHT,
+    textTransform: 'uppercase', letterSpacing: 0.4,
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6,
+  },
+  chipListWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingBottom: 14, paddingTop: 4 },
   chipReadOnly: {
     backgroundColor: 'rgba(0,85,165,0.08)',
     borderWidth: 1.5, borderColor: 'rgba(0,85,165,0.2)',
     borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7,
   },
   chipReadOnlyText: { fontSize: 12.5, fontWeight: '600', color: BLUE },
-  emptyChipText: { fontSize: 13, color: TEXT_LIGHT, paddingVertical: 12, marginBottom: 4 },
+  emptyChipText:    { fontSize: 13, color: TEXT_LIGHT, paddingHorizontal: 16, paddingVertical: 12 },
 
-  // ── Menu Item ────────────────────────────────────────────────────────────────
+  // Menu item
   menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 13,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 13, paddingHorizontal: 16,
+    borderBottomWidth: 1, borderBottomColor: BORDER,
   },
-  menuItemDanger: { borderBottomColor: RED_BORDER },
-  menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  menuLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   menuIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
+    width: 34, height: 34, borderRadius: 9,
     backgroundColor: 'rgba(0,85,165,0.07)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,85,165,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(0,85,165,0.18)',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  menuIconWrapDanger: {
-    backgroundColor: RED_SOFT,
-    borderColor: RED_BORDER,
-  },
-  menuItemContent: { flex: 1 },
-  menuItemTitle: { fontSize: 14, fontWeight: '500', color: TEXT_MAIN, marginBottom: 1 },
-  menuItemTitleDanger: { color: RED },
-  menuItemSubtitle: { fontSize: 11, color: TEXT_LIGHT, lineHeight: 15 },
+  menuContent: { flex: 1 },
+  menuTitle:   { fontSize: 14, fontWeight: '500', color: TEXT_MAIN, marginBottom: 1 },
+  menuSubtitle:{ fontSize: 11, color: TEXT_LIGHT, lineHeight: 15 },
 
-  // ── Logout row ───────────────────────────────────────────────────────────────
+  // Logout
   logoutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    marginTop: 2,
-    marginBottom: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 14, paddingHorizontal: 16,
   },
-  logoutLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   logoutIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    backgroundColor: RED_SOFT,
-    borderWidth: 1.5,
-    borderColor: RED_BORDER,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 34, height: 34, borderRadius: 9,
+    backgroundColor: RED_SOFT, borderWidth: 1.5, borderColor: RED_BORDER,
+    alignItems: 'center', justifyContent: 'center',
   },
   logoutText: { fontSize: 14, fontWeight: '600', color: RED },
 
-  // ── CV Item ──────────────────────────────────────────────────────────────────
+  // CV
   cvItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 12, paddingHorizontal: 16,
   },
-  cvItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  cvLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   cvIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
+    width: 38, height: 38, borderRadius: 8,
     backgroundColor: 'rgba(0,85,165,0.07)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,85,165,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(0,85,165,0.18)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  cvItemContent: { flex: 1 },
-  cvItemName: { fontSize: 14, fontWeight: '500', color: TEXT_MAIN, marginBottom: 2 },
-  cvItemDate: { fontSize: 11, color: TEXT_LIGHT },
+  cvContent: { flex: 1 },
+  cvName:    { fontSize: 14, fontWeight: '500', color: TEXT_MAIN, marginBottom: 2 },
+  cvDate:    { fontSize: 11, color: TEXT_LIGHT },
 
-  // ── Empty state ──────────────────────────────────────────────────────────────
+  // Empty
   emptyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 14, paddingHorizontal: 16,
   },
   emptyText: { fontSize: 13, color: TEXT_LIGHT },
-  linkText: { fontSize: 13, color: BLUE, fontWeight: '600' },
+  linkText:  { fontSize: 13, color: BLUE, fontWeight: '600' },
 
-  // ── Footer ───────────────────────────────────────────────────────────────────
-  footer: { alignItems: 'center', paddingVertical: 22, paddingHorizontal: 16 },
+  sectionLast: { marginBottom: 0 },
+
+  // Footer
+  footer:     { alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: BORDER },
   footerText: { fontSize: 11, color: TEXT_LIGHT, textAlign: 'center' },
 
-  // ── Bottom Tab Bar Styles ──
-  tabSafe: {
-    backgroundColor: CARD,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-    paddingBottom: 0,
-  },
+  // Bottom Tab Bar
+  tabSafe: { backgroundColor: CARD, borderTopWidth: 1.5, borderTopColor: BORDER },
   tabBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingTop: 8,
-    paddingBottom: 12,
-    paddingHorizontal: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
+    paddingTop: 8, paddingBottom: 12, paddingHorizontal: 8,
   },
   tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 6,
-    position: 'relative',
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 6, position: 'relative',
   },
-  tabItemCenter: {
-    flex: 0,
-    marginHorizontal: 8,
-    marginTop: -16,
-  },
+  tabItemCenter: { flex: 0, marginHorizontal: 8, marginTop: -16 },
   centerButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: WHITE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: BLUE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 2.5,
-    borderColor: WHITE,
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: WHITE, alignItems: 'center', justifyContent: 'center',
+    shadowColor: BLUE, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
+    borderWidth: 2.5, borderColor: WHITE,
   },
-  centerButtonActive: {
-    backgroundColor: BLUE,
-    transform: [{ scale: 1.02 }],
-  },
-  tabIconWrap: {
-    position: 'relative',
-    marginBottom: 4,
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: TEXT_LIGHT,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  tabLabelActive: {
-    color: BLUE,
-    fontWeight: '700',
-  },
+  centerButtonActive: { backgroundColor: BLUE },
+  tabIconWrap: { position: 'relative', marginBottom: 4 },
+  tabLabel:       { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500', marginTop: 2 },
+  tabLabelActive: { color: BLUE, fontWeight: '700' },
   tabIndicator: {
-    position: 'absolute',
-    bottom: -8,
-    width: 20,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: BLUE,
+    position: 'absolute', bottom: -8,
+    width: 20, height: 3, borderRadius: 1.5, backgroundColor: BLUE,
   },
   tabBadgeDot: {
-    position: 'absolute',
-    top: -3,
-    right: -6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: GOLD,
-    borderWidth: 1.5,
-    borderColor: WHITE,
+    position: 'absolute', top: -3, right: -6,
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: GOLD, borderWidth: 1.5, borderColor: WHITE,
   },
 });

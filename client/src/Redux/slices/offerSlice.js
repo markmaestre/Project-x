@@ -28,7 +28,7 @@ export const getSentOffers = createAsyncThunk(
   }
 );
 
-// Get received offers (for freelancers)
+// Get received offers (for freelancers) - UPDATED WITH BETTER ERROR HANDLING
 export const getReceivedOffers = createAsyncThunk(
   'offers/getReceivedOffers',
   async ({ status, page = 1, limit = 20 } = {}, { getState, rejectWithValue }) => {
@@ -38,6 +38,8 @@ export const getReceivedOffers = createAsyncThunk(
         return rejectWithValue({ message: 'No token found' });
       }
 
+      console.log('📤 Fetching received offers...');
+
       const params = { page, limit };
       if (status && status !== 'All') params.status = status;
 
@@ -46,9 +48,14 @@ export const getReceivedOffers = createAsyncThunk(
         params
       });
       
+      console.log('📥 Received offers response:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Get received offers error:', error.response?.data);
+      console.error('❌ Get received offers error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
       return rejectWithValue(error.response?.data || { message: error.message });
     }
   }
@@ -101,7 +108,7 @@ export const createOffer = createAsyncThunk(
   }
 );
 
-// Update offer status
+// Update offer status - UPDATED WITH BETTER ERROR HANDLING
 export const updateOfferStatus = createAsyncThunk(
   'offers/updateOfferStatus',
   async ({ offerId, status }, { getState, rejectWithValue }) => {
@@ -110,6 +117,12 @@ export const updateOfferStatus = createAsyncThunk(
       if (!token) {
         return rejectWithValue({ message: 'No token found' });
       }
+
+      if (!offerId) {
+        return rejectWithValue({ message: 'Offer ID is required' });
+      }
+
+      console.log('📤 Updating offer:', { offerId, status });
 
       const response = await api.patch(`/offers/${offerId}/status`, 
         { status },
@@ -121,9 +134,15 @@ export const updateOfferStatus = createAsyncThunk(
         }
       );
       
+      console.log('✅ Offer updated successfully:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Update offer status error:', error.response?.data);
+      console.error('❌ Update offer status error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+        offerId
+      });
       return rejectWithValue(error.response?.data || { message: error.message });
     }
   }
@@ -252,6 +271,12 @@ const offerSlice = createSlice({
         state.totalPages = action.payload.totalPages || 1;
         state.currentPage = action.payload.currentPage || 1;
         state.unviewedCount = action.payload.unviewedCount || 0;
+        // Update stats
+        const offers = action.payload.offers || [];
+        state.stats.totalOffers = offers.length;
+        state.stats.pendingOffers = offers.filter(o => o.status === 'pending').length;
+        state.stats.acceptedOffers = offers.filter(o => o.status === 'accepted' || o.status === 'hired').length;
+        state.stats.declinedOffers = offers.filter(o => o.status === 'declined').length;
       })
       .addCase(getReceivedOffers.rejected, (state, action) => {
         state.isLoading = false;
@@ -315,6 +340,13 @@ const offerSlice = createSlice({
         if (state.selectedOffer?._id === action.payload.offer._id) {
           state.selectedOffer = action.payload.offer;
         }
+        
+        // Update stats
+        const offers = state.receivedOffers;
+        state.stats.totalOffers = offers.length;
+        state.stats.pendingOffers = offers.filter(o => o.status === 'pending').length;
+        state.stats.acceptedOffers = offers.filter(o => o.status === 'accepted' || o.status === 'hired').length;
+        state.stats.declinedOffers = offers.filter(o => o.status === 'declined').length;
       })
       .addCase(updateOfferStatus.rejected, (state, action) => {
         state.isLoading = false;

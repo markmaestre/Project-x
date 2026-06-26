@@ -165,8 +165,69 @@ const jobSchema = new mongoose.Schema({
       required: { type: Boolean, default: true },
       options: [String]
     }]
-  }
+  },
 
+  // ===== NEW FIELDS FOR JOB UPDATES =====
+  // Job progress tracking
+  progress: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 0
+  },
+  // Job updates/milestones
+  updates: [{
+    _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
+    title: { type: String, required: true },
+    description: { type: String },
+    status: {
+      type: String,
+      enum: ['pending', 'in_progress', 'completed', 'blocked'],
+      default: 'pending'
+    },
+    created_at: { type: Date, default: Date.now },
+    updated_at: { type: Date, default: Date.now },
+    files: [{
+      name: String,
+      url: String,
+      public_id: String,
+      mime_type: String,
+      size: Number
+    }],
+    created_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    created_by_role: {
+      type: String,
+      enum: ['client', 'freelancer']
+    }
+  }],
+  // Job attachments/documents
+  attachments: [{
+    name: String,
+    url: String,
+    public_id: String,
+    mime_type: String,
+    size: Number,
+    uploaded_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    uploaded_by_role: {
+      type: String,
+      enum: ['client', 'freelancer']
+    },
+    uploaded_at: { type: Date, default: Date.now }
+  }],
+  // Job completion data
+  completed_at: { type: Date },
+  completion_notes: { type: String },
+  // Freelancer assigned to the job
+  assigned_freelancer_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Freelancer'
+  }
 }, {
   timestamps: {
     createdAt: 'created_at',
@@ -180,5 +241,5 @@ jobSchema.index({ 'location.city': 1, 'location.specific_area': 1 });
 jobSchema.index({ status: 1, job_type: 1, created_at: -1 });
 
 const Job = mongoose.model('Job', jobSchema);
-
+  
 export default Job;

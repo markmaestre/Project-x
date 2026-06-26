@@ -9,6 +9,7 @@ import offerRoutes from "./src/routes/offerRoutes.js";
 import applicationRoutes from "./src/routes/applicationRoutes.js";
 import messageRoutes from "./src/routes/messageRoutes.js";
 import connectDB from "./src/config/mongodb.js";
+import ratingRoutes from "./src/routes/ratingRoutes.js";
 
 const app = express();
 // REMOVE: const upload = multer();
@@ -27,6 +28,7 @@ app.use("/api", jobRoutes);
 app.use("/api", offerRoutes);
 app.use("/api", applicationRoutes);
 app.use("/api", messageRoutes);
+app.use("/api", ratingRoutes);
 
 app.use((err, req, res, next) => {
   console.error('=== GLOBAL ERROR HANDLER ===');

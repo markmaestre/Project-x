@@ -87,7 +87,7 @@ const EDUCATION_LEVELS = [
   'Other'
 ];
 
-// ── Bottom Tab Bar with Centered My Jobs Button (BALANCED VERSION) ─────────────────
+// ── Bottom Tab Bar ─────────────────────────────────────────────────────────────────
 function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   const tabs = [
     { key: 'Home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
@@ -100,7 +100,7 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   return (
     <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
       <View style={styles.tabBar}>
-        {tabs.map((tab, index) => {
+        {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
           const isMyJobs = tab.key === 'MyJobs';
           const hasBadge = tab.key === 'Messages' && pendingOffers > 0;
@@ -147,7 +147,7 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   );
 }
 
-// Application Status Modal
+// ── Modals ──────────────────────────────────────────────────────────────────────────
 function ApplicationStatusModal({ visible, jobTitle, onClose }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -175,7 +175,6 @@ function ApplicationStatusModal({ visible, jobTitle, onClose }) {
   );
 }
 
-// Already Applied Modal
 function AlreadyAppliedModal({ visible, jobTitle, onClose }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -197,6 +196,217 @@ function AlreadyAppliedModal({ visible, jobTitle, onClose }) {
           <TouchableOpacity style={[statusStyles.button, { backgroundColor: ORANGE }]} onPress={onClose}>
             <Text style={statusStyles.buttonText}>Got it</Text>
           </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ── Client Profile Modal ───────────────────────────────────────────────────────────
+function ClientProfileModal({ visible, client, onClose }) {
+  if (!client) return null;
+  
+  // Check if client has information
+  const hasDescription = client.description && client.description.length > 0;
+  const hasEmail = client.email && client.email.length > 0;
+  const hasPhone = client.phone && client.phone.length > 0;
+  const hasLocation = client.location && client.location.length > 0;
+  const hasCompany = client.company_name && client.company_name.length > 0;
+  const hasBusinessType = client.business_type && client.business_type.length > 0;
+  const hasIndustry = client.industry && client.industry.length > 0;
+  const hasWebsite = client.website && client.website.length > 0;
+  const hasBudgetRange = client.budget_range && client.budget_range.length > 0;
+  
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={clientProfileStyles.overlay}>
+        <TouchableOpacity style={clientProfileStyles.backdrop} activeOpacity={1} onPress={onClose} />
+        <View style={clientProfileStyles.container}>
+          <View style={clientProfileStyles.handle} />
+          
+          <View style={clientProfileStyles.header}>
+            <Text style={clientProfileStyles.headerTitle}>Client Profile</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color={TEXT_MUTED} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={clientProfileStyles.body} showsVerticalScrollIndicator={false}>
+            {/* Profile Header */}
+            <View style={clientProfileStyles.profileHeader}>
+              {client.profile_picture ? (
+                <Image source={{ uri: client.profile_picture }} style={clientProfileStyles.profileAvatar} />
+              ) : (
+                <View style={clientProfileStyles.profileAvatarPlaceholder}>
+                  <Ionicons name="person" size={40} color={NAVY} />
+                </View>
+              )}
+              <View style={clientProfileStyles.profileInfo}>
+                <Text style={clientProfileStyles.profileName}>
+                  {client.first_name || ''} {client.last_name || ''}
+                </Text>
+                {hasCompany && (
+                  <Text style={clientProfileStyles.profileCompany}>
+                    <Ionicons name="business-outline" size={14} color={TEXT_MUTED} />
+                    {' '}{client.company_name}
+                  </Text>
+                )}
+                <View style={clientProfileStyles.verifiedBadge}>
+                  <Ionicons name="checkmark-circle" size={14} color={GREEN} />
+                  <Text style={clientProfileStyles.verifiedText}>Verified Client</Text>
+                </View>
+              </View>
+            </View>
+            
+            {/* About/Description */}
+            <View style={clientProfileStyles.section}>
+              <Text style={clientProfileStyles.sectionLabel}>
+                <Ionicons name="information-circle-outline" size={14} color={BLUE} />
+                {' '}About
+              </Text>
+              {hasDescription ? (
+                <Text style={clientProfileStyles.description}>{client.description}</Text>
+              ) : (
+                <Text style={clientProfileStyles.noInfoText}>No description provided</Text>
+              )}
+            </View>
+            
+            {/* Company Information */}
+            <View style={clientProfileStyles.section}>
+              <Text style={clientProfileStyles.sectionLabel}>
+                <Ionicons name="business-outline" size={14} color={BLUE} />
+                {' '}Company Information
+              </Text>
+              {hasCompany ? (
+                <View style={clientProfileStyles.infoItem}>
+                  <Ionicons name="business-outline" size={18} color={TEXT_MUTED} />
+                  <Text style={clientProfileStyles.infoText}>{client.company_name}</Text>
+                </View>
+              ) : (
+                <View style={clientProfileStyles.infoItem}>
+                  <Ionicons name="business-outline" size={18} color={TEXT_LIGHT} />
+                  <Text style={clientProfileStyles.noInfoText}>No company name provided</Text>
+                </View>
+              )}
+              {hasBusinessType ? (
+                <View style={clientProfileStyles.infoItem}>
+                  <Ionicons name="layers-outline" size={18} color={TEXT_MUTED} />
+                  <Text style={clientProfileStyles.infoText}>{client.business_type}</Text>
+                </View>
+              ) : (
+                <View style={clientProfileStyles.infoItem}>
+                  <Ionicons name="layers-outline" size={18} color={TEXT_LIGHT} />
+                  <Text style={clientProfileStyles.noInfoText}>No business type provided</Text>
+                </View>
+              )}
+              {hasIndustry ? (
+                <View style={clientProfileStyles.infoItem}>
+                  <Ionicons name="construct-outline" size={18} color={TEXT_MUTED} />
+                  <Text style={clientProfileStyles.infoText}>{client.industry}</Text>
+                </View>
+              ) : (
+                <View style={clientProfileStyles.infoItem}>
+                  <Ionicons name="construct-outline" size={18} color={TEXT_LIGHT} />
+                  <Text style={clientProfileStyles.noInfoText}>No industry provided</Text>
+                </View>
+              )}
+              {hasWebsite ? (
+                <View style={clientProfileStyles.infoItem}>
+                  <Ionicons name="globe-outline" size={18} color={TEXT_MUTED} />
+                  <Text style={clientProfileStyles.infoText}>{client.website}</Text>
+                </View>
+              ) : (
+                <View style={clientProfileStyles.infoItem}>
+                  <Ionicons name="globe-outline" size={18} color={TEXT_LIGHT} />
+                  <Text style={clientProfileStyles.noInfoText}>No website provided</Text>
+                </View>
+              )}
+              {hasBudgetRange ? (
+                <View style={clientProfileStyles.infoItem}>
+                  <Ionicons name="cash-outline" size={18} color={TEXT_MUTED} />
+                  <Text style={clientProfileStyles.infoText}>{client.budget_range}</Text>
+                </View>
+              ) : (
+                <View style={clientProfileStyles.infoItem}>
+                  <Ionicons name="cash-outline" size={18} color={TEXT_LIGHT} />
+                  <Text style={clientProfileStyles.noInfoText}>No budget range provided</Text>
+                </View>
+              )}
+            </View>
+            
+            {/* Contact Information */}
+            <View style={clientProfileStyles.section}>
+              <Text style={clientProfileStyles.sectionLabel}>
+                <Ionicons name="contact-outline" size={14} color={BLUE} />
+                {' '}Contact Information
+              </Text>
+              {hasEmail ? (
+                <View style={clientProfileStyles.contactItem}>
+                  <Ionicons name="mail-outline" size={18} color={TEXT_MUTED} />
+                  <Text style={clientProfileStyles.contactText}>{client.email}</Text>
+                </View>
+              ) : (
+                <View style={clientProfileStyles.contactItem}>
+                  <Ionicons name="mail-outline" size={18} color={TEXT_LIGHT} />
+                  <Text style={clientProfileStyles.noInfoText}>No email provided</Text>
+                </View>
+              )}
+              {hasPhone ? (
+                <View style={clientProfileStyles.contactItem}>
+                  <Ionicons name="call-outline" size={18} color={TEXT_MUTED} />
+                  <Text style={clientProfileStyles.contactText}>{client.phone}</Text>
+                </View>
+              ) : (
+                <View style={clientProfileStyles.contactItem}>
+                  <Ionicons name="call-outline" size={18} color={TEXT_LIGHT} />
+                  <Text style={clientProfileStyles.noInfoText}>No phone provided</Text>
+                </View>
+              )}
+              {hasLocation ? (
+                <View style={clientProfileStyles.contactItem}>
+                  <Ionicons name="location-outline" size={18} color={TEXT_MUTED} />
+                  <Text style={clientProfileStyles.contactText}>{client.location}</Text>
+                </View>
+              ) : (
+                <View style={clientProfileStyles.contactItem}>
+                  <Ionicons name="location-outline" size={18} color={TEXT_LIGHT} />
+                  <Text style={clientProfileStyles.noInfoText}>No location provided</Text>
+                </View>
+              )}
+            </View>
+            
+            {/* Statistics - Updated to show rate instead of total spent and hire rate */}
+            <View style={clientProfileStyles.section}>
+              <Text style={clientProfileStyles.sectionLabel}>
+                <Ionicons name="stats-chart-outline" size={14} color={BLUE} />
+                {' '}Statistics
+              </Text>
+              <View style={clientProfileStyles.statsGrid}>
+                {client.jobs_posted !== undefined && (
+                  <View style={clientProfileStyles.statCard}>
+                    <Text style={clientProfileStyles.statValue}>{client.jobs_posted || 0}</Text>
+                    <Text style={clientProfileStyles.statLabel}>Jobs Posted</Text>
+                  </View>
+                )}
+                {client.rate !== undefined && (
+                  <View style={clientProfileStyles.statCard}>
+                    <Text style={clientProfileStyles.statValue}>
+                      {client.rate ? `₱${client.rate.toLocaleString()}` : 'N/A'}
+                    </Text>
+                    <Text style={clientProfileStyles.statLabel}>Rate</Text>
+                  </View>
+                )}
+                {client.member_since && (
+                  <View style={clientProfileStyles.statCard}>
+                    <Text style={clientProfileStyles.statValue}>
+                      {new Date(client.member_since).getFullYear()}
+                    </Text>
+                    <Text style={clientProfileStyles.statLabel}>Member Since</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -264,7 +474,7 @@ function SkeletonCard() {
   );
 }
 
-// ── Application Modal Component with Existing CV Support ──────────────────────
+// ── Application Modal Component ──────────────────────────────────────────────
 function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userProfile }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [coverLetter, setCoverLetter] = useState('');
@@ -789,12 +999,24 @@ function LocationSearchInput({ value, onChangeText, onSelectLocation, placeholde
 }
 
 // ── Job Detail Bottom Sheet ────────────────────────────────────────────────────
-function JobDetailSheet({ job, visible, onClose, onApply, hasApplied }) {
+function JobDetailSheet({ job, visible, onClose, onApply, hasApplied, onViewClientProfile }) {
   if (!job) return null;
 
   const locationText = formatLocation(job.location);
   const payText = formatPayInformation(job.pay_information, job.budget_amount);
   const skills = job.required_skills || job.skills || [];
+  const client = job.client_id || {};
+
+  // Check if client has information
+  const hasEmail = client.email && client.email.length > 0;
+  const hasPhone = client.phone && client.phone.length > 0;
+  const hasLocation = client.location && client.location.length > 0;
+  const hasCompany = client.company_name && client.company_name.length > 0;
+  const hasBusinessType = client.business_type && client.business_type.length > 0;
+  const hasIndustry = client.industry && client.industry.length > 0;
+  const hasWebsite = client.website && client.website.length > 0;
+  const hasBudgetRange = client.budget_range && client.budget_range.length > 0;
+  const hasDescription = client.description && client.description.length > 0;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -845,6 +1067,155 @@ function JobDetailSheet({ job, visible, onClose, onApply, hasApplied }) {
           <View style={sheet.divider} />
 
           <ScrollView style={sheet.body} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+            {/* CLIENT PROFILE SECTION - Clickable to view full profile */}
+            {client && Object.keys(client).length > 0 && (
+              <View style={sheet.section}>
+                <View style={sheet.clientSectionHeader}>
+                  <Ionicons name="person-circle-outline" size={18} color={BLUE} />
+                  <Text style={sheet.sectionLabel}>About the Client</Text>
+                </View>
+                
+                <TouchableOpacity 
+                  style={sheet.clientCard}
+                  onPress={() => onViewClientProfile(client)}
+                  activeOpacity={0.7}
+                >
+                  <View style={sheet.clientHeader}>
+                    {client.profile_picture ? (
+                      <Image source={{ uri: client.profile_picture }} style={sheet.clientAvatar} />
+                    ) : (
+                      <View style={sheet.clientAvatarPlaceholder}>
+                        <Ionicons name="person-outline" size={24} color={NAVY} />
+                      </View>
+                    )}
+                    <View style={sheet.clientInfo}>
+                      <Text style={sheet.clientName}>
+                        {client.first_name || ''} {client.last_name || ''}
+                      </Text>
+                      {hasCompany && (
+                        <Text style={sheet.clientCompany}>
+                          <Ionicons name="business-outline" size={12} color={TEXT_MUTED} />
+                          {' '}{client.company_name}
+                        </Text>
+                      )}
+                      <View style={sheet.clientBadge}>
+                        <Ionicons name="checkmark-circle" size={12} color={GREEN} />
+                        <Text style={sheet.clientBadgeText}>Verified Client</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={TEXT_LIGHT} />
+                  </View>
+                  
+                  {/* Client Description */}
+                  {hasDescription && (
+                    <View style={sheet.clientDescriptionContainer}>
+                      <Text style={sheet.clientDescriptionLabel}>
+                        <Ionicons name="information-circle-outline" size={12} color={TEXT_MUTED} />
+                        {' '}About
+                      </Text>
+                      <Text style={sheet.clientDescription} numberOfLines={3}>
+                        {client.description}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Company Information */}
+                  {(hasCompany || hasBusinessType || hasIndustry || hasWebsite || hasBudgetRange) && (
+                    <View style={sheet.clientCompanyContainer}>
+                      <Text style={sheet.clientDescriptionLabel}>
+                        <Ionicons name="business-outline" size={12} color={TEXT_MUTED} />
+                        {' '}Company Details
+                      </Text>
+                      {hasCompany && (
+                        <View style={sheet.clientDetail}>
+                          <Ionicons name="business-outline" size={14} color={TEXT_MUTED} />
+                          <Text style={sheet.clientDetailText}>{client.company_name}</Text>
+                        </View>
+                      )}
+                      {hasBusinessType && (
+                        <View style={sheet.clientDetail}>
+                          <Ionicons name="layers-outline" size={14} color={TEXT_MUTED} />
+                          <Text style={sheet.clientDetailText}>{client.business_type}</Text>
+                        </View>
+                      )}
+                      {hasIndustry && (
+                        <View style={sheet.clientDetail}>
+                          <Ionicons name="construct-outline" size={14} color={TEXT_MUTED} />
+                          <Text style={sheet.clientDetailText}>{client.industry}</Text>
+                        </View>
+                      )}
+                      {hasWebsite && (
+                        <View style={sheet.clientDetail}>
+                          <Ionicons name="globe-outline" size={14} color={TEXT_MUTED} />
+                          <Text style={sheet.clientDetailText}>{client.website}</Text>
+                        </View>
+                      )}
+                      {hasBudgetRange && (
+                        <View style={sheet.clientDetail}>
+                          <Ionicons name="cash-outline" size={14} color={TEXT_MUTED} />
+                          <Text style={sheet.clientDetailText}>{client.budget_range}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Contact Details */}
+                  {(hasEmail || hasPhone || hasLocation) && (
+                    <View style={sheet.clientContactContainer}>
+                      <Text style={sheet.clientDescriptionLabel}>
+                        <Ionicons name="contact-outline" size={12} color={TEXT_MUTED} />
+                        {' '}Contact
+                      </Text>
+                      {hasEmail && (
+                        <View style={sheet.clientDetail}>
+                          <Ionicons name="mail-outline" size={14} color={TEXT_MUTED} />
+                          <Text style={sheet.clientDetailText}>{client.email}</Text>
+                        </View>
+                      )}
+                      {hasPhone && (
+                        <View style={sheet.clientDetail}>
+                          <Ionicons name="call-outline" size={14} color={TEXT_MUTED} />
+                          <Text style={sheet.clientDetailText}>{client.phone}</Text>
+                        </View>
+                      )}
+                      {hasLocation && (
+                        <View style={sheet.clientDetail}>
+                          <Ionicons name="location-outline" size={14} color={TEXT_MUTED} />
+                          <Text style={sheet.clientDetailText}>{client.location}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Client Statistics - Updated to show rate instead of total spent and hire rate */}
+                  {(client.jobs_posted !== undefined || client.rate !== undefined) && (
+                    <View style={sheet.clientStats}>
+                      {client.jobs_posted !== undefined && (
+                        <View style={sheet.clientStat}>
+                          <Text style={sheet.clientStatValue}>{client.jobs_posted || 0}</Text>
+                          <Text style={sheet.clientStatLabel}>Jobs Posted</Text>
+                        </View>
+                      )}
+                      {client.rate !== undefined && (
+                        <View style={sheet.clientStat}>
+                          <Text style={sheet.clientStatValue}>
+                            {client.rate ? `₱${client.rate.toLocaleString()}` : 'N/A'}
+                          </Text>
+                          <Text style={sheet.clientStatLabel}>Rate</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* View Full Profile Button */}
+                  <View style={sheet.viewProfileBtn}>
+                    <Text style={sheet.viewProfileBtnText}>Tap to view full profile</Text>
+                    <Ionicons name="arrow-forward" size={16} color={BLUE} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {skills.length > 0 && (
               <View style={sheet.section}>
                 <Text style={sheet.sectionLabel}>Required Skills</Text>
@@ -855,10 +1226,12 @@ function JobDetailSheet({ job, visible, onClose, onApply, hasApplied }) {
                 </View>
               </View>
             )}
+            
             <View style={sheet.section}>
               <Text style={sheet.sectionLabel}>Job Description</Text>
               <Text style={sheet.descText}>{job.description || 'No description provided.'}</Text>
             </View>
+            
             {job.requirements && (
               <View style={sheet.section}>
                 <Text style={sheet.sectionLabel}>Requirements & Qualifications</Text>
@@ -879,6 +1252,7 @@ function JobDetailSheet({ job, visible, onClose, onApply, hasApplied }) {
                 )}
               </View>
             )}
+            
             <View style={sheet.detailGrid}>
               {job.experience_level && (
                 <View style={sheet.detailItem}>
@@ -949,6 +1323,8 @@ export default function FreelancerScreen({ onNavigate, route }) {
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showAlreadyAppliedModal, setShowAlreadyAppliedModal] = useState(false);
+  const [showClientProfileModal, setShowClientProfileModal] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [appliedJobIds, setAppliedJobIds] = useState([]);
   const [applicationStatus, setApplicationStatus] = useState({});
@@ -1069,6 +1445,26 @@ export default function FreelancerScreen({ onNavigate, route }) {
     setSheetVisible(false); 
     setSelectedJob(job); 
     setShowApplyModal(true); 
+  };
+
+  const handleViewClientProfile = (client) => {
+    // Ensure we have all client data, use defaults if missing
+    const fullClient = {
+      ...client,
+      description: client.description || 'No description provided',
+      email: client.email || 'No email provided',
+      location: client.location || 'No location provided',
+      phone: client.phone || 'No phone provided',
+      company_name: client.company_name || 'No company name',
+      business_type: client.business_type || 'No business type',
+      industry: client.industry || 'No industry',
+      website: client.website || 'No website',
+      budget_range: client.budget_range || 'No budget range',
+      jobs_posted: client.jobs_posted || 0,
+      rate: client.rate || null,
+    };
+    setSelectedClient(fullClient);
+    setShowClientProfileModal(true);
   };
 
   const handleSubmitApplication = async (formData) => {
@@ -1233,7 +1629,7 @@ export default function FreelancerScreen({ onNavigate, route }) {
           )}
         </Text>
         <TouchableOpacity onPress={() => onNavigate('BrowseJobs')}>
-          <Text style={styles.sectionLink}>See all →</Text>
+          <Text style={styles.sectionLink}>See all </Text>
         </TouchableOpacity>
       </View>
     </>
@@ -1290,7 +1686,7 @@ export default function FreelancerScreen({ onNavigate, route }) {
           />
         )}
 
-        {/* Bottom Tab Bar - Balanced Version */}
+        {/* Bottom Tab Bar */}
         <BottomTabBar 
           activeTab={activeTab} 
           onTabPress={handleTabPress} 
@@ -1304,6 +1700,17 @@ export default function FreelancerScreen({ onNavigate, route }) {
         onClose={() => setSheetVisible(false)}
         onApply={handleApply}
         hasApplied={selectedJob ? appliedJobIds.includes(selectedJob._id) : false}
+        onViewClientProfile={handleViewClientProfile}
+      />
+
+      {/* Client Profile Modal */}
+      <ClientProfileModal
+        visible={showClientProfileModal}
+        client={selectedClient}
+        onClose={() => {
+          setShowClientProfileModal(false);
+          setSelectedClient(null);
+        }}
       />
 
       <ApplicationModal
@@ -1420,7 +1827,6 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '700', color: TEXT_MAIN, marginTop: 14, marginBottom: 6 },
   emptySub: { fontSize: 13, color: TEXT_MUTED, textAlign: 'center', paddingHorizontal: 20 },
 
-  // Balanced Bottom Tab Bar Styles - hindi masyadong baba, hindi nakalutang
   tabSafe: { 
     backgroundColor: CARD,
     borderTopWidth: 1,
@@ -1521,6 +1927,149 @@ const sheet = StyleSheet.create({
   body: { paddingHorizontal: 20 },
   section: { marginBottom: 20 },
   sectionLabel: { fontSize: 11, fontWeight: '700', color: BLUE, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
+  
+  // Client Profile Styles
+  clientSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  clientCard: {
+    backgroundColor: BG,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+  },
+  clientHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  clientAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: BLUE,
+  },
+  clientAvatarPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: `${GOLD}30`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: GOLD,
+  },
+  clientInfo: {
+    flex: 1,
+  },
+  clientName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    marginBottom: 2,
+  },
+  clientCompany: {
+    fontSize: 12,
+    color: TEXT_MUTED,
+  },
+  clientBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  clientBadgeText: {
+    fontSize: 10,
+    color: GREEN,
+    fontWeight: '500',
+  },
+  clientDescriptionContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  clientCompanyContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  clientContactContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  clientDescriptionLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  clientDescription: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    lineHeight: 20,
+  },
+  clientDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  clientDetailText: {
+    fontSize: 12,
+    color: TEXT_MUTED,
+    flex: 1,
+  },
+  clientStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  clientStat: {
+    alignItems: 'center',
+  },
+  clientStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  clientStatLabel: {
+    fontSize: 10,
+    color: TEXT_LIGHT,
+    marginTop: 2,
+  },
+  viewProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: `${BLUE}10`,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: `${BLUE}20`,
+  },
+  viewProfileBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: BLUE,
+  },
+  
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   tag: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: `${BLUE}10`, borderRadius: 999, borderWidth: 1.5, borderColor: `${BLUE}22` },
   tagText: { fontSize: 12, color: BLUE, fontWeight: '600' },
@@ -1534,6 +2083,37 @@ const sheet = StyleSheet.create({
   applyBtn: { flex: 1, height: 48, borderRadius: 14, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center' },
   applyBtnDisabled: { backgroundColor: `${BLUE}50` },
   applyBtnText: { fontSize: 15, fontWeight: '700', color: WHITE },
+});
+
+// ── Client Profile Modal Styles ──────────────────────────────────────────────
+const clientProfileStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(7,26,62,0.55)' },
+  container: { backgroundColor: WHITE, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: SCREEN_H * 0.9, paddingTop: 12 },
+  handle: { width: 40, height: 4, borderRadius: 999, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: BORDER },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: TEXT_MAIN },
+  body: { paddingHorizontal: 20, paddingTop: 16 },
+  profileHeader: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 20 },
+  profileAvatar: { width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: BLUE },
+  profileAvatarPlaceholder: { width: 64, height: 64, borderRadius: 32, backgroundColor: `${GOLD}30`, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: GOLD },
+  profileInfo: { flex: 1 },
+  profileName: { fontSize: 20, fontWeight: '700', color: TEXT_MAIN, marginBottom: 4 },
+  profileCompany: { fontSize: 14, color: TEXT_MUTED, marginBottom: 4 },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  verifiedText: { fontSize: 12, color: GREEN, fontWeight: '500' },
+  section: { marginBottom: 20 },
+  sectionLabel: { fontSize: 14, fontWeight: '600', color: BLUE, marginBottom: 12 },
+  description: { fontSize: 14, color: TEXT_MUTED, lineHeight: 22 },
+  noInfoText: { fontSize: 14, color: TEXT_LIGHT, fontStyle: 'italic' },
+  infoItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: BORDER },
+  infoText: { fontSize: 14, color: TEXT_MAIN, flex: 1 },
+  contactItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: BORDER },
+  contactText: { fontSize: 14, color: TEXT_MAIN, flex: 1 },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  statCard: { flex: 1, minWidth: '45%', backgroundColor: BG, borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1.5, borderColor: BORDER },
+  statValue: { fontSize: 20, fontWeight: '700', color: TEXT_MAIN },
+  statLabel: { fontSize: 11, color: TEXT_LIGHT, marginTop: 4 },
 });
 
 // ── Application Modal Styles ─────────────────────────────────────────────────────
@@ -1561,7 +2141,6 @@ const applyStyles = StyleSheet.create({
   uploadBtnText: { fontSize: 12, color: BLUE, marginTop: 8 },
   fileInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: BG, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, marginBottom: 16, borderWidth: 1.5, borderColor: BORDER },
   fileName: { flex: 1, fontSize: 12, color: TEXT_MAIN },
-  educationScroll: { flexDirection: 'row', marginBottom: 16 },
   educationChip: { backgroundColor: BG, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, marginRight: 8, borderWidth: 1.5, borderColor: BORDER },
   educationChipActive: { backgroundColor: `${BLUE}10`, borderColor: BLUE },
   educationChipText: { fontSize: 12, color: TEXT_MUTED },

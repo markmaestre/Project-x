@@ -1,22 +1,15 @@
+// routes/jobRoutes.js
 import express from "express";
 import mongoose from "mongoose";
-import multer from "multer";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import Job from "../models/Job.js";
 import Client from "../models/Client.js";
 import Freelancer from "../models/Freelancer.js";
 import Application from "../models/Application.js";
 import SavedJob from "../models/SavedJob.js";
+import { upload } from "../config/cloudinary.js";
 
 const router = express.Router();
-
-// Configure multer for FormData parsing
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  }
-});
 
 // Helper function to safely parse JSON fields
 const parseJSONField = (value) => {
@@ -69,6 +62,10 @@ const calculateProfileInsights = async (job, freelancerId) => {
   
   const missingSkills = jobSkills.filter(jobSkill =>
     !freelancerSkills.some(skill => skill.toLowerCase() === jobSkill.toLowerCase())
+  );
+  
+  const extraSkills = freelancerSkills.filter(skill =>
+    !jobSkills.some(jobSkill => jobSkill.toLowerCase() === skill.toLowerCase())
   );
   
   const skillMatchPercentage = jobSkills.length > 0 
@@ -278,7 +275,8 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
       estimated_duration: estimated_duration || null,
       contact_preference: contact_preference || "chat",
       total_applicants: 0,
-      status: "open"
+      status: "open",
+      progress: 0
     };
 
     // Add optional fields if provided
@@ -357,10 +355,12 @@ router.get("/jobs/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "Job not found" });
     }
 
+    // Check if user is client and owns the job
     if (req.user.role === "client" && job.client_id._id.toString() !== req.user.id) {
       return res.status(403).json({ message: "Access denied" });
     }
 
+    // Check if user is freelancer and job is not open
     if (req.user.role === "freelancer" && job.status !== "open") {
       return res.status(403).json({ message: "This job is not available" });
     }
@@ -498,6 +498,10 @@ router.patch("/jobs/:id/status", authMiddleware, async (req, res) => {
     }
 
     job.status = status;
+    if (status === "completed") {
+      job.completed_at = new Date();
+      job.progress = 100;
+    }
     await job.save();
 
     res.json({
@@ -716,6 +720,361 @@ router.get("/jobs/stats/dashboard", authMiddleware, async (req, res) => {
     console.error("Error fetching job statistics:", error);
     res.status(500).json({ 
       message: "Error fetching statistics", 
+      error: error.message 
+    });
+  }
+});
+
+// ==================== JOB PROGRESS & UPDATES ROUTES (NEW) ====================
+
+// Update job progress
+router.patch("/jobs/:id/progress", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { progress, notes } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid job ID" });
+    }
+
+    if (progress === undefined || progress < 0 || progress > 100) {
+      return res.status(400).json({ message: "Progress must be between 0 and 100" });
+    }
+
+    const job = await Job.findById(id);
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    // Check if user is authorized (client or assigned freelancer)
+    const isClient = job.client_id.toString() === req.user.id;
+    const isAssignedFreelancer = job.assigned_freelancer_id && 
+      job.assigned_freelancer_id.toString() === req.user.id;
+
+    if (!isClient && !isAssignedFreelancer) {
+      return res.status(403).json({ message: "You are not authorized to update this job's progress" });
+    }
+
+    // Update progress
+    const previousProgress = job.progress || 0;
+    job.progress = progress;
+    
+    if (progress === 100 && previousProgress < 100) {
+      job.status = "completed";
+      job.completed_at = new Date();
+      job.completion_notes = notes || "Job marked as complete";
+    }
+
+    await job.save();
+
+    res.json({
+      message: "Progress updated successfully",
+      job
+    });
+  } catch (error) {
+    console.error("Error updating job progress:", error);
+    res.status(500).json({ 
+      message: "Error updating job progress", 
+      error: error.message 
+    });
+  }
+});
+
+// Add job update/milestone with file upload
+router.patch("/jobs/:id/updates", authMiddleware, upload.array('files', 5), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, status } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid job ID" });
+    }
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ message: "Update title is required" });
+    }
+
+    const job = await Job.findById(id);
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    // Check authorization
+    const isClient = job.client_id.toString() === req.user.id;
+    const isAssignedFreelancer = job.assigned_freelancer_id && 
+      job.assigned_freelancer_id.toString() === req.user.id;
+
+    if (!isClient && !isAssignedFreelancer) {
+      return res.status(403).json({ message: "Not authorized to add updates to this job" });
+    }
+
+    // Process uploaded files
+    const files = req.files ? req.files.map(file => ({
+      name: file.originalname,
+      url: file.path,
+      public_id: file.filename,
+      mime_type: file.mimetype,
+      size: file.size
+    })) : [];
+
+    const update = {
+      title: title.trim(),
+      description: description || '',
+      status: status || 'pending',
+      files: files,
+      created_by: req.user.id,
+      created_by_role: req.user.role
+    };
+
+    job.updates.push(update);
+    await job.save();
+
+    // Get the newly added update
+    const newUpdate = job.updates[job.updates.length - 1];
+
+    res.status(201).json({
+      message: "Update added successfully",
+      update: newUpdate,
+      job
+    });
+  } catch (error) {
+    console.error("Error adding job update:", error);
+    res.status(500).json({ 
+      message: "Error adding job update", 
+      error: error.message 
+    });
+  }
+});
+
+// Update a specific job update
+router.patch("/jobs/:jobId/updates/:updateId", authMiddleware, async (req, res) => {
+  try {
+    const { jobId, updateId } = req.params;
+    const { title, description, status } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(jobId) || !mongoose.Types.ObjectId.isValid(updateId)) {
+      return res.status(400).json({ message: "Invalid ID" });
+    }
+
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    // Check authorization
+    const isClient = job.client_id.toString() === req.user.id;
+    const isAssignedFreelancer = job.assigned_freelancer_id && 
+      job.assigned_freelancer_id.toString() === req.user.id;
+
+    if (!isClient && !isAssignedFreelancer) {
+      return res.status(403).json({ message: "Not authorized to update this job" });
+    }
+
+    const updateIndex = job.updates.findIndex(u => u._id.toString() === updateId);
+    if (updateIndex === -1) {
+      return res.status(404).json({ message: "Update not found" });
+    }
+
+    const update = job.updates[updateIndex];
+    if (title) update.title = title.trim();
+    if (description !== undefined) update.description = description;
+    if (status) update.status = status;
+    update.updated_at = new Date();
+
+    await job.save();
+
+    res.json({
+      message: "Update updated successfully",
+      update: job.updates[updateIndex],
+      job
+    });
+  } catch (error) {
+    console.error("Error updating job update:", error);
+    res.status(500).json({ 
+      message: "Error updating job update", 
+      error: error.message 
+    });
+  }
+});
+
+// Delete a job update
+router.delete("/jobs/:jobId/updates/:updateId", authMiddleware, async (req, res) => {
+  try {
+    const { jobId, updateId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(jobId) || !mongoose.Types.ObjectId.isValid(updateId)) {
+      return res.status(400).json({ message: "Invalid ID" });
+    }
+
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    // Check authorization
+    const isClient = job.client_id.toString() === req.user.id;
+    const isAssignedFreelancer = job.assigned_freelancer_id && 
+      job.assigned_freelancer_id.toString() === req.user.id;
+
+    if (!isClient && !isAssignedFreelancer) {
+      return res.status(403).json({ message: "Not authorized to delete updates from this job" });
+    }
+
+    const updateIndex = job.updates.findIndex(u => u._id.toString() === updateId);
+    if (updateIndex === -1) {
+      return res.status(404).json({ message: "Update not found" });
+    }
+
+    job.updates.splice(updateIndex, 1);
+    await job.save();
+
+    res.json({
+      message: "Update deleted successfully",
+      job
+    });
+  } catch (error) {
+    console.error("Error deleting job update:", error);
+    res.status(500).json({ 
+      message: "Error deleting job update", 
+      error: error.message 
+    });
+  }
+});
+
+// Upload attachments to a job
+router.patch("/jobs/:id/attachments", authMiddleware, upload.array('files', 10), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid job ID" });
+    }
+
+    const job = await Job.findById(id);
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    // Check authorization
+    const isClient = job.client_id.toString() === req.user.id;
+    const isAssignedFreelancer = job.assigned_freelancer_id && 
+      job.assigned_freelancer_id.toString() === req.user.id;
+
+    if (!isClient && !isAssignedFreelancer) {
+      return res.status(403).json({ message: "Not authorized to upload attachments to this job" });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "No files uploaded" });
+    }
+
+    const attachments = req.files.map(file => ({
+      name: file.originalname,
+      url: file.path,
+      public_id: file.filename,
+      mime_type: file.mimetype,
+      size: file.size,
+      uploaded_by: req.user.id,
+      uploaded_by_role: req.user.role
+    }));
+
+    job.attachments.push(...attachments);
+    await job.save();
+
+    res.json({
+      message: "Attachments uploaded successfully",
+      attachments: job.attachments,
+      job
+    });
+  } catch (error) {
+    console.error("Error uploading attachments:", error);
+    res.status(500).json({ 
+      message: "Error uploading attachments", 
+      error: error.message 
+    });
+  }
+});
+
+// Delete an attachment
+router.delete("/jobs/:jobId/attachments/:attachmentId", authMiddleware, async (req, res) => {
+  try {
+    const { jobId, attachmentId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(jobId) || !mongoose.Types.ObjectId.isValid(attachmentId)) {
+      return res.status(400).json({ message: "Invalid ID" });
+    }
+
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    // Check authorization
+    const isClient = job.client_id.toString() === req.user.id;
+    const isAssignedFreelancer = job.assigned_freelancer_id && 
+      job.assigned_freelancer_id.toString() === req.user.id;
+
+    if (!isClient && !isAssignedFreelancer) {
+      return res.status(403).json({ message: "Not authorized to delete attachments from this job" });
+    }
+
+    const attachmentIndex = job.attachments.findIndex(a => a._id.toString() === attachmentId);
+    if (attachmentIndex === -1) {
+      return res.status(404).json({ message: "Attachment not found" });
+    }
+
+    job.attachments.splice(attachmentIndex, 1);
+    await job.save();
+
+    res.json({
+      message: "Attachment deleted successfully",
+      job
+    });
+  } catch (error) {
+    console.error("Error deleting attachment:", error);
+    res.status(500).json({ 
+      message: "Error deleting attachment", 
+      error: error.message 
+    });
+  }
+});
+
+// Get job updates and progress
+router.get("/jobs/:id/progress", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid job ID" });
+    }
+
+    const job = await Job.findById(id)
+      .select('progress updates attachments status assigned_freelancer_id');
+
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    // Check authorization
+    const isClient = job.client_id.toString() === req.user.id;
+    const isAssignedFreelancer = job.assigned_freelancer_id && 
+      job.assigned_freelancer_id.toString() === req.user.id;
+
+    if (!isClient && !isAssignedFreelancer && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Not authorized to view this job's progress" });
+    }
+
+    res.json({
+      progress: job.progress || 0,
+      status: job.status,
+      updates: job.updates || [],
+      attachments: job.attachments || [],
+      assigned_freelancer_id: job.assigned_freelancer_id
+    });
+  } catch (error) {
+    console.error("Error fetching job progress:", error);
+    res.status(500).json({ 
+      message: "Error fetching job progress", 
       error: error.message 
     });
   }

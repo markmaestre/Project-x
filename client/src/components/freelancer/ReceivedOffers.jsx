@@ -1,1240 +1,881 @@
+// screens/freelancer/ReceivedOffersScreen.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, 
-  Modal, Alert, FlatList, RefreshControl, ActivityIndicator, StatusBar
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
+  Image,
+  StatusBar,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Dimensions,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { getReceivedOffers, updateOfferStatus } from '../../Redux/slices/offerSlice';
+import { getFreelancerApplications } from '../../Redux/slices/applicationSlice';
 
-// ── Vantara Design tokens ──────────────────────────────────────────────────────────
+const { width } = Dimensions.get('window');
+
+// ─── Design Tokens ───────────────────────────────────────────────────────────
 const NAVY       = '#071A3E';
-const NAVY2      = '#0D2151';
+const NAVY_MID   = '#0D2456';
 const BLUE       = '#0055A5';
 const BLUE_MD    = '#0073CF';
-const BLUE_LT    = '#1E90FF';
 const GOLD       = '#C89520';
-const GOLD_LT    = '#E8B84B';
-const GOLD_DK    = '#8A6410';
-const SILVER     = '#8899B0';
-const SILVER2    = '#B8C8D8';
 const WHITE      = '#FFFFFF';
-const BG         = '#EEF4FA';
+const BG         = '#F0F4F8';
 const CARD       = '#FFFFFF';
 const TEXT_MAIN  = '#071A3E';
-const TEXT_MUTED = '#3A5070';
-const TEXT_LIGHT = '#7A90A8';
-const BORDER     = '#C8D8E8';
+const TEXT_MUTED = '#4A6A8A';
+const TEXT_LIGHT = '#8AA4BE';
+const BORDER     = '#DCE4EC';
 const GREEN      = '#059669';
-const ORANGE     = '#F97316';
-const RED        = '#EF4444';
-// ─────────────────────────────────────────────────────────────────────────────────
+const GREEN_SOFT = '#D1FAE5';
+const ORANGE     = '#D97706';
+const RED        = '#DC2626';
+const RED_SOFT   = '#FEE2E2';
+const YELLOW_SOFT= '#FEF3C7';
+const PURPLE     = '#6D28D9';
+const PURPLE_SOFT= '#EDE9FE';
+const TEAL       = '#0D9488';
+const TEAL_SOFT  = '#CCFBF1';
 
-const STATUS_PENDING = GOLD;
-const STATUS_ACCEPTED = GREEN;
-const STATUS_DECLINED = RED;
-const STATUS_EXPIRED = TEXT_LIGHT;
+// ─── Tabs - Only Offer related tabs ──────────────────────────────────────────
+const TABS = [
+  { key: 'All',      label: 'All' },
+  { key: 'offered',  label: 'Offers' },
+  { key: 'accepted', label: 'Accepted' },
+  { key: 'declined', label: 'Declined' },
+  { key: 'expired',  label: 'Expired' },
+];
 
-export default function ReceivedOffers({ onNavigate }) {
+// ─── Status Config - Only Offer statuses ──────────────────────────────────────
+const STATUS_CONFIG = {
+  pending:   { label: 'Pending',     color: ORANGE,      bgColor: YELLOW_SOFT,           icon: 'time-outline' },
+  offered:   { label: 'New Offer',   color: BLUE,        bgColor: `${BLUE}14`,           icon: 'gift-outline' },
+  accepted:  { label: 'Accepted',    color: GREEN,       bgColor: GREEN_SOFT,            icon: 'checkmark-circle-outline' },
+  declined:  { label: 'Declined',    color: RED,         bgColor: RED_SOFT,              icon: 'close-circle-outline' },
+  expired:   { label: 'Expired',     color: TEXT_LIGHT,  bgColor: '#F3F4F6',             icon: 'calendar-outline' },
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const formatDate = (dateString) => {
+  if (!dateString) return 'Unknown date';
+  return new Date(dateString).toLocaleDateString('en-PH', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
+};
+
+const formatTime = (dateString) => {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleTimeString('en-PH', {
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+};
+
+const formatDateTime = (dateString) => {
+  if (!dateString) return 'Unknown';
+  const d = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1)    return 'Just now';
+  if (diffMins < 60)   return `${diffMins}m ago`;
+  if (diffHours < 24)  return `${diffHours}h ago`;
+  if (diffDays === 1)  return `Yesterday at ${formatTime(dateString)}`;
+  if (diffDays < 7)    return `${diffDays}d ago`;
+  return formatDate(dateString);
+};
+
+const formatCurrency = (amount) => {
+  if (!amount) return '₱0';
+  return `₱${Number(amount).toLocaleString('en-PH')}`;
+};
+
+const getInitials = (first, last) =>
+  `${first?.[0] || ''}${last?.[0] || ''}`.toUpperCase();
+
+const AVATAR_COLORS = [BLUE, BLUE_MD, GOLD, '#3B82F6', '#F59E0B', '#EF4444', '#10B981', '#8B5CF6', '#EC4899'];
+const getAvatarColor = (name) => AVATAR_COLORS[(name?.length || 0) % AVATAR_COLORS.length];
+
+const getTimeRemaining = (expiryDate) => {
+  if (!expiryDate) return null;
+  const diff = new Date(expiryDate) - new Date();
+  if (diff <= 0) return 'Expired';
+  const days  = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  if (days > 0)  return `${days}d ${hours}h remaining`;
+  if (hours > 0) return `${hours}h remaining`;
+  return 'Expiring soon';
+};
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function StatusBadge({ status, small = false }) {
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+  return (
+    <View style={[
+      badge.wrap,
+      { backgroundColor: cfg.bgColor },
+      small && badge.small,
+    ]}>
+      <Ionicons name={cfg.icon} size={small ? 10 : 11} color={cfg.color} />
+      <Text style={[badge.text, { color: cfg.color }, small && badge.smallText]}>
+        {cfg.label}
+      </Text>
+    </View>
+  );
+}
+
+const badge = StyleSheet.create({
+  wrap:      { flexDirection:'row', alignItems:'center', gap:4, paddingHorizontal:9, paddingVertical:5, borderRadius:20 },
+  small:     { paddingHorizontal:7, paddingVertical:3 },
+  text:      { fontSize:11, fontWeight:'700', letterSpacing:0.1 },
+  smallText: { fontSize:10 },
+});
+
+function Avatar({ src, first, last, name, size = 44 }) {
+  const color = getAvatarColor(name || first || '');
+  const initials = getInitials(first, last) || 'C';
+  const r = size / 2;
+  return (
+    <View style={{ width:size, height:size, borderRadius:r, backgroundColor:`${color}18`, alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
+      {src
+        ? <Image source={{ uri:src }} style={{ width:size, height:size, borderRadius:r }} />
+        : <Text style={{ fontSize: size * 0.33, fontWeight:'700', color }}>{initials}</Text>
+      }
+    </View>
+  );
+}
+
+// ─── New-Offer Banner ─────────────────────────────────────────────────────────
+function NewOfferBanner({ offers, onPress }) {
+  const newOffers = offers.filter(o =>
+    o.status === 'offered' && o.status !== 'expired'
+  );
+  if (newOffers.length === 0) return null;
+
+  const latest = newOffers[0];
+  const client = latest.client_id || {};
+  const job    = latest.job_id || {};
+  const clientName = client.company_name ||
+    `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'A client';
+
+  return (
+    <TouchableOpacity style={banner.wrap} onPress={() => onPress(latest)} activeOpacity={0.88}>
+      <View style={banner.accentBar} />
+      <View style={banner.inner}>
+        <View style={banner.iconWrap}>
+          <Ionicons name="gift" size={22} color={WHITE} />
+        </View>
+        <View style={banner.textBlock}>
+          <View style={banner.topRow}>
+            <Text style={banner.label}>New Offer Received</Text>
+            {newOffers.length > 1 && (
+              <View style={banner.countPill}>
+                <Text style={banner.countText}>+{newOffers.length - 1} more</Text>
+              </View>
+            )}
+          </View>
+          <Text style={banner.headline} numberOfLines={1}>
+            {clientName} — {job.title || 'Project'}
+          </Text>
+          <View style={banner.metaRow}>
+            <Ionicons name="cash-outline" size={12} color={`${BLUE}CC`} />
+            <Text style={banner.meta}>{formatCurrency(latest.amount)}</Text>
+            <View style={banner.dot} />
+            <Ionicons name="time-outline" size={12} color={`${BLUE}CC`} />
+            <Text style={banner.meta}>{formatDateTime(latest.created_at)}</Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={BLUE_MD} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const banner = StyleSheet.create({
+  wrap: {
+    marginHorizontal:16, marginTop:14, marginBottom:4,
+    backgroundColor:WHITE, borderRadius:14,
+    borderWidth:1.5, borderColor:`${BLUE}28`,
+    shadowColor:BLUE, shadowOffset:{width:0,height:4},
+    shadowOpacity:0.10, shadowRadius:14, elevation:4,
+    overflow:'hidden',
+  },
+  accentBar: { height:3, backgroundColor:BLUE_MD, width:'100%' },
+  inner: {
+    flexDirection:'row', alignItems:'center',
+    padding:14, gap:12,
+  },
+  iconWrap: {
+    width:44, height:44, borderRadius:12,
+    backgroundColor:BLUE, alignItems:'center', justifyContent:'center',
+    shadowColor:BLUE, shadowOffset:{width:0,height:3}, shadowOpacity:0.30, shadowRadius:8, elevation:3,
+  },
+  textBlock: { flex:1 },
+  topRow:    { flexDirection:'row', alignItems:'center', gap:8, marginBottom:2 },
+  label:     { fontSize:10, fontWeight:'700', color:BLUE, textTransform:'uppercase', letterSpacing:0.8 },
+  countPill: { backgroundColor:`${BLUE}14`, paddingHorizontal:7, paddingVertical:2, borderRadius:10 },
+  countText: { fontSize:10, fontWeight:'700', color:BLUE },
+  headline:  { fontSize:14, fontWeight:'700', color:TEXT_MAIN, marginBottom:4 },
+  metaRow:   { flexDirection:'row', alignItems:'center', gap:4 },
+  meta:      { fontSize:11, color:TEXT_MUTED, fontWeight:'500' },
+  dot:       { width:3, height:3, borderRadius:1.5, backgroundColor:BORDER, marginHorizontal:2 },
+});
+
+// ─── Offer Card ───────────────────────────────────────────────────────────────
+function OfferCard({ offer, onPress }) {
+  const client     = offer.client_id || {};
+  const job        = offer.job_id || {};
+  const clientName = client.company_name ||
+    `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client';
+
+  const isOffered   = offer.status === 'offered';
+  const isAccepted  = offer.status === 'accepted';
+  const isDeclined  = offer.status === 'declined';
+  const isExpired   = offer.status === 'expired';
+  const timeLeft    = getTimeRemaining(offer.expiry_date);
+
+  let cardExtra = {};
+  if (isOffered && !isExpired) cardExtra = card.offered;
+  else if (isAccepted) cardExtra = card.accepted;
+  else if (isDeclined) cardExtra = card.declined;
+  else if (isExpired)  cardExtra = card.expired;
+
+  return (
+    <TouchableOpacity style={[card.base, cardExtra]} activeOpacity={0.84} onPress={() => onPress(offer)}>
+
+      {isOffered && !isExpired && <View style={card.stripe} />}
+
+      <View style={card.header}>
+        <Avatar
+          src={client.profile_picture}
+          first={client.first_name}
+          last={client.last_name}
+          name={clientName}
+          size={46}
+        />
+        <View style={card.headerText}>
+          <Text style={card.clientName} numberOfLines={1}>{clientName}</Text>
+          <Text style={card.jobTitle} numberOfLines={1}>{job.title || 'Project'}</Text>
+        </View>
+        <StatusBadge status={offer.status} />
+      </View>
+
+      <View style={card.divider} />
+
+      <View style={card.metaGrid}>
+        <MetaItem icon="cash-outline" label="Offer Amount" value={formatCurrency(offer.amount)} valueStyle={isOffered && card.amountHighlight} />
+        <MetaItem icon="calendar-outline" label="Received" value={formatDate(offer.created_at)} sub={formatTime(offer.created_at)} />
+      </View>
+
+      {(isOffered) && !isExpired && timeLeft && (
+        <View style={card.timerRow}>
+          <Ionicons name="hourglass-outline" size={13} color={ORANGE} />
+          <Text style={card.timerText}>{timeLeft}</Text>
+        </View>
+      )}
+
+      {!!offer.message && (
+        <View style={card.msgBox}>
+          <Text style={card.msgLabel}>Message</Text>
+          <Text style={card.msgText} numberOfLines={2}>{offer.message}</Text>
+        </View>
+      )}
+
+      {isAccepted && <FooterLabel icon="checkmark-circle" color={GREEN} bg={GREEN_SOFT} text="Offer accepted by you" />}
+      {isDeclined  && <FooterLabel icon="close-circle"        color={RED}        bg={RED_SOFT}    text="You declined this offer" />}
+      {isExpired   && <FooterLabel icon="calendar"            color={TEXT_LIGHT}  bg="#F3F4F6"    text="This offer has expired" />}
+    </TouchableOpacity>
+  );
+}
+
+function MetaItem({ icon, label, value, sub, valueStyle }) {
+  return (
+    <View style={meta.wrap}>
+      <View style={meta.labelRow}>
+        <Ionicons name={icon} size={11} color={TEXT_LIGHT} />
+        <Text style={meta.label}>{label}</Text>
+      </View>
+      <Text style={[meta.value, valueStyle]}>{value}</Text>
+      {sub ? <Text style={meta.sub}>{sub}</Text> : null}
+    </View>
+  );
+}
+
+function FooterLabel({ icon, color, bg, text }) {
+  return (
+    <View style={[footer.wrap, { backgroundColor: bg }]}>
+      <Ionicons name={icon} size={13} color={color} />
+      <Text style={[footer.text, { color }]}>{text}</Text>
+    </View>
+  );
+}
+
+const card = StyleSheet.create({
+  base: {
+    backgroundColor:CARD, borderRadius:16, marginBottom:12,
+    borderWidth:1, borderColor:BORDER,
+    shadowColor:'#000', shadowOffset:{width:0,height:1}, shadowOpacity:0.05, shadowRadius:6, elevation:2,
+    overflow:'hidden',
+  },
+  offered:  { borderColor:BLUE, borderWidth:2, shadowColor:BLUE, shadowOpacity:0.12, shadowRadius:14, elevation:5 },
+  accepted: { borderColor:GREEN, borderWidth:1.5 },
+  declined: { borderColor:RED,   borderWidth:1.5, opacity:0.88 },
+  expired:  { opacity:0.65 },
+  stripe:   { height:3, backgroundColor:BLUE_MD },
+  header:   { flexDirection:'row', alignItems:'center', padding:14, paddingBottom:10, gap:12 },
+  headerText:{ flex:1 },
+  clientName:{ fontSize:14, fontWeight:'700', color:TEXT_MAIN, marginBottom:2 },
+  jobTitle:  { fontSize:12, color:TEXT_MUTED },
+  divider:   { height:1, backgroundColor:BG, marginHorizontal:14 },
+  metaGrid:  { flexDirection:'row', gap:0, padding:14, paddingVertical:12 },
+  amountHighlight: { color:BLUE, fontSize:16, fontWeight:'800' },
+  timerRow:  { flexDirection:'row', alignItems:'center', gap:6, marginHorizontal:14, marginBottom:10,
+               backgroundColor:YELLOW_SOFT, paddingHorizontal:10, paddingVertical:6, borderRadius:8 },
+  timerText: { fontSize:12, color:ORANGE, fontWeight:'600' },
+  msgBox:    { backgroundColor:BG, marginHorizontal:14, marginBottom:12, padding:12, borderRadius:10, borderWidth:1, borderColor:BORDER },
+  msgLabel:  { fontSize:9, fontWeight:'700', color:TEXT_LIGHT, textTransform:'uppercase', letterSpacing:0.8, marginBottom:3 },
+  msgText:   { fontSize:12, color:TEXT_MUTED, lineHeight:17 },
+});
+
+const meta = StyleSheet.create({
+  wrap:     { flex:1 },
+  labelRow: { flexDirection:'row', alignItems:'center', gap:4, marginBottom:3 },
+  label:    { fontSize:10, color:TEXT_LIGHT, fontWeight:'600', textTransform:'uppercase', letterSpacing:0.5 },
+  value:    { fontSize:14, fontWeight:'700', color:TEXT_MAIN },
+  sub:      { fontSize:11, color:TEXT_LIGHT, marginTop:1 },
+});
+
+const footer = StyleSheet.create({
+  wrap: { flexDirection:'row', alignItems:'center', justifyContent:'center', gap:6,
+          paddingVertical:9, marginTop:0 },
+  text: { fontSize:12, fontWeight:'600' },
+});
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+export default function ReceivedOffersScreen({ onNavigate }) {
   const dispatch = useDispatch();
-  const { receivedOffers, isLoading, error } = useSelector((state) => state.offers);
-  const { user } = useSelector((state) => state.auth);
-  
-  const [selectedOffer, setSelectedOffer] = useState(null);
-  const [activeTab, setActiveTab] = useState('all');
-  const [refreshing, setRefreshing] = useState(false);
+  const { receivedOffers, isLoading }               = useSelector((s) => s.offers);
+  const { applications, isLoading: appsLoading }    = useSelector((s) => s.applications);
 
-  useEffect(() => {
-    fetchOffers();
-  }, []);
+  const [activeTab,      setActiveTab]      = useState('All');
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [selectedOffer,  setSelectedOffer]  = useState(null);
+  const [showModal,      setShowModal]      = useState(false);
+  const [combinedOffers, setCombinedOffers] = useState([]);
 
-  const fetchOffers = useCallback(async () => {
+  // ── Fetch ────────────────────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
     try {
-      await dispatch(getReceivedOffers({})).unwrap();
-    } catch (error) {
-      console.error('Error fetching offers:', error);
-      Alert.alert('Error', 'Failed to load offers');
+      setRefreshing(true);
+      await Promise.all([
+        dispatch(getReceivedOffers({})).unwrap(),
+        dispatch(getFreelancerApplications({})).unwrap(),
+      ]);
+    } catch {
+      Alert.alert('Error', 'Failed to load offers. Please try again.');
+    } finally {
+      setRefreshing(false);
     }
   }, [dispatch]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchOffers();
-    setRefreshing(false);
-  }, [fetchOffers]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'pending': return STATUS_PENDING;
-      case 'accepted': return STATUS_ACCEPTED;
-      case 'declined': return STATUS_DECLINED;
-      case 'expired': return STATUS_EXPIRED;
-      default: return TEXT_MAIN;
-    }
-  };
+  // ── Combine offers + applications ────────────────────────────────────────
+  useEffect(() => {
+    const directOffers = (receivedOffers || []).map(o => ({
+      ...o,
+      source: 'offer', isFromApplication: false, hasOffer: true,
+      offerId: o._id, status: o.status || 'pending', displayStatus: o.status || 'pending',
+    }));
 
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case 'pending': return 'time-outline';
-      case 'accepted': return 'checkmark-circle-outline';
-      case 'declined': return 'close-circle-outline';
-      case 'expired': return 'alert-circle-outline';
-      default: return 'help-outline';
-    }
-  };
+    const appOffers = (applications || [])
+      .filter(app => ['offered', 'accepted', 'pending', 'declined', 'expired'].includes(app.status))
+      .map(app => {
+        const job = app.job_id || {};
+        const client = app.client_id || {};
 
-  const getStatusText = (status) => {
-    const statusMap = {
-      pending: 'Pending',
-      accepted: 'Accepted',
-      declined: 'Declined',
-      expired: 'Expired'
-    };
-    return statusMap[status] || status;
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Unknown';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  const getInitials = (firstName, lastName) => {
-    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
-  };
-
-  const handleAcceptOffer = (offer) => {
-    Alert.alert(
-      'Accept Offer',
-      `Are you sure you want to accept the offer from ${offer.client_name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Accept',
-          onPress: async () => {
-            try {
-              await dispatch(updateOfferStatus({ offerId: offer._id, status: 'accepted' })).unwrap();
-              Alert.alert('Success', 'Offer accepted successfully!');
-              setSelectedOffer(null);
-              fetchOffers();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to accept offer');
-            }
-          }
+        let match = (receivedOffers || []).find(o =>
+          o.application_id?.toString() === app._id?.toString()
+        );
+        if (!match && job._id) {
+          match = (receivedOffers || []).find(o => {
+            const oJob = o.job_id?._id?.toString() || o.job_id?.toString();
+            const oFl  = o.freelancer_id?._id?.toString() || o.freelancer_id?.toString();
+            return oJob === job._id?.toString() && oFl === (app.freelancer_id?._id?.toString() || app.freelancer_id?.toString());
+          });
         }
-      ]
-    );
-  };
-
-  const handleDeclineOffer = (offer) => {
-    Alert.alert(
-      'Decline Offer',
-      `Are you sure you want to decline the offer from ${offer.client_name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Decline',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await dispatch(updateOfferStatus({ offerId: offer._id, status: 'declined' })).unwrap();
-              Alert.alert('Info', 'Offer declined');
-              setSelectedOffer(null);
-              fetchOffers();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to decline offer');
-            }
-          }
+        if (!match && job._id) {
+          match = (receivedOffers || []).find(o =>
+            (o.job_id?._id?.toString() || o.job_id?.toString()) === job._id?.toString()
+          );
         }
-      ]
+
+        const actualStatus = match?.status || app.status;
+        return {
+          _id: match?._id || app._id,
+          source: 'application', client_id: client, job_id: job,
+          amount: app.offer_amount || app.proposed_rate || 0,
+          message: app.offer_message || app.cover_letter || '',
+          status: actualStatus, displayStatus: actualStatus,
+          created_at: app.offer_sent_at || app.updated_at || app.applied_at || new Date(),
+          expiry_date: match?.expiry_date || null,
+          viewed_by_freelancer: match?.viewed_by_freelancer || true,
+          application: app, isFromApplication: true,
+          offerId: match?._id || null, rawAppStatus: app.status,
+          hasOffer: !!match || ['offered', 'accepted'].includes(app.status),
+        };
+      });
+
+    const directIds = new Set(directOffers.map(o => o._id));
+    const filtered  = appOffers.filter(a =>
+      !(a.offerId && directIds.has(a.offerId)) && !directIds.has(a._id)
     );
+
+    const all = [...directOffers, ...filtered]
+      .filter(o => o.status !== 'hired' && o.status !== 'pending')
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    setCombinedOffers(all);
+  }, [receivedOffers, applications]);
+
+  // ── Filter ───────────────────────────────────────────────────────────────
+  const filteredOffers = combinedOffers.filter(o => {
+    if (activeTab === 'All')     return true;
+    return o.status === activeTab;
+  });
+
+  const newOffersCount = combinedOffers.filter(
+    o => o.status === 'offered' && o.status !== 'expired'
+  ).length;
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+  const handleOfferPress = (offer) => { setSelectedOffer(offer); setShowModal(true); };
+
+  const handleMessageClient = (clientId, clientName) => {
+    setShowModal(false);
+    onNavigate('Messages', { userId: clientId, userName: clientName, userRole: 'client' });
   };
 
-  const handleCounterOffer = (offer) => {
-    Alert.alert(
-      'Counter Offer',
-      'This feature will allow you to send a counter offer. Coming soon!',
-      [{ text: 'OK' }]
-    );
-  };
+  // ── Loading ───────────────────────────────────────────────────────────────
+  const isInitialLoading = (isLoading || appsLoading) && !refreshing && combinedOffers.length === 0;
 
-  const filteredOffers = () => {
-    if (activeTab === 'all') return receivedOffers || [];
-    return (receivedOffers || []).filter(offer => offer.status === activeTab);
-  };
-
-  const getTabCount = (status) => {
-    if (status === 'all') return (receivedOffers || []).length;
-    return (receivedOffers || []).filter(offer => offer.status === status).length;
-  };
-
-  const OfferCard = ({ offer, onPress }) => {
-    const statusColor = getStatusColor(offer.status);
-    const initials = getInitials(offer.client_first_name, offer.client_last_name);
-    const isExpired = offer.expiry_date && new Date(offer.expiry_date) < new Date();
-    
+  if (isInitialLoading) {
     return (
-      <TouchableOpacity 
-        style={styles.offerCard}
-        onPress={() => onPress(offer)}
-        activeOpacity={0.85}
-      >
-        <View style={styles.offerHeader}>
-          <View style={styles.clientSection}>
-            <View style={[styles.clientAvatar, { backgroundColor: BLUE }]}>
-              <Text style={styles.clientInitials}>{initials}</Text>
-            </View>
-            <View style={styles.clientDetails}>
-              <Text style={styles.clientName}>{offer.client_name}</Text>
-              <View style={styles.ratingRow}>
-                <Ionicons name="star" size={12} color={GOLD} />
-                <Text style={styles.ratingText}>{offer.client_rating || '4.5'}</Text>
-                <View style={styles.dot} />
-                <Text style={styles.dateText}>{formatDate(offer.created_at)}</Text>
-              </View>
-            </View>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
-            <Ionicons name={getStatusIcon(offer.status)} size={12} color={statusColor} />
-            <Text style={[styles.statusText, { color: statusColor }]}>
-              {getStatusText(offer.status)}
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.projectTitle} numberOfLines={1}>{offer.job_title}</Text>
-        
-        {offer.message && (
-          <View style={styles.messagePreview}>
-            <Ionicons name="chatbubble-outline" size={14} color={TEXT_LIGHT} />
-            <Text style={styles.offerMessage} numberOfLines={2}>
-              {offer.message}
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.offerDetails}>
-          <View style={styles.detailItem}>
-            <View style={styles.detailIconBox}>
-              <Ionicons name="cash-outline" size={14} color={BLUE} />
-            </View>
-            <Text style={styles.detailText}>₱{offer.amount?.toLocaleString()}</Text>
-          </View>
-          
-          {offer.expiry_date && new Date(offer.expiry_date) > new Date() && offer.status === 'pending' && (
-            <View style={styles.detailItem}>
-              <View style={[styles.detailIconBox, { backgroundColor: `${STATUS_PENDING}10` }]}>
-                <Ionicons name="time-outline" size={14} color={STATUS_PENDING} />
-              </View>
-              <Text style={[styles.detailText, { color: STATUS_PENDING }]}>
-                Expires: {formatDate(offer.expiry_date)}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {offer.status === 'pending' && !isExpired && (
-          <View style={styles.offerActions}>
-            <TouchableOpacity 
-              style={[styles.actionBtn, styles.acceptBtn]}
-              onPress={() => handleAcceptOffer(offer)}
-            >
-              <Ionicons name="checkmark" size={16} color={WHITE} />
-              <Text style={styles.acceptBtnText}>Accept</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.actionBtn, styles.declineBtn]}
-              onPress={() => handleDeclineOffer(offer)}
-            >
-              <Ionicons name="close" size={16} color={RED} />
-              <Text style={styles.declineBtnText}>Decline</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {offer.status === 'pending' && isExpired && (
-          <View style={styles.expiredBadge}>
-            <Ionicons name="alert-circle" size={14} color={STATUS_EXPIRED} />
-            <Text style={styles.expiredBadgeText}>Offer Expired</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  const OfferDetailModal = ({ offer, visible, onClose }) => {
-    if (!offer) return null;
-
-    const statusColor = getStatusColor(offer.status);
-    const initials = getInitials(offer.client_first_name, offer.client_last_name);
-    const isExpired = offer.expiry_date && new Date(offer.expiry_date) < new Date();
-
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={visible}
-        onRequestClose={onClose}
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalBackdrop} onPress={onClose} activeOpacity={1} />
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHandle} />
-            
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
-                <Ionicons name="close" size={20} color={TEXT_MUTED} />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>Offer Details</Text>
-              <View style={{ width: 36 }} />
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
-              <View style={styles.modalContent}>
-                {/* Client Info Section */}
-                <View style={styles.modalClientSection}>
-                  <View style={[styles.modalClientAvatar, { backgroundColor: BLUE }]}>
-                    <Text style={styles.modalClientInitials}>{initials}</Text>
-                  </View>
-                  <View style={styles.modalClientInfo}>
-                    <Text style={styles.modalClientName}>{offer.client_name}</Text>
-                    <View style={styles.modalRatingRow}>
-                      <Ionicons name="star" size={14} color={GOLD} />
-                      <Text style={styles.modalRatingText}>{offer.client_rating || '4.5'}</Text>
-                      <Text style={styles.modalReviewCount}>(Client)</Text>
-                    </View>
-                  </View>
-                  <View style={[styles.modalStatusBadge, { backgroundColor: statusColor + '15' }]}>
-                    <Ionicons name={getStatusIcon(offer.status)} size={14} color={statusColor} />
-                    <Text style={[styles.modalStatusText, { color: statusColor }]}>
-                      {getStatusText(offer.status)}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Job Title */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Project</Text>
-                  <Text style={styles.modalProjectTitle}>{offer.job_title}</Text>
-                </View>
-
-                {/* Client Message */}
-                {offer.message && (
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Message from Client</Text>
-                    <View style={styles.messageCard}>
-                      <Ionicons name="chatbubble-ellipses-outline" size={18} color={BLUE} />
-                      <Text style={styles.messageText}>{offer.message}</Text>
-                    </View>
-                  </View>
-                )}
-
-                {/* Offer Details Grid */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Offer Details</Text>
-                  <View style={styles.detailsGrid}>
-                    <View style={styles.gridCard}>
-                      <View style={styles.gridIconBox}>
-                        <Ionicons name="cash-outline" size={22} color={BLUE} />
-                      </View>
-                      <Text style={styles.gridLabel}>Amount</Text>
-                      <Text style={styles.gridValue}>₱{offer.amount?.toLocaleString()}</Text>
-                    </View>
-                    <View style={styles.gridCard}>
-                      <View style={styles.gridIconBox}>
-                        <Ionicons name="calendar-outline" size={22} color={BLUE} />
-                      </View>
-                      <Text style={styles.gridLabel}>Received</Text>
-                      <Text style={styles.gridValue}>{formatDate(offer.created_at)}</Text>
-                    </View>
-                    {offer.expiry_date && (
-                      <View style={styles.gridCard}>
-                        <View style={[styles.gridIconBox, { backgroundColor: isExpired ? `${STATUS_EXPIRED}10` : `${STATUS_PENDING}10` }]}>
-                          <Ionicons name="time-outline" size={22} color={isExpired ? STATUS_EXPIRED : STATUS_PENDING} />
-                        </View>
-                        <Text style={styles.gridLabel}>Expires</Text>
-                        <Text style={[styles.gridValue, { color: isExpired ? STATUS_EXPIRED : STATUS_PENDING, fontSize: 12 }]}>
-                          {formatDate(offer.expiry_date)}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-                {/* Required Skills */}
-                {offer.job_skills && offer.job_skills.length > 0 && (
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Required Skills</Text>
-                    <View style={styles.skillsGrid}>
-                      {offer.job_skills.map((skill, index) => (
-                        <View key={index} style={styles.skillChip}>
-                          <Ionicons name="code-slash-outline" size={12} color={BLUE} />
-                          <Text style={styles.skillText}>{skill}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* Matched Skills */}
-                {offer.freelancer_skills && offer.freelancer_skills.length > 0 && (
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Your Matched Skills</Text>
-                    <View style={styles.skillsGrid}>
-                      {offer.freelancer_skills.map((skill, index) => (
-                        <View key={index} style={[styles.skillChip, styles.matchedChip]}>
-                          <Ionicons name="checkmark-circle" size={12} color={GREEN} />
-                          <Text style={[styles.skillText, styles.matchedText]}>{skill}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* Action Buttons */}
-                {offer.status === 'pending' && !isExpired && (
-                  <View style={styles.modalActions}>
-                    <TouchableOpacity 
-                      style={[styles.modalActionBtn, styles.modalAcceptBtn]}
-                      onPress={() => handleAcceptOffer(offer)}
-                    >
-                      <Ionicons name="checkmark-circle" size={20} color={WHITE} />
-                      <Text style={styles.modalAcceptText}>Accept Offer</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.modalActionBtn, styles.modalCounterBtn]}
-                      onPress={() => handleCounterOffer(offer)}
-                    >
-                      <Ionicons name="chatbubble-outline" size={20} color={BLUE} />
-                      <Text style={styles.modalCounterText}>Counter</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.modalActionBtn, styles.modalDeclineBtn]}
-                      onPress={() => handleDeclineOffer(offer)}
-                    >
-                      <Ionicons name="close-circle" size={20} color={RED} />
-                      <Text style={styles.modalDeclineText}>Decline</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {offer.status === 'pending' && isExpired && (
-                  <View style={styles.expiredContainer}>
-                    <Ionicons name="alert-circle" size={56} color={STATUS_EXPIRED} />
-                    <Text style={styles.expiredTitle}>Offer Expired</Text>
-                    <Text style={styles.expiredDescription}>
-                      This offer expired on {formatDate(offer.expiry_date)} and is no longer available.
-                    </Text>
-                  </View>
-                )}
-
-                {offer.status === 'accepted' && (
-                  <View style={styles.acceptedContainer}>
-                    <Ionicons name="checkmark-circle" size={56} color={STATUS_ACCEPTED} />
-                    <Text style={styles.acceptedTitle}>Offer Accepted!</Text>
-                    <Text style={styles.acceptedDescription}>
-                      You have accepted this offer. The client will contact you soon with next steps.
-                    </Text>
-                    <TouchableOpacity 
-                      style={styles.messageClientBtn}
-                      onPress={() => {
-                        onClose();
-                        onNavigate('Messages', { 
-                          userId: offer.client_id,
-                          userName: offer.client_name,
-                          userRole: 'client'
-                        });
-                      }}
-                    >
-                      <Ionicons name="chatbubble" size={20} color={WHITE} />
-                      <Text style={styles.messageClientText}>Message Client</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
-  if (isLoading && !refreshing) {
-    return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={s.safe} edges={['top']}>
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => onNavigate('MyApplications')} style={styles.backBtn}>
-            <View style={styles.backIconWrap}>
-              <Ionicons name="arrow-back" size={18} color={WHITE} />
-            </View>
+        <View style={s.topbar}>
+          <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} activeOpacity={0.7}>
+            <View style={s.iconBtn}><Ionicons name="arrow-back" size={18} color={WHITE} /></View>
           </TouchableOpacity>
-          <Text style={styles.title}>Received Offers</Text>
-          <View style={{ width: 40 }} />
+          <Text style={s.topbarTitle}>Offers</Text>
+          <View style={{ width:40 }} />
         </View>
-        <View style={styles.loadingContainer}>
+        <View style={s.center}>
           <ActivityIndicator size="large" color={BLUE} />
-          <Text style={styles.loadingText}>Loading offers...</Text>
+          <Text style={s.loadingText}>Loading offers…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={s.safe} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
-      
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => onNavigate('MyApplications')} style={styles.backBtn}>
-          <View style={styles.backIconWrap}>
-            <Ionicons name="arrow-back" size={18} color={WHITE} />
-          </View>
-        </TouchableOpacity>
-        <Text style={styles.title}>Received Offers</Text>
-        <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh}>
-          <View style={styles.refreshIconWrap}>
-            <Ionicons name="refresh-outline" size={18} color={WHITE} />
-          </View>
-        </TouchableOpacity>
-      </View>
+      <View style={s.root}>
 
-      {/* Stats Summary */}
-      {(receivedOffers?.length > 0) && (
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{getTabCount('pending')}</Text>
-            <Text style={styles.statLabel}>Pending</Text>
+        {/* ── Top Bar ── */}
+        <View style={s.topbar}>
+          <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} activeOpacity={0.7}>
+            <View style={s.iconBtn}><Ionicons name="arrow-back" size={18} color={WHITE} /></View>
+          </TouchableOpacity>
+          <View style={s.topbarCenter}>
+            <Text style={s.topbarTitle}>Offers Received</Text>
+            {newOffersCount > 0 && (
+              <View style={s.topbarBadge}>
+                <Text style={s.topbarBadgeText}>{newOffersCount} new</Text>
+              </View>
+            )}
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{getTabCount('accepted')}</Text>
-            <Text style={styles.statLabel}>Accepted</Text>
+          <TouchableOpacity onPress={fetchData} activeOpacity={0.7}>
+            <View style={s.iconBtnOutline}><Ionicons name="refresh-outline" size={18} color={BLUE_MD} /></View>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Stats Row - Only Offer stats ── */}
+        <View style={s.statsRow}>
+          <View style={s.statItem}>
+            <Text style={[s.statNum, { color: BLUE }]}>{combinedOffers.length}</Text>
+            <Text style={s.statLabel}>Total Offers</Text>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{getTabCount('declined')}</Text>
-            <Text style={styles.statLabel}>Declined</Text>
+          <View style={s.statDiv} />
+          <View style={s.statItem}>
+            <Text style={[s.statNum, { color: ORANGE }]}>{combinedOffers.filter(o=>o.status==='offered').length}</Text>
+            <Text style={s.statLabel}>New</Text>
+          </View>
+          <View style={s.statDiv} />
+          <View style={s.statItem}>
+            <Text style={[s.statNum, { color: GREEN }]}>{combinedOffers.filter(o=>o.status==='accepted').length}</Text>
+            <Text style={s.statLabel}>Accepted</Text>
+          </View>
+          <View style={s.statDiv} />
+          <View style={s.statItem}>
+            <Text style={[s.statNum, { color: RED }]}>{combinedOffers.filter(o=>o.status==='declined').length}</Text>
+            <Text style={s.statLabel}>Declined</Text>
           </View>
         </View>
-      )}
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        {['all', 'pending', 'accepted', 'declined'].map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </Text>
-            <View style={[styles.tabBadge, activeTab === tab && styles.tabBadgeActive]}>
-              <Text style={[styles.tabBadgeText, activeTab === tab && styles.tabBadgeTextActive]}>
-                {getTabCount(tab)}
+        {/* ── Filter Tabs ── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          style={s.tabScroll} contentContainerStyle={s.tabContent}>
+          {TABS.map(tab => {
+            const active = activeTab === tab.key;
+            const count = tab.key === 'All'
+              ? combinedOffers.length
+              : combinedOffers.filter(o=>o.status===tab.key).length;
+            const isHot = tab.key === 'offered' && count > 0;
+
+            return (
+              <TouchableOpacity key={tab.key}
+                style={[s.tab, active && s.tabActive, isHot && !active && s.tabHot]}
+                onPress={() => setActiveTab(tab.key)} activeOpacity={0.75}>
+                <Text style={[s.tabText, active && s.tabTextActive, isHot && !active && s.tabTextHot]}>
+                  {tab.label}
+                </Text>
+                {count > 0 && (
+                  <View style={[s.tabBadge, active && s.tabBadgeActive, isHot && !active && s.tabBadgeHot]}>
+                    <Text style={[s.tabBadgeText, active && s.tabBadgeTextActive, isHot && !active && s.tabBadgeTextHot]}>
+                      {count}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* ── Scrollable Content ── */}
+        <ScrollView showsVerticalScrollIndicator={false}
+          contentContainerStyle={s.scroll}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchData} tintColor={BLUE} />}
+        >
+          <NewOfferBanner offers={combinedOffers} onPress={handleOfferPress} />
+
+          {filteredOffers.length === 0 ? (
+            <View style={s.empty}>
+              <View style={s.emptyIcon}>
+                <Ionicons name="gift-outline" size={40} color={BLUE} />
+              </View>
+              <Text style={s.emptyTitle}>No offers here</Text>
+              <Text style={s.emptyText}>
+                {activeTab === 'All'
+                  ? 'Keep applying to jobs — clients will reach out with offers.'
+                  : `No ${activeTab} offers at the moment.`}
               </Text>
+              <TouchableOpacity style={s.emptyBtn} onPress={() => onNavigate('FindJobs')} activeOpacity={0.8}>
+                <Ionicons name="search-outline" size={15} color={WHITE} />
+                <Text style={s.emptyBtnText}>Browse Jobs</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-        ))}
+          ) : (
+            filteredOffers.map(offer => (
+              <OfferCard key={offer._id} offer={offer} onPress={handleOfferPress} />
+            ))
+          )}
+        </ScrollView>
       </View>
 
-      <FlatList
-        data={filteredOffers()}
-        keyExtractor={(item) => item._id}
-        renderItem={({ item }) => (
-          <OfferCard offer={item} onPress={setSelectedOffer} />
-        )}
-        contentContainerStyle={styles.offersList}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
-        }
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconWrap}>
-              <Ionicons name="mail-open-outline" size={56} color={TEXT_LIGHT} />
-            </View>
-            <Text style={styles.emptyTitle}>No offers found</Text>
-            <Text style={styles.emptyText}>
-              {activeTab === 'all' 
-                ? "You haven't received any offers yet" 
-                : `No ${activeTab} offers to display`}
-            </Text>
-            <TouchableOpacity 
-              style={styles.browseBtn}
-              onPress={() => onNavigate('FreelancerDashboard')}
-            >
-              <Ionicons name="search-outline" size={18} color={WHITE} />
-              <Text style={styles.browseBtnText}>Browse Jobs</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      />
+      {/* ── Detail Modal ── */}
+      <Modal animationType="slide" transparent visible={showModal} onRequestClose={() => setShowModal(false)}>
+        <View style={modal.overlay}>
+          <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':undefined} style={{ flex:1, justifyContent:'flex-end' }}>
+            <View style={modal.sheet}>
+              <View style={modal.handle} />
 
-      <OfferDetailModal 
-        offer={selectedOffer}
-        visible={selectedOffer !== null}
-        onClose={() => setSelectedOffer(null)}
-      />
+              <View style={modal.header}>
+                <TouchableOpacity style={modal.closeBtn} onPress={() => setShowModal(false)} activeOpacity={0.7}>
+                  <Ionicons name="close" size={19} color={TEXT_MAIN} />
+                </TouchableOpacity>
+                <Text style={modal.title}>Offer Details</Text>
+                <View style={{ width:36 }} />
+              </View>
+
+              {selectedOffer && (() => {
+                const client     = selectedOffer.client_id || {};
+                const job        = selectedOffer.job_id || {};
+                const clientName = client.company_name ||
+                  `${client.first_name||''} ${client.last_name||''}`.trim() || 'Client';
+                const isOffered  = selectedOffer.status === 'offered';
+                const isAccepted = selectedOffer.status === 'accepted';
+                const timeLeft   = getTimeRemaining(selectedOffer.expiry_date);
+
+                return (
+                  <>
+                    <View style={modal.clientStrip}>
+                      <Avatar src={client.profile_picture} first={client.first_name}
+                        last={client.last_name} name={clientName} size={50} />
+                      <View style={{ flex:1 }}>
+                        <Text style={modal.clientName}>{clientName}</Text>
+                        <Text style={modal.clientRole}>Client</Text>
+                      </View>
+                      <StatusBadge status={selectedOffer.status} />
+                    </View>
+
+                    <ScrollView showsVerticalScrollIndicator={false}
+                      contentContainerStyle={modal.body}>
+
+                      <View style={modal.card}>
+                        <Text style={modal.cardEyebrow}>Job</Text>
+                        <Text style={modal.cardTitle}>{job.title || 'Project'}</Text>
+                        {!!job.description && (
+                          <Text style={modal.cardDesc} numberOfLines={3}>{job.description}</Text>
+                        )}
+                      </View>
+
+                      <View style={[modal.amountCard, isOffered && modal.amountCardActive]}>
+                        <View style={modal.amountRow}>
+                          <View>
+                            <Text style={modal.amountLabel}>Offer Amount</Text>
+                            <Text style={modal.amountValue}>{formatCurrency(selectedOffer.amount)}</Text>
+                          </View>
+                          {isOffered && (
+                            <View style={modal.newPill}>
+                              <Ionicons name="gift-outline" size={11} color={WHITE} />
+                              <Text style={modal.newPillText}>New</Text>
+                            </View>
+                          )}
+                        </View>
+                        {timeLeft && isOffered && (
+                          <View style={modal.timerInline}>
+                            <Ionicons name="hourglass-outline" size={12} color={ORANGE} />
+                            <Text style={modal.timerInlineText}>{timeLeft}</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {!!selectedOffer.message && (
+                        <View style={modal.card}>
+                          <Text style={modal.cardEyebrow}>Message from Client</Text>
+                          <Text style={modal.cardBody}>{selectedOffer.message}</Text>
+                        </View>
+                      )}
+
+                      <View style={modal.card}>
+                        <Text style={modal.cardEyebrow}>Offer Details</Text>
+                        <View style={modal.grid}>
+                          <GridItem label="Date Received" value={formatDate(selectedOffer.created_at)} />
+                          <GridItem label="Time"          value={formatTime(selectedOffer.created_at)} />
+                          {selectedOffer.expiry_date && (
+                            <GridItem label="Expires"  value={formatDate(selectedOffer.expiry_date)}
+                              valueColor={selectedOffer.status==='expired' ? RED : undefined} />
+                          )}
+                          <GridItem label="Status"
+                            value={(STATUS_CONFIG[selectedOffer.status]||STATUS_CONFIG.pending).label}
+                            valueColor={(STATUS_CONFIG[selectedOffer.status]||STATUS_CONFIG.pending).color} />
+                        </View>
+                      </View>
+
+                      {(isOffered || isAccepted) && (
+                        <TouchableOpacity style={modal.cta}
+                          onPress={() => handleMessageClient(client._id, client.first_name)}
+                          activeOpacity={0.8}>
+                          <Ionicons name="chatbubble-ellipses-outline" size={18} color={WHITE} />
+                          <Text style={modal.ctaText}>Message Client</Text>
+                        </TouchableOpacity>
+                      )}
+                    </ScrollView>
+                  </>
+                );
+              })()}
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
-  
-  // Header
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 16, 
-    paddingVertical: 12,
-    backgroundColor: NAVY,
+function GridItem({ label, value, valueColor }) {
+  return (
+    <View style={grid.item}>
+      <Text style={grid.label}>{label}</Text>
+      <Text style={[grid.value, valueColor && { color: valueColor }]}>{value}</Text>
+    </View>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  safe: { flex:1, backgroundColor:NAVY },
+  root: { flex:1, backgroundColor:BG },
+
+  topbar: {
+    flexDirection:'row', alignItems:'center', justifyContent:'space-between',
+    paddingHorizontal:16, paddingVertical:13, backgroundColor:NAVY,
   },
-  backBtn: { alignSelf: 'flex-start' },
-  backIconWrap: {
-    width: 40, height: 40,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 12,
-    borderWidth: 1, 
-    borderColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center', 
-    justifyContent: 'center',
+  topbarCenter: { flexDirection:'row', alignItems:'center', gap:8 },
+  topbarTitle:  { fontSize:17, fontWeight:'700', color:WHITE, letterSpacing:-0.3 },
+  topbarBadge:  { backgroundColor:BLUE_MD, paddingHorizontal:8, paddingVertical:3, borderRadius:10 },
+  topbarBadgeText: { fontSize:10, fontWeight:'700', color:WHITE, letterSpacing:0.3 },
+  iconBtn: {
+    width:38, height:38, borderRadius:10,
+    backgroundColor:'rgba(255,255,255,0.09)',
+    borderWidth:1, borderColor:'rgba(255,255,255,0.14)',
+    alignItems:'center', justifyContent:'center',
   },
-  title: { 
-    fontSize: 18, 
-    fontWeight: '700', 
-    color: WHITE, 
-    letterSpacing: -0.3,
-  },
-  refreshBtn: { alignSelf: 'flex-start' },
-  refreshIconWrap: {
-    width: 40, height: 40,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 12,
-    borderWidth: 1, 
-    borderColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center', 
-    justifyContent: 'center',
+  iconBtnOutline: {
+    width:38, height:38, borderRadius:10,
+    backgroundColor:'rgba(0,115,207,0.1)',
+    borderWidth:1, borderColor:'rgba(0,115,207,0.22)',
+    alignItems:'center', justifyContent:'center',
   },
 
-  // Stats Summary
-  statsContainer: {
-    flexDirection: 'row',
-    backgroundColor: CARD,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+  statsRow: {
+    flexDirection:'row', 
+    alignItems:'center', 
+    justifyContent:'space-around',
+    paddingHorizontal:16, 
+    paddingVertical:14,
+    backgroundColor:CARD, 
+    borderBottomWidth:1, 
+    borderBottomColor:BORDER,
   },
-  statCard: {
-    flex: 1,
-    alignItems: 'center',
+  statItem: { 
+    flex:1, 
+    alignItems:'center',
+    paddingHorizontal:4,
   },
-  statNumber: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: TEXT_MAIN,
-    marginBottom: 2,
+  statNum:  { 
+    fontSize:22, 
+    fontWeight:'800', 
+    letterSpacing:-0.5,
+    textAlign:'center',
   },
-  statLabel: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-    fontWeight: '500',
+  statLabel:{ 
+    fontSize:10, 
+    color:TEXT_MUTED, 
+    fontWeight:'500', 
+    marginTop:2, 
+    letterSpacing:0.2,
+    textAlign:'center',
   },
-  statDivider: {
-    width: 1,
-    backgroundColor: BORDER,
-  },
-
-  // Loading
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: BG,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: TEXT_MUTED,
+  statDiv:  { 
+    width:1, 
+    height:30, 
+    backgroundColor:BORDER,
+    marginHorizontal:4,
   },
 
-  // Tabs
-  tabsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-    backgroundColor: CARD,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
+  tabScroll:   { backgroundColor:CARD, borderBottomWidth:1, borderBottomColor:BORDER },
+  tabContent:  { paddingHorizontal:14, paddingVertical:11, gap:8, flexDirection:'row' },
   tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: BG,
-    borderWidth: 1,
-    borderColor: BORDER,
+    flexDirection:'row', alignItems:'center', gap:5,
+    paddingHorizontal:13, paddingVertical:7, borderRadius:20,
+    borderWidth:1, borderColor:BORDER, backgroundColor:BG,
   },
-  tabActive: {
-    backgroundColor: `${BLUE}08`,
-    borderColor: BLUE,
-  },
-  tabText: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    fontWeight: '500',
-  },
-  tabTextActive: {
-    color: BLUE,
-    fontWeight: '600',
-  },
-  tabBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: BORDER,
-  },
-  tabBadgeActive: {
-    backgroundColor: BLUE,
-  },
-  tabBadgeText: {
-    fontSize: 10,
-    color: TEXT_MUTED,
-    fontWeight: '500',
-  },
-  tabBadgeTextActive: {
-    color: WHITE,
-    fontWeight: '700',
-  },
+  tabActive:      { backgroundColor:`${BLUE}10`, borderColor:BLUE },
+  tabHot:         { borderColor:BLUE_MD, borderWidth:1.5 },
+  tabText:        { fontSize:12, color:TEXT_MUTED, fontWeight:'500' },
+  tabTextActive:  { color:BLUE, fontWeight:'700' },
+  tabTextHot:     { color:BLUE_MD, fontWeight:'700' },
+  tabBadge:      { minWidth:17, height:17, borderRadius:9, backgroundColor:BORDER, alignItems:'center', justifyContent:'center', paddingHorizontal:3 },
+  tabBadgeActive:{ backgroundColor:`${BLUE}22` },
+  tabBadgeHot:   { backgroundColor:BLUE },
+  tabBadgeText:      { fontSize:10, color:TEXT_MUTED, fontWeight:'600' },
+  tabBadgeTextActive:{ color:BLUE },
+  tabBadgeTextHot:   { color:WHITE },
 
-  // Offer Card
-  offersList: {
-    padding: 16,
-    paddingBottom: 80,
-  },
-  offerCard: {
-    backgroundColor: CARD,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: BORDER,
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04, 
-    shadowRadius: 8, 
-    elevation: 2,
-  },
-  offerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  clientSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  clientAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clientInitials: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: WHITE,
-  },
-  clientDetails: {
-    flex: 1,
-  },
-  clientName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginBottom: 4,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  ratingText: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-  },
-  dot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: TEXT_LIGHT,
-  },
-  dateText: {
-    fontSize: 11,
-    color: TEXT_LIGHT,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  projectTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-    marginBottom: 8,
-  },
-  messagePreview: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 12,
-  },
-  offerMessage: {
-    flex: 1,
-    fontSize: 13,
-    color: TEXT_MUTED,
-    lineHeight: 18,
-  },
-  offerDetails: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 12,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  detailIconBox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: `${BLUE}08`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  detailText: {
-    fontSize: 12,
-    color: TEXT_MUTED,
-    fontWeight: '500',
-  },
-  offerActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  acceptBtn: {
-    backgroundColor: BLUE,
-  },
-  acceptBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: WHITE,
-  },
-  declineBtn: {
-    backgroundColor: `${RED}08`,
-    borderWidth: 1,
-    borderColor: `${RED}20`,
-  },
-  declineBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: RED,
-  },
-  expiredBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: `${STATUS_EXPIRED}08`,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  expiredBadgeText: {
-    fontSize: 11,
-    color: STATUS_EXPIRED,
-    fontWeight: '500',
-  },
+  scroll: { padding:16, paddingBottom:48 },
 
-  // Empty State
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 40,
-  },
-  emptyIconWrap: {
-    width: 96,
-    height: 96,
-    backgroundColor: `${TEXT_LIGHT}08`,
-    borderRadius: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: `${TEXT_LIGHT}15`,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: TEXT_MUTED,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
-  },
-  browseBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: BLUE,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  browseBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: WHITE,
-  },
+  center:      { flex:1, alignItems:'center', justifyContent:'center', backgroundColor:BG },
+  loadingText: { marginTop:12, fontSize:13, color:TEXT_MUTED },
 
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(7,26,62,0.6)',
-    justifyContent: 'flex-end',
+  empty:     { alignItems:'center', paddingVertical:64, paddingHorizontal:32 },
+  emptyIcon: { width:76, height:76, borderRadius:18, backgroundColor:`${BLUE}10`, alignItems:'center', justifyContent:'center', marginBottom:16 },
+  emptyTitle:{ fontSize:16, fontWeight:'700', color:TEXT_MAIN, marginBottom:6 },
+  emptyText: { fontSize:13, color:TEXT_MUTED, textAlign:'center', lineHeight:20, marginBottom:24 },
+  emptyBtn:  {
+    flexDirection:'row', alignItems:'center', gap:6,
+    backgroundColor:BLUE, paddingHorizontal:20, paddingVertical:12, borderRadius:12,
+    shadowColor:BLUE, shadowOffset:{width:0,height:4}, shadowOpacity:0.26, shadowRadius:10, elevation:3,
   },
-  modalBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  emptyBtnText:{ fontSize:13, fontWeight:'600', color:WHITE },
+});
+
+const modal = StyleSheet.create({
+  overlay: { flex:1, backgroundColor:'rgba(7,26,62,0.52)' },
+  sheet: {
+    backgroundColor:WHITE, borderTopLeftRadius:24, borderTopRightRadius:24,
+    maxHeight:'92%', minHeight:'75%',
   },
-  modalContainer: {
-    backgroundColor: CARD,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
+  handle: { width:34, height:4, backgroundColor:BORDER, borderRadius:2, alignSelf:'center', marginTop:10, marginBottom:4 },
+  header: {
+    flexDirection:'row', alignItems:'center', justifyContent:'space-between',
+    paddingHorizontal:16, paddingVertical:12,
+    borderBottomWidth:1, borderBottomColor:BORDER,
   },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: BORDER,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 12,
+  closeBtn: { width:34, height:34, borderRadius:17, backgroundColor:BG, alignItems:'center', justifyContent:'center' },
+  title:    { fontSize:15, fontWeight:'700', color:TEXT_MAIN },
+
+  clientStrip: {
+    flexDirection:'row', alignItems:'center', padding:14, gap:12,
+    borderBottomWidth:1, borderBottomColor:BORDER,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+  clientName:  { fontSize:15, fontWeight:'700', color:TEXT_MAIN },
+  clientRole:  { fontSize:12, color:TEXT_MUTED, marginTop:1 },
+
+  body: { padding:16, paddingBottom:36 },
+
+  card: {
+    backgroundColor:BG, borderRadius:12, padding:14,
+    marginBottom:12, borderWidth:1, borderColor:BORDER,
   },
-  modalCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: BG,
+  cardEyebrow: { fontSize:10, fontWeight:'700', color:TEXT_LIGHT, textTransform:'uppercase', letterSpacing:0.7, marginBottom:5 },
+  cardTitle:   { fontSize:15, fontWeight:'700', color:TEXT_MAIN, marginBottom:4 },
+  cardDesc:    { fontSize:12, color:TEXT_MUTED, lineHeight:18 },
+  cardBody:    { fontSize:13, color:TEXT_MAIN, lineHeight:20 },
+
+  amountCard: {
+    backgroundColor:`${BLUE}08`, borderRadius:12, padding:14,
+    marginBottom:12, borderWidth:1, borderColor:`${BLUE}1A`,
   },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: TEXT_MAIN,
+  amountCardActive: { borderColor:BLUE, borderWidth:2 },
+  amountRow:  { flexDirection:'row', alignItems:'center', justifyContent:'space-between' },
+  amountLabel:{ fontSize:10, fontWeight:'700', color:BLUE_MD, textTransform:'uppercase', letterSpacing:0.7, marginBottom:4 },
+  amountValue:{ fontSize:26, fontWeight:'800', color:BLUE, letterSpacing:-0.5 },
+  newPill:    { flexDirection:'row', alignItems:'center', gap:4, backgroundColor:BLUE, paddingHorizontal:10, paddingVertical:5, borderRadius:12 },
+  newPillText:{ fontSize:11, fontWeight:'700', color:WHITE },
+
+  timerInline:{ flexDirection:'row', alignItems:'center', gap:5, marginTop:10,
+                backgroundColor:YELLOW_SOFT, paddingHorizontal:10, paddingVertical:6, borderRadius:8 },
+  timerInlineText:{ fontSize:12, color:ORANGE, fontWeight:'600' },
+
+  grid: { flexDirection:'row', flexWrap:'wrap', gap:10, marginTop:4 },
+
+  cta: {
+    flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8,
+    backgroundColor:BLUE, paddingVertical:14, borderRadius:12, marginTop:4,
+    shadowColor:BLUE, shadowOffset:{width:0,height:4}, shadowOpacity:0.25, shadowRadius:12, elevation:4,
   },
-  modalScroll: {
-    maxHeight: '90%',
-  },
-  modalContent: {
-    padding: 20,
-  },
-  modalClientSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
-  modalClientAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalClientInitials: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: WHITE,
-  },
-  modalClientInfo: {
-    flex: 1,
-  },
-  modalClientName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginBottom: 4,
-  },
-  modalRatingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  modalRatingText: {
-    fontSize: 13,
-    color: TEXT_MAIN,
-    fontWeight: '500',
-  },
-  modalReviewCount: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-  },
-  modalStatusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  modalStatusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  modalSection: {
-    marginBottom: 24,
-  },
-  modalSectionTitle: {
-    fontSize: 12,
-    color: TEXT_MUTED,
-    fontWeight: '600',
-    marginBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  modalProjectTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    lineHeight: 24,
-  },
-  messageCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    backgroundColor: BG,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  messageText: {
-    flex: 1,
-    fontSize: 14,
-    color: TEXT_MUTED,
-    lineHeight: 20,
-  },
-  detailsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  gridCard: {
-    flex: 1,
-    backgroundColor: BG,
-    padding: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  gridIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: `${BLUE}08`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  gridLabel: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-    marginBottom: 4,
-  },
-  gridValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-  },
-  skillsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  skillChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: `${BLUE}08`,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: `${BLUE}15`,
-  },
-  skillText: {
-    fontSize: 12,
-    color: BLUE,
-    fontWeight: '500',
-  },
-  matchedChip: {
-    backgroundColor: `${GREEN}08`,
-    borderColor: `${GREEN}20`,
-  },
-  matchedText: {
-    color: GREEN,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  modalActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  modalAcceptBtn: {
-    backgroundColor: BLUE,
-  },
-  modalAcceptText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: WHITE,
-  },
-  modalCounterBtn: {
-    backgroundColor: `${BLUE}08`,
-    borderWidth: 1,
-    borderColor: `${BLUE}20`,
-  },
-  modalCounterText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: BLUE,
-  },
-  modalDeclineBtn: {
-    backgroundColor: `${RED}08`,
-    borderWidth: 1,
-    borderColor: `${RED}20`,
-  },
-  modalDeclineText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: RED,
-  },
-  expiredContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  expiredTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  expiredDescription: {
-    fontSize: 14,
-    color: TEXT_MUTED,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  acceptedContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  acceptedTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  acceptedDescription: {
-    fontSize: 14,
-    color: TEXT_MUTED,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
-  },
-  messageClientBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: BLUE,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  messageClientText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: WHITE,
-  },
+  ctaText: { fontSize:15, fontWeight:'700', color:WHITE },
+});
+
+const grid = StyleSheet.create({
+  item:  { width:'48%' },
+  label: { fontSize:10, color:TEXT_LIGHT, textTransform:'uppercase', letterSpacing:0.5, marginBottom:2 },
+  value: { fontSize:13, fontWeight:'600', color:TEXT_MAIN },
 });

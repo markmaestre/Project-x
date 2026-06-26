@@ -1,15 +1,31 @@
+// screens/freelancer/ReceivedOffersScreen.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, Text, TouchableOpacity, StyleSheet, 
-  Modal, Alert, FlatList, TextInput, ScrollView, RefreshControl, ActivityIndicator, StatusBar
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
+  Image,
+  StatusBar,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Dimensions,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { getReceivedOffers, updateOfferStatus } from '../../Redux/slices/offerSlice';
-import { getFreelancerJobs } from '../../Redux/slices/jobSlice';
+import { getFreelancerApplications } from '../../Redux/slices/applicationSlice';
 
-// ── Vantara Design tokens ──────────────────────────────────────────────────────────
+const { width } = Dimensions.get('window');
+
+// ─── Design Tokens ───────────────────────────────────────────────────────────
 const NAVY       = '#071A3E';
 const NAVY2      = '#0D2151';
 const BLUE       = '#0055A5';
@@ -28,16 +44,13 @@ const TEXT_MUTED = '#3A5070';
 const TEXT_LIGHT = '#7A90A8';
 const BORDER     = '#C8D8E8';
 const GREEN      = '#059669';
+const GREEN_SOFT = '#D1FAE5';
+const GREEN_MID  = '#86EFAC';
+const GREEN_DARK = '#059669';
 const ORANGE     = '#F97316';
 const RED        = '#EF4444';
-// ─────────────────────────────────────────────────────────────────────────────────
 
-const STATUS_IN_PROGRESS = BLUE;
-const STATUS_COMPLETED = GREEN;
-const STATUS_PENDING = GOLD;
-const STATUS_CANCELLED = RED;
-
-// ── Bottom Tab Bar with Centered My Jobs Button ─────────────────────────────────────
+// ─── Bottom Tab Bar - Same as MyJobs ────────────────────────────────────────
 function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   const tabs = [
     { key: 'Home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
@@ -50,11 +63,11 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   return (
     <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
       <View style={styles.tabBar}>
-        {tabs.map((tab, index) => {
+        {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
           const isMyJobs = tab.key === 'MyJobs';
           const hasBadge = tab.key === 'Messages' && pendingOffers > 0;
-          
+
           return (
             <TouchableOpacity
               key={tab.key}
@@ -98,240 +111,514 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   );
 }
 
-export default function MyJobs({ onNavigate, route }) {
-  const dispatch = useDispatch();
-  const { receivedOffers, isLoading: offersLoading } = useSelector((state) => state.offers);
-  const { list: jobs, isLoading: jobsLoading } = useSelector((state) => state.jobs.jobs);
-  const { user } = useSelector((state) => state.auth);
+// ─── Tabs - Updated to show hired and in-progress ──────────────────────────
+const TABS = [
+  { key: 'All',         label: 'All' },
+  { key: 'hired',       label: 'Hired' },
+  { key: 'in_progress', label: 'In Progress' },
+  { key: 'completed',   label: 'Completed' },
+  { key: 'offered',     label: 'Offers' },
+  { key: 'accepted',    label: 'Accepted' },
+  { key: 'declined',    label: 'Declined' },
+  { key: 'expired',     label: 'Expired' },
+];
+
+// ─── Status Config - Updated with hired and in_progress ──────────────────────
+const STATUS_CONFIG = {
+  pending:     { label: 'Pending',     color: ORANGE,      bgColor: `${ORANGE}15`,   icon: 'time-outline' },
+  offered:     { label: 'Offer',       color: BLUE,        bgColor: `${BLUE}15`,     icon: 'gift-outline' },
+  accepted:    { label: 'Accepted',    color: BLUE_MD,     bgColor: `${BLUE}15`,     icon: 'checkmark-circle-outline' },
+  hired:       { label: 'Hired',       color: GREEN,       bgColor: `${GREEN}15`,    icon: 'people-outline' },
+  in_progress: { label: 'In Progress', color: BLUE_MD,     bgColor: `${BLUE}15`,     icon: 'construct-outline' },
+  completed:   { label: 'Completed',   color: GREEN_DARK,  bgColor: `${GREEN}15`,    icon: 'flag-outline' },
+  declined:    { label: 'Declined',    color: RED,         bgColor: `${RED}15`,      icon: 'close-circle-outline' },
+  expired:     { label: 'Expired',     color: TEXT_MUTED,  bgColor: `${TEXT_MUTED}15`, icon: 'calendar-outline' },
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const formatDate = (dateString) => {
+  if (!dateString) return 'Unknown date';
+  return new Date(dateString).toLocaleDateString('en-PH', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
+};
+
+const formatTime = (dateString) => {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleTimeString('en-PH', {
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+};
+
+const formatDateTime = (dateString) => {
+  if (!dateString) return 'Unknown';
+  const d = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1)    return 'Just now';
+  if (diffMins < 60)   return `${diffMins}m ago`;
+  if (diffHours < 24)  return `${diffHours}h ago`;
+  if (diffDays === 1)  return `Yesterday at ${formatTime(dateString)}`;
+  if (diffDays < 7)    return `${diffDays}d ago`;
+  return formatDate(dateString);
+};
+
+const formatCurrency = (amount) => {
+  if (!amount) return '₱0';
+  return `₱${Number(amount).toLocaleString('en-PH')}`;
+};
+
+const getInitials = (first, last) =>
+  `${first?.[0] || ''}${last?.[0] || ''}`.toUpperCase();
+
+const AVATAR_COLORS = [BLUE, BLUE_MD, GOLD, '#3B82F6', '#F59E0B', '#EF4444', '#10B981', '#8B5CF6', '#EC4899'];
+const getAvatarColor = (name) => AVATAR_COLORS[(name?.length || 0) % AVATAR_COLORS.length];
+
+const getTimeRemaining = (expiryDate) => {
+  if (!expiryDate) return null;
+  const diff = new Date(expiryDate) - new Date();
+  if (diff <= 0) return 'Expired';
+  const days  = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  if (days > 0)  return `${days}d ${hours}h remaining`;
+  if (hours > 0) return `${hours}h remaining`;
+  return 'Expiring soon';
+};
+
+const getProgressColor = (progress) => {
+  if (progress < 30) return RED;
+  if (progress < 70) return ORANGE;
+  return GREEN;
+};
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function StatusBadge({ status, small = false }) {
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+  return (
+    <View style={[
+      badge.wrap,
+      { backgroundColor: cfg.bgColor },
+      small && badge.small,
+    ]}>
+      <Ionicons name={cfg.icon} size={small ? 10 : 11} color={cfg.color} />
+      <Text style={[badge.text, { color: cfg.color }, small && badge.smallText]}>
+        {cfg.label}
+      </Text>
+    </View>
+  );
+}
+
+const badge = StyleSheet.create({
+  wrap:      { flexDirection:'row', alignItems:'center', gap:4, paddingHorizontal:10, paddingVertical:5, borderRadius:15 },
+  small:     { paddingHorizontal:7, paddingVertical:3 },
+  text:      { fontSize:11, fontWeight:'500', letterSpacing:0.1 },
+  smallText: { fontSize:10 },
+});
+
+function Avatar({ src, first, last, name, size = 44 }) {
+  const color = getAvatarColor(name || first || '');
+  const initials = getInitials(first, last) || 'C';
+  const r = size / 2;
+  return (
+    <View style={{ 
+      width:size, 
+      height:size, 
+      borderRadius:r, 
+      backgroundColor: `${color}18`, 
+      alignItems:'center', 
+      justifyContent:'center', 
+      overflow:'hidden',
+      borderWidth: 1,
+      borderColor: `${color}30`,
+    }}>
+      {src
+        ? <Image source={{ uri:src }} style={{ width:size, height:size, borderRadius:r }} />
+        : <Text style={{ fontSize: size * 0.33, fontWeight:'600', color }}>{initials}</Text>
+      }
+    </View>
+  );
+}
+
+// ─── Progress Bar Component ──────────────────────────────────────────────────
+function ProgressBar({ progress }) {
+  const color = getProgressColor(progress);
+  return (
+    <View style={progressStyles.wrap}>
+      <View style={progressStyles.barBg}>
+        <View style={[progressStyles.barFill, { width: `${progress}%`, backgroundColor: color }]} />
+      </View>
+      <Text style={[progressStyles.text, { color }]}>{progress}%</Text>
+    </View>
+  );
+}
+
+const progressStyles = StyleSheet.create({
+  wrap: { flexDirection:'row', alignItems:'center', gap:8 },
+  barBg: { flex:1, height:6, backgroundColor:BORDER, borderRadius:3, overflow:'hidden' },
+  barFill: { height:'100%', borderRadius:3 },
+  text: { fontSize:12, fontWeight:'700', minWidth:36, textAlign:'right' },
+});
+
+// ─── Offer Card - Updated with hired/in_progress support ───────────────────
+function OfferCard({ offer, onPress }) {
+  const client     = offer.client_id || {};
+  const job        = offer.job_id || {};
+  const clientName = client.company_name ||
+    `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client';
+
+  const isOffered   = offer.status === 'offered';
+  const isAccepted  = offer.status === 'accepted';
+  const isHired     = offer.status === 'hired';
+  const isInProgress = offer.status === 'in_progress';
+  const isCompleted = offer.status === 'completed';
+  const isDeclined  = offer.status === 'declined';
+  const isExpired   = offer.status === 'expired';
+  const timeLeft    = getTimeRemaining(offer.expiry_date);
+  const progress    = offer.progress || (isCompleted ? 100 : isInProgress ? 50 : 0);
+
+  let cardExtra = {};
+  if (isOffered && !isExpired) cardExtra = card.offered;
+  else if (isHired || isInProgress) cardExtra = card.active;
+  else if (isCompleted) cardExtra = card.completed;
+  else if (isAccepted) cardExtra = card.accepted;
+  else if (isDeclined) cardExtra = card.declined;
+  else if (isExpired)  cardExtra = card.expired;
+
+  const isActive = isHired || isInProgress;
+
+  return (
+    <TouchableOpacity style={[card.base, cardExtra]} activeOpacity={0.85} onPress={() => onPress(offer)}>
+
+      {(isOffered && !isExpired) && <View style={card.stripe} />}
+      {(isHired || isInProgress) && <View style={[card.stripe, { backgroundColor: GREEN }]} />}
+      {isCompleted && <View style={[card.stripe, { backgroundColor: GREEN_DARK }]} />}
+
+      <View style={card.header}>
+        <Avatar
+          src={client.profile_picture}
+          first={client.first_name}
+          last={client.last_name}
+          name={clientName}
+          size={46}
+        />
+        <View style={card.headerText}>
+          <Text style={card.clientName} numberOfLines={1}>{clientName}</Text>
+          <Text style={card.jobTitle} numberOfLines={1}>{job.title || 'Project'}</Text>
+        </View>
+        <StatusBadge status={offer.status} />
+      </View>
+
+      <View style={card.divider} />
+
+      <View style={card.metaGrid}>
+        <MetaItem icon="cash-outline" label="Amount" value={formatCurrency(offer.amount)} valueStyle={isActive && card.amountHighlight} />
+        <MetaItem icon="calendar-outline" label="Started" value={formatDate(offer.created_at)} sub={formatTime(offer.created_at)} />
+      </View>
+
+      {/* Progress Bar - Show for hired, in_progress, and completed */}
+      {(isHired || isInProgress || isCompleted) && (
+        <View style={card.progressSection}>
+          <View style={card.progressHeader}>
+            <Text style={card.progressLabel}>Progress</Text>
+            <Text style={card.progressPercent}>{progress}%</Text>
+          </View>
+          <View style={card.progressBarBg}>
+            <View style={[card.progressBarFill, { width: `${progress}%`, backgroundColor: getProgressColor(progress) }]} />
+          </View>
+        </View>
+      )}
+
+      {(isOffered) && !isExpired && timeLeft && (
+        <View style={card.timerRow}>
+          <Ionicons name="hourglass-outline" size={13} color={ORANGE} />
+          <Text style={card.timerText}>{timeLeft}</Text>
+        </View>
+      )}
+
+      {!!offer.message && (
+        <View style={card.msgBox}>
+          <Text style={card.msgLabel}>Message</Text>
+          <Text style={card.msgText} numberOfLines={2}>{offer.message}</Text>
+        </View>
+      )}
+
+      {isActive && (
+        <View style={card.actionRow}>
+          <TouchableOpacity style={card.actionBtn} onPress={() => onPress(offer)}>
+            <Ionicons name="construct-outline" size={16} color={BLUE} />
+            <Text style={card.actionBtnText}>View Work</Text>
+          </TouchableOpacity>
+          <View style={card.actionDivider} />
+          <TouchableOpacity style={card.actionBtn} onPress={() => onPress(offer)}>
+            <Ionicons name="chatbubble-outline" size={16} color={BLUE} />
+            <Text style={card.actionBtnText}>Message</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {isCompleted && <FooterLabel icon="checkmark-circle" color={GREEN_DARK} bg={`${GREEN_DARK}15`} text="Project Completed ✓" />}
+      {isAccepted  && <FooterLabel icon="checkmark-circle" color={GREEN} bg={`${GREEN}15`} text="Offer accepted" />}
+      {isDeclined  && <FooterLabel icon="close-circle" color={RED} bg={`${RED}15`} text="You declined this offer" />}
+      {isExpired   && <FooterLabel icon="calendar" color={TEXT_MUTED} bg={`${TEXT_MUTED}15`} text="This offer has expired" />}
+    </TouchableOpacity>
+  );
+}
+
+function MetaItem({ icon, label, value, sub, valueStyle }) {
+  return (
+    <View style={meta.wrap}>
+      <View style={meta.labelRow}>
+        <Ionicons name={icon} size={11} color={TEXT_LIGHT} />
+        <Text style={meta.label}>{label}</Text>
+      </View>
+      <Text style={[meta.value, valueStyle]}>{value}</Text>
+      {sub ? <Text style={meta.sub}>{sub}</Text> : null}
+    </View>
+  );
+}
+
+function FooterLabel({ icon, color, bg, text }) {
+  return (
+    <View style={[footer.wrap, { backgroundColor: bg }]}>
+      <Ionicons name={icon} size={13} color={color} />
+      <Text style={[footer.text, { color }]}>{text}</Text>
+    </View>
+  );
+}
+
+const card = StyleSheet.create({
+  base: {
+    backgroundColor:CARD, borderRadius:18, marginBottom:12,
+    borderWidth:1, borderColor:BORDER,
+    shadowColor:'#000', shadowOffset:{width:0,height:2}, shadowOpacity:0.05, shadowRadius:8, elevation:2,
+    overflow:'hidden',
+  },
+  offered:  { borderColor:BLUE, borderWidth:2, shadowColor:BLUE, shadowOpacity:0.12, shadowRadius:14, elevation:5 },
+  active:   { borderColor:GREEN, borderWidth:2, shadowColor:GREEN, shadowOpacity:0.12, shadowRadius:14, elevation:5 },
+  completed:{ borderColor:GREEN_DARK, borderWidth:1.5, opacity:0.85 },
+  accepted: { borderColor:GREEN, borderWidth:1.5 },
+  declined: { borderColor:RED,   borderWidth:1.5, opacity:0.88 },
+  expired:  { opacity:0.65 },
+  stripe:   { height:3, backgroundColor:BLUE_MD },
+  header:   { flexDirection:'row', alignItems:'center', padding:14, paddingBottom:10, gap:12 },
+  headerText:{ flex:1 },
+  clientName:{ fontSize:14, fontWeight:'600', color:TEXT_MAIN, marginBottom:2 },
+  jobTitle:  { fontSize:12, color:TEXT_MUTED },
+  divider:   { height:1, backgroundColor:BORDER, marginHorizontal:14 },
+  metaGrid:  { flexDirection:'row', gap:0, padding:14, paddingVertical:12 },
+  amountHighlight: { color:BLUE, fontSize:16, fontWeight:'800' },
+  timerRow:  { flexDirection:'row', alignItems:'center', gap:6, marginHorizontal:14, marginBottom:10,
+               backgroundColor:`${ORANGE}15`, paddingHorizontal:10, paddingVertical:6, borderRadius:8 },
+  timerText: { fontSize:12, color:ORANGE, fontWeight:'600' },
+  msgBox:    { backgroundColor:BG, marginHorizontal:14, marginBottom:12, padding:12, borderRadius:10, borderWidth:1, borderColor:BORDER },
+  msgLabel:  { fontSize:9, fontWeight:'700', color:TEXT_LIGHT, textTransform:'uppercase', letterSpacing:0.8, marginBottom:3 },
+  msgText:   { fontSize:12, color:TEXT_MUTED, lineHeight:17 },
   
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [activeTab, setActiveTab] = useState('active');
-  const [messageInput, setMessageInput] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
-  const [myJobs, setMyJobs] = useState([]);
+  // Progress Section
+  progressSection: {
+    paddingHorizontal:14,
+    paddingVertical:10,
+    backgroundColor: `${BLUE}05`,
+  },
+  progressHeader: {
+    flexDirection:'row',
+    justifyContent:'space-between',
+    marginBottom:4,
+  },
+  progressLabel: {
+    fontSize:11,
+    color:TEXT_MUTED,
+    fontWeight:'500',
+  },
+  progressPercent: {
+    fontSize:11,
+    fontWeight:'700',
+    color:TEXT_MAIN,
+  },
+  progressBarBg: {
+    height:6,
+    backgroundColor:BORDER,
+    borderRadius:3,
+    overflow:'hidden',
+  },
+  progressBarFill: {
+    height:'100%',
+    borderRadius:3,
+  },
+  
+  // Action Row for active jobs
+  actionRow: {
+    flexDirection:'row',
+    paddingVertical:8,
+    paddingHorizontal:14,
+    borderTopWidth:1,
+    borderTopColor:BORDER,
+    backgroundColor: `${BLUE}05`,
+  },
+  actionBtn: {
+    flex:1,
+    flexDirection:'row',
+    alignItems:'center',
+    justifyContent:'center',
+    gap:6,
+    paddingVertical:8,
+  },
+  actionBtnText: {
+    fontSize:13,
+    fontWeight:'600',
+    color:BLUE,
+  },
+  actionDivider: {
+    width:1,
+    backgroundColor:BORDER,
+  },
+});
 
-  // Restore active tab when coming back from other screens
-  useEffect(() => {
-    if (route?.params?.returnState?.activeTab) {
-      setActiveTab(route.params.returnState.activeTab);
-    }
-  }, [route?.params]);
+const meta = StyleSheet.create({
+  wrap:     { flex:1 },
+  labelRow: { flexDirection:'row', alignItems:'center', gap:4, marginBottom:3 },
+  label:    { fontSize:10, color:TEXT_LIGHT, fontWeight:'600', textTransform:'uppercase', letterSpacing:0.5 },
+  value:    { fontSize:14, fontWeight:'700', color:TEXT_MAIN },
+  sub:      { fontSize:11, color:TEXT_LIGHT, marginTop:1 },
+});
 
-  // Fetch data
+const footer = StyleSheet.create({
+  wrap: { flexDirection:'row', alignItems:'center', justifyContent:'center', gap:6,
+          paddingVertical:9, marginTop:0 },
+  text: { fontSize:12, fontWeight:'600' },
+});
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+export default function ReceivedOffersScreen({ onNavigate }) {
+  const dispatch = useDispatch();
+  const { receivedOffers, isLoading }               = useSelector((s) => s.offers);
+  const { applications, isLoading: appsLoading }    = useSelector((s) => s.applications);
+
+  const [activeTab,      setActiveTab]      = useState('hired');
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [selectedOffer,  setSelectedOffer]  = useState(null);
+  const [showModal,      setShowModal]      = useState(false);
+  const [combinedOffers, setCombinedOffers] = useState([]);
+
+  // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     try {
+      setRefreshing(true);
       await Promise.all([
         dispatch(getReceivedOffers({})).unwrap(),
-        dispatch(getFreelancerJobs({ limit: 50 })).unwrap(),
+        dispatch(getFreelancerApplications({})).unwrap(),
       ]);
-    } catch (error) {
-      console.error('Error fetching jobs:', error);
-      Alert.alert('Error', 'Failed to load jobs');
+    } catch {
+      Alert.alert('Error', 'Failed to load offers. Please try again.');
+    } finally {
+      setRefreshing(false);
     }
   }, [dispatch]);
 
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Combine offers + applications ────────────────────────────────────────
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    const directOffers = (receivedOffers || []).map(o => ({
+      ...o,
+      source: 'offer', isFromApplication: false, hasOffer: true,
+      offerId: o._id, status: o.status || 'pending', displayStatus: o.status || 'pending',
+    }));
 
-  // Process accepted offers into jobs
-  useEffect(() => {
-    if (receivedOffers && receivedOffers.length > 0) {
-      const acceptedJobs = receivedOffers
-        .filter(offer => offer.status === 'accepted')
-        .map(offer => ({
-          id: offer._id,
-          offerId: offer._id,
-          clientName: offer.client_name || 'Client',
-          clientId: offer.client_id,
-          projectTitle: offer.job_title || 'Untitled Project',
-          description: offer.message || 'No description provided',
-          budget: `₱${offer.amount?.toLocaleString() || 0}`,
-          budgetType: 'Fixed',
-          startDate: formatDate(offer.created_at),
-          deadline: offer.expiry_date ? formatDate(offer.expiry_date) : 'Not specified',
-          status: offer.status === 'accepted' ? 'in_progress' : offer.status,
-          progress: calculateProgress(offer.created_at, offer.updated_at),
-          category: offer.job_category || 'General',
-          skills: offer.required_skills || [],
-          milestones: generateMilestones(offer),
-          messages: offer.messages || [],
-          clientRating: offer.client_rating || 4.5,
-          submittedForReview: offer.submitted_for_review || false,
-          created_at: offer.created_at,
-        }));
-      
-      setMyJobs(acceptedJobs);
-    }
-  }, [receivedOffers]);
+    const appOffers = (applications || [])
+      .filter(app => ['offered', 'accepted', 'hired', 'in_progress', 'completed', 'pending', 'declined', 'expired'].includes(app.status))
+      .map(app => {
+        const job = app.job_id || {};
+        const client = app.client_id || {};
 
-  // Helper function to format date
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
-  };
-
-  // Helper function to calculate progress
-  const calculateProgress = (startDate, lastUpdate) => {
-    if (!startDate) return 0;
-    const start = new Date(startDate);
-    const now = new Date();
-    const daysSinceStart = Math.floor((now - start) / (1000 * 60 * 60 * 24));
-    const progress = Math.min(Math.floor((daysSinceStart / 30) * 100), 95);
-    return progress;
-  };
-
-  // Generate milestones based on offer
-  const generateMilestones = (offer) => {
-    return [
-      { id: 'm1', title: 'Project Started', completed: true, date: formatDate(offer.created_at) },
-      { id: 'm2', title: 'Work in Progress', completed: false, dueDate: formatDate(new Date(new Date(offer.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)) },
-      { id: 'm3', title: 'Submit for Review', completed: false, dueDate: formatDate(new Date(new Date(offer.created_at).getTime() + 14 * 24 * 60 * 60 * 1000)) },
-      { id: 'm4', title: 'Project Completion', completed: false, dueDate: formatDate(new Date(new Date(offer.created_at).getTime() + 30 * 24 * 60 * 60 * 1000)) },
-    ];
-  };
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchData();
-    setRefreshing(false);
-  }, [fetchData]);
-
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'in_progress': return STATUS_IN_PROGRESS;
-      case 'completed': return STATUS_COMPLETED;
-      case 'pending': return STATUS_PENDING;
-      case 'cancelled': return STATUS_CANCELLED;
-      default: return TEXT_MAIN;
-    }
-  };
-
-  const getStatusText = (status) => {
-    switch(status) {
-      case 'in_progress': return 'In Progress';
-      case 'completed': return 'Completed';
-      case 'pending': return 'Pending';
-      case 'cancelled': return 'Cancelled';
-      default: return status;
-    }
-  };
-
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case 'in_progress': return 'play-circle-outline';
-      case 'completed': return 'checkmark-circle-outline';
-      case 'pending': return 'time-outline';
-      case 'cancelled': return 'close-circle-outline';
-      default: return 'help-outline';
-    }
-  };
-
-  const handleSubmitForReview = (job) => {
-    Alert.alert(
-      'Submit for Review',
-      'Are you ready to submit this project for client review?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Submit',
-          onPress: async () => {
-            try {
-              await dispatch(updateOfferStatus({ 
-                offerId: job.offerId, 
-                status: 'completed' 
-              })).unwrap();
-              
-              Alert.alert('Success', 'Project submitted for client review!');
-              fetchData();
-              setSelectedJob(null);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to submit project');
-            }
-          }
+        let match = (receivedOffers || []).find(o =>
+          o.application_id?.toString() === app._id?.toString()
+        );
+        if (!match && job._id) {
+          match = (receivedOffers || []).find(o => {
+            const oJob = o.job_id?._id?.toString() || o.job_id?.toString();
+            const oFl  = o.freelancer_id?._id?.toString() || o.freelancer_id?.toString();
+            return oJob === job._id?.toString() && oFl === (app.freelancer_id?._id?.toString() || app.freelancer_id?.toString());
+          });
         }
-      ]
-    );
-  };
-
-  const handleMarkComplete = (job) => {
-    Alert.alert(
-      'Complete Project',
-      'Are you sure this project is complete?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Complete',
-          onPress: async () => {
-            try {
-              await dispatch(updateOfferStatus({ 
-                offerId: job.offerId, 
-                status: 'completed' 
-              })).unwrap();
-              
-              Alert.alert('Success', 'Project marked as completed!');
-              fetchData();
-              setSelectedJob(null);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to update project status');
-            }
-          }
+        if (!match && job._id) {
+          match = (receivedOffers || []).find(o =>
+            (o.job_id?._id?.toString() || o.job_id?.toString()) === job._id?.toString()
+          );
         }
-      ]
+
+        const actualStatus = match?.status || app.status;
+        return {
+          _id: match?._id || app._id,
+          source: 'application', client_id: client, job_id: job,
+          amount: app.offer_amount || app.proposed_rate || 0,
+          message: app.offer_message || app.cover_letter || '',
+          status: actualStatus, displayStatus: actualStatus,
+          created_at: app.offer_sent_at || app.updated_at || app.applied_at || new Date(),
+          expiry_date: match?.expiry_date || null,
+          viewed_by_freelancer: match?.viewed_by_freelancer || true,
+          application: app, isFromApplication: true,
+          offerId: match?._id || null, rawAppStatus: app.status,
+          hasOffer: !!match || ['offered', 'accepted', 'hired', 'in_progress', 'completed'].includes(app.status),
+          progress: app.progress || (app.status === 'completed' ? 100 : app.status === 'in_progress' ? 50 : 0),
+        };
+      });
+
+    const directIds = new Set(directOffers.map(o => o._id));
+    const filtered  = appOffers.filter(a =>
+      !(a.offerId && directIds.has(a.offerId)) && !directIds.has(a._id)
     );
+
+    const all = [...directOffers, ...filtered]
+      .filter(o => o.status !== 'pending') // Filter out pending
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    setCombinedOffers(all);
+  }, [receivedOffers, applications]);
+
+  // ── Filter ───────────────────────────────────────────────────────────────
+  const filteredOffers = combinedOffers.filter(o => {
+    if (activeTab === 'All')     return true;
+    return o.status === activeTab;
+  });
+
+  // Count active jobs (hired + in_progress)
+  const activeJobsCount = combinedOffers.filter(
+    o => o.status === 'hired' || o.status === 'in_progress'
+  ).length;
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+  const handleOfferPress = (offer) => { 
+    setSelectedOffer(offer); 
+    setShowModal(true); 
   };
 
-  const sendMessage = () => {
-    if (!messageInput.trim()) return;
-    Alert.alert('Message Sent', 'Your message has been sent to the client');
-    setMessageInput('');
+  const handleMessageClient = (clientId, clientName) => {
+    setShowModal(false);
+    onNavigate('Messages', { userId: clientId, userName: clientName, userRole: 'client' });
   };
 
-  const calculateDaysRemaining = (deadline) => {
-    if (!deadline || deadline === 'Not specified') return null;
-    const today = new Date();
-    const deadlineDate = new Date(deadline);
-    const diffTime = deadlineDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
-  const getProgressBarColor = (progress) => {
-    if (progress < 30) return RED;
-    if (progress < 70) return GOLD;
-    return GREEN;
-  };
-
-  const getClientInitials = (clientName) => {
-    return clientName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-
-  const filteredJobs = () => {
-    if (activeTab === 'active') {
-      return myJobs.filter(job => job.status === 'in_progress');
-    } else if (activeTab === 'completed') {
-      return myJobs.filter(job => job.status === 'completed');
+  const handleNavigateToJob = (offer) => {
+    setShowModal(false);
+    if (offer.job_id?._id || offer.job_id) {
+      onNavigate('JobDetails', { 
+        jobId: offer.job_id?._id || offer.job_id, 
+        fromMyJobs: true 
+      });
     } else {
-      return myJobs.filter(job => job.status === 'pending');
+      Alert.alert('Info', 'Job details not available');
     }
   };
 
-  const getTabCount = (tab) => {
-    if (tab === 'active') return myJobs.filter(job => job.status === 'in_progress').length;
-    if (tab === 'completed') return myJobs.filter(job => job.status === 'completed').length;
-    return myJobs.filter(job => job.status === 'pending').length;
-  };
-
-  const isLoading = jobsLoading || offersLoading;
-
-  // Handle tab bar navigation
   const handleTabPress = (key) => {
     if (key === 'Home') {
       onNavigate('FreelancerDashboard', { returnState: { activeTab: key } });
     } else if (key === 'MyJobs') {
-      // Already on MyJobs, stay here
-      setActiveTab('active');
+      onNavigate('MyJobs', { returnState: { activeTab: key } });
     } else if (key === 'Messages') {
       onNavigate('Messages', { returnState: { activeTab: key } });
     } else if (key === 'Profile') {
@@ -341,979 +628,538 @@ export default function MyJobs({ onNavigate, route }) {
     }
   };
 
-  const JobCard = ({ job, onPress }) => {
-    const daysRemaining = calculateDaysRemaining(job.deadline);
-    const isUrgent = daysRemaining !== null && daysRemaining <= 3;
-    
+  // ── Loading ───────────────────────────────────────────────────────────────
+  const isInitialLoading = (isLoading || appsLoading) && !refreshing && combinedOffers.length === 0;
+
+  if (isInitialLoading) {
     return (
-      <TouchableOpacity 
-        style={styles.jobCard}
-        onPress={() => onPress(job)}
-        activeOpacity={0.85}
-      >
-        <View style={styles.jobHeader}>
-          <View style={styles.clientInfo}>
-            <View style={[styles.clientAvatar, { backgroundColor: BLUE }]}>
-              <Text style={styles.clientInitials}>{getClientInitials(job.clientName)}</Text>
-            </View>
-            <View>
-              <Text style={styles.clientName}>{job.clientName}</Text>
-              <View style={styles.ratingContainer}>
-                <Ionicons name="star" size={12} color={GOLD} />
-                <Text style={styles.ratingText}>{job.clientRating}</Text>
-              </View>
-            </View>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(job.status) + '20' }]}>
-            <Ionicons name={getStatusIcon(job.status)} size={12} color={getStatusColor(job.status)} />
-            <Text style={[styles.statusText, { color: getStatusColor(job.status) }]}>
-              {getStatusText(job.status)}
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.projectTitle}>{job.projectTitle}</Text>
-        <Text style={styles.projectCategory}>{job.category}</Text>
-
-        <View style={styles.progressSection}>
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressLabel}>Progress</Text>
-            <Text style={styles.progressPercent}>{job.progress}%</Text>
-          </View>
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: `${job.progress}%`, backgroundColor: getProgressBarColor(job.progress) }]} />
-          </View>
-        </View>
-
-        <View style={styles.jobDetails}>
-          <View style={styles.detailItem}>
-            <Ionicons name="cash-outline" size={14} color={BLUE} />
-            <Text style={styles.detailText}>{job.budget}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Ionicons name="calendar-outline" size={14} color={BLUE} />
-            <Text style={styles.detailText}>
-              {job.status === 'pending' ? `Starts: ${job.startDate}` : `Due: ${job.deadline}`}
-            </Text>
-          </View>
-        </View>
-
-        {job.status === 'in_progress' && daysRemaining !== null && (
-          <View style={styles.deadlineWarning}>
-            <Ionicons name="alert-circle-outline" size={14} color={RED} />
-            <Text style={[styles.deadlineText, isUrgent && styles.deadlineUrgent]}>
-              {daysRemaining} days remaining
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  const JobDetailModal = ({ job, visible, onClose }) => {
-    if (!job) return null;
-
-    const completedMilestones = job.milestones?.filter(m => m.completed).length || 0;
-    const totalMilestones = job.milestones?.length || 0;
-
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={visible}
-        onRequestClose={onClose}
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalBackdrop} onPress={onClose} activeOpacity={1} />
-          <View style={styles.modalContainer}>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
-                  <Ionicons name="close" size={24} color={TEXT_MUTED} />
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>Project Details</Text>
-                <View style={{ width: 40 }} />
-              </View>
-
-              <View style={styles.modalContent}>
-                {/* Client Info */}
-                <View style={styles.modalClientSection}>
-                  <View style={[styles.modalClientAvatar, { backgroundColor: BLUE }]}>
-                    <Text style={styles.modalClientInitials}>{getClientInitials(job.clientName)}</Text>
-                  </View>
-                  <View style={styles.modalClientInfo}>
-                    <Text style={styles.modalClientName}>{job.clientName}</Text>
-                    <View style={styles.modalRating}>
-                      <Ionicons name="star" size={14} color={GOLD} />
-                      <Text style={styles.modalRatingText}>{job.clientRating}</Text>
-                    </View>
-                  </View>
-                  <View style={[styles.modalStatusBadge, { backgroundColor: getStatusColor(job.status) + '20' }]}>
-                    <Ionicons name={getStatusIcon(job.status)} size={14} color={getStatusColor(job.status)} />
-                    <Text style={[styles.modalStatusText, { color: getStatusColor(job.status) }]}>
-                      {getStatusText(job.status)}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Project Info */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Project Title</Text>
-                  <Text style={styles.modalProjectTitle}>{job.projectTitle}</Text>
-                </View>
-
-                <View style={styles.modalSection}>
-                  <View style={styles.sectionHeader}>
-                    <Ionicons name="document-text-outline" size={16} color={BLUE} />
-                    <Text style={styles.modalSectionTitle}>Description</Text>
-                  </View>
-                  <Text style={styles.modalDescription}>{job.description}</Text>
-                </View>
-
-                {/* Budget & Timeline */}
-                <View style={styles.modalDetailsGrid}>
-                  <View style={styles.modalDetailCard}>
-                    <Ionicons name="cash-outline" size={20} color={BLUE} />
-                    <Text style={styles.modalDetailLabel}>Budget</Text>
-                    <Text style={styles.modalDetailValue}>{job.budget}</Text>
-                    <Text style={styles.modalDetailSub}>{job.budgetType}</Text>
-                  </View>
-                  <View style={styles.modalDetailCard}>
-                    <Ionicons name="calendar-outline" size={20} color={BLUE} />
-                    <Text style={styles.modalDetailLabel}>Timeline</Text>
-                    <Text style={styles.modalDetailValue}>
-                      {job.startDate} - {job.deadline}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Progress */}
-                <View style={styles.modalSection}>
-                  <View style={styles.sectionHeader}>
-                    <Ionicons name="trending-up-outline" size={16} color={BLUE} />
-                    <Text style={styles.modalSectionTitle}>Overall Progress</Text>
-                  </View>
-                  <View style={styles.modalProgressSection}>
-                    <View style={styles.progressHeader}>
-                      <Text style={styles.progressLabel}>Completion</Text>
-                      <Text style={styles.progressPercent}>{job.progress}%</Text>
-                    </View>
-                    <View style={styles.progressBarBg}>
-                      <View style={[styles.progressBarFill, { width: `${job.progress}%`, backgroundColor: getProgressBarColor(job.progress) }]} />
-                    </View>
-                  </View>
-                </View>
-
-                {/* Milestones */}
-                <View style={styles.modalSection}>
-                  <View style={styles.sectionHeader}>
-                    <Ionicons name="flag-outline" size={16} color={BLUE} />
-                    <Text style={styles.modalSectionTitle}>Milestones</Text>
-                  </View>
-                  <View style={styles.milestoneSummary}>
-                    <Text style={styles.milestoneCount}>
-                      {completedMilestones}/{totalMilestones} Completed
-                    </Text>
-                  </View>
-                  {job.milestones?.map((milestone, index) => (
-                    <View key={milestone.id} style={styles.milestoneItem}>
-                      <View style={[styles.milestoneIcon, milestone.completed && styles.milestoneIconCompleted]}>
-                        {milestone.completed ? (
-                          <Ionicons name="checkmark" size={12} color={TEXT_MAIN} />
-                        ) : (
-                          <Text style={styles.milestoneNumber}>{index + 1}</Text>
-                        )}
-                      </View>
-                      <View style={styles.milestoneInfo}>
-                        <Text style={[styles.milestoneTitle, milestone.completed && styles.milestoneTitleCompleted]}>
-                          {milestone.title}
-                        </Text>
-                        {milestone.completed ? (
-                          <Text style={styles.milestoneDate}>Completed {milestone.date}</Text>
-                        ) : (
-                          <Text style={styles.milestoneDue}>Due {milestone.dueDate}</Text>
-                        )}
-                      </View>
-                    </View>
-                  ))}
-                </View>
-
-                {/* Skills */}
-                {job.skills && job.skills.length > 0 && (
-                  <View style={styles.modalSection}>
-                    <View style={styles.sectionHeader}>
-                      <Ionicons name="flash-outline" size={16} color={BLUE} />
-                      <Text style={styles.modalSectionTitle}>Skills Required</Text>
-                    </View>
-                    <View style={styles.skillsContainer}>
-                      {job.skills.map((skill, index) => (
-                        <View key={index} style={styles.modalSkillChip}>
-                          <Text style={styles.modalSkillText}>{skill}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* Messages */}
-                <View style={styles.modalSection}>
-                  <View style={styles.sectionHeader}>
-                    <Ionicons name="chatbubbles-outline" size={16} color={BLUE} />
-                    <Text style={styles.modalSectionTitle}>Messages</Text>
-                  </View>
-                  <ScrollView style={styles.messagesContainer} nestedScrollEnabled={true}>
-                    {(!job.messages || job.messages.length === 0) && (
-                      <Text style={styles.noMessages}>No messages yet</Text>
-                    )}
-                  </ScrollView>
-                  <View style={styles.messageInputContainer}>
-                    <TextInput
-                      style={styles.messageInput}
-                      placeholder="Type a message..."
-                      placeholderTextColor={TEXT_LIGHT}
-                      value={messageInput}
-                      onChangeText={setMessageInput}
-                    />
-                    <TouchableOpacity style={styles.sendBtn} onPress={sendMessage}>
-                      <Ionicons name="send" size={18} color={WHITE} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Action Buttons */}
-                {job.status === 'in_progress' && (
-                  <View style={styles.modalActions}>
-                    {!job.submittedForReview && (
-                      <TouchableOpacity 
-                        style={[styles.modalActionBtn, styles.modalSubmitBtn]}
-                        onPress={() => handleSubmitForReview(job)}
-                      >
-                        <Ionicons name="cloud-upload-outline" size={20} color={WHITE} />
-                        <Text style={styles.modalSubmitText}>Submit for Review</Text>
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity 
-                      style={[styles.modalActionBtn, styles.modalCompleteBtn]}
-                      onPress={() => handleMarkComplete(job)}
-                    >
-                      <Ionicons name="checkmark-circle-outline" size={20} color={WHITE} />
-                      <Text style={styles.modalCompleteText}>Mark Complete</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {job.status === 'completed' && (
-                  <View style={styles.completedSection}>
-                    <Ionicons name="checkmark-circle" size={48} color={STATUS_COMPLETED} />
-                    <Text style={styles.completedTitle}>Project Completed!</Text>
-                    <Text style={styles.completedText}>
-                      This project has been successfully completed
-                    </Text>
-                    <TouchableOpacity 
-                      style={styles.leaveReviewBtn}
-                      onPress={() => Alert.alert('Review', 'Review feature coming soon!')}
-                    >
-                      <Ionicons name="star-outline" size={20} color={BLUE} />
-                      <Text style={styles.leaveReviewText}>Leave a Review</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
-  if (isLoading && !refreshing) {
-    return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={s.safe} edges={['top']}>
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} style={styles.backBtn}>
-            <View style={styles.backIconWrap}>
-              <Ionicons name="arrow-back" size={18} color={WHITE} />
-            </View>
+        <View style={s.topbar}>
+          <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} activeOpacity={0.7}>
+            <View style={s.iconBtn}><Ionicons name="arrow-back" size={18} color={WHITE} /></View>
           </TouchableOpacity>
-          <Text style={styles.title}>My Jobs</Text>
-          <View style={{ width: 40 }} />
+          <Text style={s.topbarTitle}>My Work</Text>
+          <View style={{ width:40 }} />
         </View>
-        <View style={styles.loadingContainer}>
+        <View style={s.center}>
           <ActivityIndicator size="large" color={BLUE} />
-          <Text style={styles.loadingText}>Loading your jobs...</Text>
+          <Text style={s.loadingText}>Loading your work…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const pendingOffers = 0; // You can calculate this if needed
+  const pendingOffers = receivedOffers?.filter(o => o.status === 'pending').length || 0;
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={s.safe} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} style={styles.backBtn}>
-          <View style={styles.backIconWrap}>
-            <Ionicons name="arrow-back" size={18} color={WHITE} />
-          </View>
-        </TouchableOpacity>
-        <Text style={styles.title}>My Jobs</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <View style={s.root}>
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        {['active', 'completed', 'pending'].map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'active' ? 'Active' : tab === 'completed' ? 'Completed' : 'Pending'}
-            </Text>
-            <View style={[styles.tabBadge, activeTab === tab && styles.tabBadgeActive]}>
-              <Text style={[styles.tabBadgeText, activeTab === tab && styles.tabBadgeTextActive]}>
-                {getTabCount(tab)}
-              </Text>
-            </View>
+        {/* ── Top Bar ── */}
+        <View style={s.topbar}>
+          <TouchableOpacity onPress={() => onNavigate('FreelancerDashboard')} activeOpacity={0.7}>
+            <View style={s.iconBtn}><Ionicons name="arrow-back" size={18} color={WHITE} /></View>
           </TouchableOpacity>
-        ))}
+          <View style={s.topbarCenter}>
+            <Text style={s.topbarTitle}>My Work</Text>
+            {activeJobsCount > 0 && (
+              <View style={s.topbarBadge}>
+                <Text style={s.topbarBadgeText}>{activeJobsCount} active</Text>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity onPress={fetchData} activeOpacity={0.7}>
+            <View style={s.iconBtnOutline}><Ionicons name="refresh-outline" size={18} color={BLUE_MD} /></View>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Stats Row - Updated with hired/in_progress ── */}
+        <View style={s.statsRow}>
+          <View style={s.statItem}>
+            <Text style={[s.statNum, { color: GREEN }]}>{activeJobsCount}</Text>
+            <Text style={s.statLabel}>Active Jobs</Text>
+          </View>
+          <View style={s.statDiv} />
+          <View style={s.statItem}>
+            <Text style={[s.statNum, { color: BLUE }]}>{combinedOffers.length}</Text>
+            <Text style={s.statLabel}>Total Jobs</Text>
+          </View>
+          <View style={s.statDiv} />
+          <View style={s.statItem}>
+            <Text style={[s.statNum, { color: ORANGE }]}>{combinedOffers.filter(o=>o.status==='offered').length}</Text>
+            <Text style={s.statLabel}>Offers</Text>
+          </View>
+          <View style={s.statDiv} />
+          <View style={s.statItem}>
+            <Text style={[s.statNum, { color: GREEN_DARK }]}>{combinedOffers.filter(o=>o.status==='completed').length}</Text>
+            <Text style={s.statLabel}>Completed</Text>
+          </View>
+        </View>
+
+        {/* ── Filter Tabs ── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          style={s.tabScroll} contentContainerStyle={s.tabContent}>
+          {TABS.map(tab => {
+            const active = activeTab === tab.key;
+            const count = tab.key === 'All'
+              ? combinedOffers.length
+              : combinedOffers.filter(o=>o.status===tab.key).length;
+            const isHot = tab.key === 'hired' && count > 0;
+
+            return (
+              <TouchableOpacity key={tab.key}
+                style={[s.tab, active && s.tabActive, isHot && !active && s.tabHot]}
+                onPress={() => setActiveTab(tab.key)} activeOpacity={0.75}>
+                <Text style={[s.tabText, active && s.tabTextActive, isHot && !active && s.tabTextHot]}>
+                  {tab.label}
+                </Text>
+                {count > 0 && (
+                  <View style={[s.tabBadge, active && s.tabBadgeActive, isHot && !active && s.tabBadgeHot]}>
+                    <Text style={[s.tabBadgeText, active && s.tabBadgeTextActive, isHot && !active && s.tabBadgeTextHot]}>
+                      {count}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* ── Scrollable Content ── */}
+        <ScrollView showsVerticalScrollIndicator={false}
+          contentContainerStyle={s.scroll}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchData} tintColor={BLUE} />}
+        >
+          {filteredOffers.length === 0 ? (
+            <View style={s.empty}>
+              <View style={s.emptyIcon}>
+                <Ionicons name={activeTab === 'hired' ? 'people-outline' : 'briefcase-outline'} size={48} color={BLUE} />
+              </View>
+              <Text style={s.emptyTitle}>
+                {activeTab === 'hired' ? 'No hired jobs yet' : 
+                 activeTab === 'in_progress' ? 'No work in progress' :
+                 activeTab === 'completed' ? 'No completed jobs' :
+                 'No items here'}
+              </Text>
+              <Text style={s.emptyText}>
+                {activeTab === 'hired' 
+                  ? 'When you get hired for a job, it will appear here.'
+                  : activeTab === 'in_progress'
+                  ? 'Start working on your hired jobs to track progress here.'
+                  : activeTab === 'completed'
+                  ? 'Completed jobs will appear here.'
+                  : 'Keep applying to jobs to get hired!'}
+              </Text>
+              <TouchableOpacity style={s.emptyBtn} onPress={() => onNavigate('FindJobs')} activeOpacity={0.8}>
+                <Ionicons name="search-outline" size={18} color={WHITE} style={{ marginRight: 6 }} />
+                <Text style={s.emptyBtnText}>Browse Jobs</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            filteredOffers.map(offer => (
+              <OfferCard key={offer._id} offer={offer} onPress={handleOfferPress} />
+            ))
+          )}
+        </ScrollView>
       </View>
 
-      <FlatList
-        data={filteredJobs()}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <JobCard job={item} onPress={setSelectedJob} />
-        )}
-        contentContainerStyle={styles.jobsList}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
-        }
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconWrap}>
-              <Ionicons name="briefcase-outline" size={48} color={BLUE} />
+      {/* ── Detail Modal - Updated for hired/in_progress ── */}
+      <Modal animationType="slide" transparent visible={showModal} onRequestClose={() => setShowModal(false)}>
+        <View style={modal.overlay}>
+          <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':undefined} style={{ flex:1, justifyContent:'flex-end' }}>
+            <View style={modal.sheet}>
+              <View style={modal.handle} />
+
+              <View style={modal.header}>
+                <TouchableOpacity style={modal.closeBtn} onPress={() => setShowModal(false)} activeOpacity={0.7}>
+                  <Ionicons name="close" size={24} color={TEXT_MUTED} />
+                </TouchableOpacity>
+                <Text style={modal.title}>Job Details</Text>
+                <View style={{ width:40 }} />
+              </View>
+
+              {selectedOffer && (() => {
+                const client     = selectedOffer.client_id || {};
+                const job        = selectedOffer.job_id || {};
+                const clientName = client.company_name ||
+                  `${client.first_name||''} ${client.last_name||''}`.trim() || 'Client';
+                const isOffered  = selectedOffer.status === 'offered';
+                const isHired    = selectedOffer.status === 'hired';
+                const isInProgress = selectedOffer.status === 'in_progress';
+                const isCompleted = selectedOffer.status === 'completed';
+                const isActive   = isHired || isInProgress;
+                const timeLeft   = getTimeRemaining(selectedOffer.expiry_date);
+                const progress   = selectedOffer.progress || (isCompleted ? 100 : isInProgress ? 50 : 0);
+
+                return (
+                  <>
+                    <View style={modal.clientStrip}>
+                      <Avatar src={client.profile_picture} first={client.first_name}
+                        last={client.last_name} name={clientName} size={52} />
+                      <View style={{ flex:1 }}>
+                        <Text style={modal.clientName}>{clientName}</Text>
+                        <Text style={modal.clientRole}>Client</Text>
+                      </View>
+                      <StatusBadge status={selectedOffer.status} />
+                    </View>
+
+                    <ScrollView showsVerticalScrollIndicator={false}
+                      contentContainerStyle={modal.body}>
+
+                      <View style={modal.card}>
+                        <Text style={modal.cardEyebrow}>Job</Text>
+                        <Text style={modal.cardTitle}>{job.title || 'Project'}</Text>
+                        {!!job.description && (
+                          <Text style={modal.cardDesc} numberOfLines={3}>{job.description}</Text>
+                        )}
+                      </View>
+
+                      <View style={[modal.amountCard, (isOffered || isActive) && modal.amountCardActive]}>
+                        <View style={modal.amountRow}>
+                          <View>
+                            <Text style={modal.amountLabel}>Amount</Text>
+                            <Text style={modal.amountValue}>{formatCurrency(selectedOffer.amount)}</Text>
+                          </View>
+                          {isOffered && (
+                            <View style={modal.newPill}>
+                              <Ionicons name="gift-outline" size={11} color={WHITE} />
+                              <Text style={modal.newPillText}>Offer</Text>
+                            </View>
+                          )}
+                          {(isHired || isInProgress) && (
+                            <View style={[modal.newPill, { backgroundColor: GREEN }]}>
+                              <Ionicons name="checkmark-circle" size={11} color={WHITE} />
+                              <Text style={modal.newPillText}>Active</Text>
+                            </View>
+                          )}
+                        </View>
+                        {timeLeft && isOffered && (
+                          <View style={modal.timerInline}>
+                            <Ionicons name="hourglass-outline" size={12} color={ORANGE} />
+                            <Text style={modal.timerInlineText}>{timeLeft}</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Progress Section - Show for active and completed jobs */}
+                      {(isHired || isInProgress || isCompleted) && (
+                        <View style={modal.card}>
+                          <View style={modal.progressHeader}>
+                            <Text style={modal.cardEyebrow}>Progress</Text>
+                            <Text style={modal.progressPercent}>{progress}%</Text>
+                          </View>
+                          <View style={modal.progressBarBg}>
+                            <View style={[modal.progressBarFill, { width: `${progress}%`, backgroundColor: getProgressColor(progress) }]} />
+                          </View>
+                          {isInProgress && (
+                            <TouchableOpacity style={modal.updateProgressBtn} onPress={() => {
+                              setShowModal(false);
+                              Alert.alert('Update Progress', 'Update progress feature coming soon!');
+                            }}>
+                              <Ionicons name="pencil-outline" size={16} color={BLUE} />
+                              <Text style={modal.updateProgressText}>Update Progress</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+
+                      {!!selectedOffer.message && (
+                        <View style={modal.card}>
+                          <Text style={modal.cardEyebrow}>Message from Client</Text>
+                          <Text style={modal.cardBody}>{selectedOffer.message}</Text>
+                        </View>
+                      )}
+
+                      <View style={modal.card}>
+                        <Text style={modal.cardEyebrow}>Details</Text>
+                        <View style={modal.grid}>
+                          <GridItem label="Date" value={formatDate(selectedOffer.created_at)} />
+                          <GridItem label="Time" value={formatTime(selectedOffer.created_at)} />
+                          {selectedOffer.expiry_date && (
+                            <GridItem label="Expires" value={formatDate(selectedOffer.expiry_date)}
+                              valueColor={selectedOffer.status==='expired' ? RED : undefined} />
+                          )}
+                          <GridItem label="Status"
+                            value={(STATUS_CONFIG[selectedOffer.status]||STATUS_CONFIG.pending).label}
+                            valueColor={(STATUS_CONFIG[selectedOffer.status]||STATUS_CONFIG.pending).color} />
+                        </View>
+                      </View>
+
+                      {/* Action Buttons for Active Jobs */}
+                      {isActive && (
+                        <View style={modal.actionRow}>
+                          <TouchableOpacity style={[modal.cta, { flex: 1, backgroundColor: BLUE }]} 
+                            onPress={() => handleNavigateToJob(selectedOffer)} activeOpacity={0.8}>
+                            <Ionicons name="construct-outline" size={20} color={WHITE} />
+                            <Text style={modal.ctaText}>View Work</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={[modal.cta, { flex: 1, backgroundColor: GREEN }]} 
+                            onPress={() => handleMessageClient(client._id, client.first_name)} activeOpacity={0.8}>
+                            <Ionicons name="chatbubble-ellipses-outline" size={20} color={WHITE} />
+                            <Text style={modal.ctaText}>Message</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {/* Single CTA for Offered jobs */}
+                      {(isOffered) && (
+                        <TouchableOpacity style={modal.cta}
+                          onPress={() => handleMessageClient(client._id, client.first_name)}
+                          activeOpacity={0.8}>
+                          <Ionicons name="chatbubble-ellipses-outline" size={20} color={WHITE} />
+                          <Text style={modal.ctaText}>Message Client</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {/* CTA for Completed jobs */}
+                      {isCompleted && (
+                        <TouchableOpacity style={[modal.cta, { backgroundColor: GREEN_DARK }]}
+                          onPress={() => Alert.alert('Review', 'Review feature coming soon!')}
+                          activeOpacity={0.8}>
+                          <Ionicons name="star-outline" size={20} color={WHITE} />
+                          <Text style={modal.ctaText}>Leave Review</Text>
+                        </TouchableOpacity>
+                      )}
+                    </ScrollView>
+                  </>
+                );
+              })()}
             </View>
-            <Text style={styles.emptyTitle}>No jobs found</Text>
-            <Text style={styles.emptyText}>
-              {activeTab === 'active' 
-                ? "You don't have any active jobs at the moment" 
-                : activeTab === 'completed'
-                ? "You haven't completed any jobs yet"
-                : "No pending jobs to start"}
-            </Text>
-            <TouchableOpacity 
-              style={styles.browseJobsBtn}
-              onPress={() => onNavigate('BrowseJobs')}
-            >
-              <Ionicons name="search-outline" size={18} color={WHITE} style={{ marginRight: 6 }} />
-              <Text style={styles.browseJobsText}>Browse Jobs</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      />
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
 
-      <JobDetailModal 
-        job={selectedJob}
-        visible={selectedJob !== null}
-        onClose={() => setSelectedJob(null)}
-      />
-
-      {/* Bottom Tab Bar */}
-      <BottomTabBar 
-        activeTab="MyJobs" 
-        onTabPress={handleTabPress} 
+      {/* ── Bottom Tab Bar ── */}
+      <BottomTabBar
+        activeTab="MyJobs"
+        onTabPress={handleTabPress}
         pendingOffers={pendingOffers}
       />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 16, 
-    paddingVertical: 16,
-    backgroundColor: NAVY,
+function GridItem({ label, value, valueColor }) {
+  return (
+    <View style={grid.item}>
+      <Text style={grid.label}>{label}</Text>
+      <Text style={[grid.value, valueColor && { color: valueColor }]}>{value}</Text>
+    </View>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  safe: { flex:1, backgroundColor:NAVY },
+  root: { flex:1, backgroundColor:BG },
+
+  topbar: {
+    flexDirection:'row', alignItems:'center', justifyContent:'space-between',
+    paddingHorizontal:16, paddingVertical:16, backgroundColor:NAVY,
   },
-  backBtn: { alignSelf: 'flex-start' },
-  backIconWrap: {
-    width: 40, height: 40,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center', justifyContent: 'center',
+  topbarCenter: { flexDirection:'row', alignItems:'center', gap:8 },
+  topbarTitle:  { fontSize:18, fontWeight:'700', color:WHITE, letterSpacing:-0.3 },
+  topbarBadge:  { backgroundColor:GREEN, paddingHorizontal:8, paddingVertical:3, borderRadius:10 },
+  topbarBadgeText: { fontSize:10, fontWeight:'700', color:WHITE, letterSpacing:0.3 },
+  iconBtn: {
+    width:40, height:40, borderRadius:12,
+    backgroundColor:'rgba(255,255,255,0.06)',
+    borderWidth:1, borderColor:'rgba(255,255,255,0.1)',
+    alignItems:'center', justifyContent:'center',
   },
-  title: { fontSize: 18, fontWeight: '700', color: WHITE, letterSpacing: -0.3 },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: TEXT_MUTED,
+  iconBtnOutline: {
+    width:40, height:40, borderRadius:12,
+    backgroundColor:'rgba(0,115,207,0.1)',
+    borderWidth:1, borderColor:'rgba(0,115,207,0.2)',
+    alignItems:'center', justifyContent:'center',
   },
 
-  // Tabs
-  tabsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-    backgroundColor: CARD,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+  statsRow: {
+    flexDirection:'row', 
+    alignItems:'center', 
+    justifyContent:'space-around',
+    paddingHorizontal:16, 
+    paddingVertical:14,
+    backgroundColor:CARD, 
+    borderBottomWidth:1, 
+    borderBottomColor:BORDER,
   },
+  statItem: { 
+    flex:1, 
+    alignItems:'center',
+    paddingHorizontal:4,
+  },
+  statNum:  { 
+    fontSize:22, 
+    fontWeight:'800', 
+    letterSpacing:-0.5,
+    textAlign:'center',
+  },
+  statLabel:{ 
+    fontSize:10, 
+    color:TEXT_MUTED, 
+    fontWeight:'500', 
+    marginTop:2, 
+    letterSpacing:0.2,
+    textAlign:'center',
+  },
+  statDiv:  { 
+    width:1, 
+    height:30, 
+    backgroundColor:BORDER,
+    marginHorizontal:4,
+  },
+
+  tabScroll:   { backgroundColor:CARD, borderBottomWidth:1, borderBottomColor:BORDER },
+  tabContent:  { paddingHorizontal:14, paddingVertical:11, gap:8, flexDirection:'row' },
   tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: BG,
-    borderWidth: 1,
-    borderColor: BORDER,
+    flexDirection:'row', alignItems:'center', gap:5,
+    paddingHorizontal:13, paddingVertical:7, borderRadius:20,
+    borderWidth:1, borderColor:BORDER, backgroundColor:BG,
   },
-  tabActive: {
-    backgroundColor: `${BLUE}10`,
-    borderColor: BLUE,
-  },
-  tabText: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    fontWeight: '500',
-  },
-  tabTextActive: {
-    color: BLUE,
-    fontWeight: '600',
-  },
-  tabBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    backgroundColor: BORDER,
-  },
-  tabBadgeActive: {
-    backgroundColor: BLUE,
-  },
-  tabBadgeText: {
-    fontSize: 10,
-    color: TEXT_MUTED,
-    fontWeight: '500',
-  },
-  tabBadgeTextActive: {
-    color: WHITE,
-    fontWeight: '700',
-  },
+  tabActive:      { backgroundColor:`${BLUE}10`, borderColor:BLUE },
+  tabHot:         { borderColor:GREEN, borderWidth:1.5 },
+  tabText:        { fontSize:12, color:TEXT_MUTED, fontWeight:'500' },
+  tabTextActive:  { color:BLUE, fontWeight:'700' },
+  tabTextHot:     { color:GREEN, fontWeight:'700' },
+  tabBadge:      { minWidth:17, height:17, borderRadius:9, backgroundColor:BORDER, alignItems:'center', justifyContent:'center', paddingHorizontal:3 },
+  tabBadgeActive:{ backgroundColor:`${BLUE}22` },
+  tabBadgeHot:   { backgroundColor:GREEN },
+  tabBadgeText:      { fontSize:10, color:TEXT_MUTED, fontWeight:'600' },
+  tabBadgeTextActive:{ color:BLUE },
+  tabBadgeTextHot:   { color:WHITE },
 
-  // Job Card
-  jobsList: {
-    padding: 16,
-    paddingBottom: 80, // Extra padding for bottom tab bar
+  scroll: { padding:16, paddingBottom:100 },
+
+  center:      { flex:1, alignItems:'center', justifyContent:'center', backgroundColor:BG },
+  loadingText: { marginTop:12, fontSize:14, color:TEXT_MUTED },
+
+  empty:     { alignItems:'center', paddingVertical:60, paddingHorizontal:32 },
+  emptyIcon: { width:80, height:80, borderRadius:20, backgroundColor:`${BLUE}10`, alignItems:'center', justifyContent:'center', marginBottom:16 },
+  emptyTitle:{ fontSize:18, fontWeight:'600', color:TEXT_MAIN, marginBottom:6 },
+  emptyText: { fontSize:14, color:TEXT_MUTED, textAlign:'center', lineHeight:20, marginBottom:20, paddingHorizontal:40 },
+  emptyBtn:  {
+    flexDirection:'row', alignItems:'center', gap:6,
+    backgroundColor:BLUE, paddingHorizontal:24, paddingVertical:12, borderRadius:12,
+    shadowColor:BLUE, shadowOffset:{width:0,height:4}, shadowOpacity:0.26, shadowRadius:10, elevation:3,
   },
-  jobCard: {
-    backgroundColor: CARD,
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: BORDER,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  emptyBtnText:{ fontSize:14, fontWeight:'600', color:WHITE },
+});
+
+const modal = StyleSheet.create({
+  overlay: { flex:1, backgroundColor:'rgba(7,26,62,0.55)' },
+  sheet: {
+    backgroundColor:WHITE, borderTopLeftRadius:24, borderTopRightRadius:24,
+    maxHeight:'92%',
   },
-  jobHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+  handle: { width:34, height:4, backgroundColor:BORDER, borderRadius:2, alignSelf:'center', marginTop:10, marginBottom:4 },
+  header: {
+    flexDirection:'row', alignItems:'center', justifyContent:'space-between',
+    paddingHorizontal:16, paddingVertical:16,
+    borderBottomWidth:1, borderBottomColor:BORDER,
   },
-  clientInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  closeBtn: { width:40, height:40, borderRadius:10, backgroundColor:BG, alignItems:'center', justifyContent:'center' },
+  title:    { fontSize:18, fontWeight:'600', color:TEXT_MAIN },
+
+  clientStrip: {
+    flexDirection:'row', alignItems:'center', padding:16, gap:12,
+    borderBottomWidth:1, borderBottomColor:BORDER,
   },
-  clientAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: BLUE,
-    alignItems: 'center',
-    justifyContent: 'center',
+  clientName:  { fontSize:16, fontWeight:'600', color:TEXT_MAIN },
+  clientRole:  { fontSize:13, color:TEXT_MUTED, marginTop:1 },
+
+  body: { padding:20, paddingBottom:36 },
+
+  card: {
+    backgroundColor:BG, borderRadius:12, padding:16,
+    marginBottom:12, borderWidth:1, borderColor:BORDER,
   },
-  clientInitials: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: WHITE,
+  cardEyebrow: { fontSize:10, fontWeight:'700', color:TEXT_LIGHT, textTransform:'uppercase', letterSpacing:0.7, marginBottom:6 },
+  cardTitle:   { fontSize:16, fontWeight:'600', color:TEXT_MAIN, marginBottom:4 },
+  cardDesc:    { fontSize:13, color:TEXT_MUTED, lineHeight:18 },
+  cardBody:    { fontSize:14, color:TEXT_MAIN, lineHeight:20 },
+
+  amountCard: {
+    backgroundColor:`${BLUE}08`, borderRadius:12, padding:16,
+    marginBottom:12, borderWidth:1, borderColor:`${BLUE}1A`,
   },
-  clientName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  ratingText: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  projectTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-    marginBottom: 4,
-  },
-  projectCategory: {
-    fontSize: 12,
-    color: BLUE,
-    marginBottom: 12,
-  },
-  progressSection: {
-    marginBottom: 12,
-  },
+  amountCardActive: { borderColor:BLUE, borderWidth:2 },
+  amountRow:  { flexDirection:'row', alignItems:'center', justifyContent:'space-between' },
+  amountLabel:{ fontSize:11, fontWeight:'700', color:BLUE_MD, textTransform:'uppercase', letterSpacing:0.7, marginBottom:4 },
+  amountValue:{ fontSize:28, fontWeight:'800', color:BLUE, letterSpacing:-0.5 },
+  newPill:    { flexDirection:'row', alignItems:'center', gap:4, backgroundColor:BLUE, paddingHorizontal:10, paddingVertical:5, borderRadius:12 },
+  newPillText:{ fontSize:11, fontWeight:'700', color:WHITE },
+
+  timerInline:{ flexDirection:'row', alignItems:'center', gap:5, marginTop:10,
+                backgroundColor:`${ORANGE}15`, paddingHorizontal:10, paddingVertical:6, borderRadius:8 },
+  timerInlineText:{ fontSize:12, color:ORANGE, fontWeight:'600' },
+
+  // Progress styles
   progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  progressLabel: {
-    fontSize: 11,
-    color: TEXT_MUTED,
+    flexDirection:'row',
+    justifyContent:'space-between',
+    alignItems:'center',
+    marginBottom:6,
   },
   progressPercent: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: TEXT_MAIN,
+    fontSize:18,
+    fontWeight:'700',
+    color:TEXT_MAIN,
   },
   progressBarBg: {
-    height: 6,
-    backgroundColor: BORDER,
-    borderRadius: 3,
-    overflow: 'hidden',
+    height:8,
+    backgroundColor:BORDER,
+    borderRadius:4,
+    overflow:'hidden',
+    marginBottom:10,
   },
   progressBarFill: {
-    height: '100%',
-    borderRadius: 3,
+    height:'100%',
+    borderRadius:4,
   },
-  jobDetails: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 8,
+  updateProgressBtn: {
+    flexDirection:'row',
+    alignItems:'center',
+    justifyContent:'center',
+    gap:6,
+    paddingVertical:10,
+    backgroundColor:`${BLUE}10`,
+    borderRadius:8,
+    marginTop:4,
   },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  detailText: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-  },
-  deadlineWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  deadlineText: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-  },
-  deadlineUrgent: {
-    color: RED,
+  updateProgressText: {
+    fontSize:13,
+    fontWeight:'600',
+    color:BLUE,
   },
 
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(7,26,62,0.55)',
-    justifyContent: 'flex-end',
-  },
-  modalBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  modalContainer: {
-    backgroundColor: CARD,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
-  modalCloseBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-  },
-  modalContent: {
-    padding: 20,
-  },
-  modalClientSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
-  modalClientAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: BLUE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalClientInitials: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: WHITE,
-  },
-  modalClientInfo: {
-    flex: 1,
-  },
-  modalClientName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-    marginBottom: 4,
-  },
-  modalRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  modalRatingText: {
-    fontSize: 13,
-    color: TEXT_MAIN,
-  },
-  modalStatusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
-  },
-  modalStatusText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  modalSection: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  modalSectionTitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: TEXT_MUTED,
-  },
-  modalProjectTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-  },
-  modalDescription: {
-    fontSize: 14,
-    color: TEXT_MUTED,
-    lineHeight: 20,
-  },
-  modalDetailsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  modalDetailCard: {
-    flex: 1,
-    backgroundColor: BG,
-    padding: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  modalDetailLabel: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-    marginTop: 6,
-    marginBottom: 2,
-  },
-  modalDetailValue: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-    textAlign: 'center',
-  },
-  modalDetailSub: {
-    fontSize: 10,
-    color: TEXT_LIGHT,
-  },
-  modalProgressSection: {
-    backgroundColor: BG,
-    padding: 12,
-    borderRadius: 12,
-  },
-  milestoneSummary: {
-    marginBottom: 12,
-  },
-  milestoneCount: {
-    fontSize: 12,
-    color: BLUE,
-    fontWeight: '500',
-  },
-  milestoneItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-  },
-  milestoneIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: BORDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  milestoneIconCompleted: {
-    backgroundColor: STATUS_COMPLETED,
-  },
-  milestoneNumber: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: TEXT_MUTED,
-  },
-  milestoneInfo: {
-    flex: 1,
-  },
-  milestoneTitle: {
-    fontSize: 13,
-    color: TEXT_MAIN,
-    marginBottom: 2,
-  },
-  milestoneTitleCompleted: {
-    textDecorationLine: 'line-through',
-    color: TEXT_MUTED,
-  },
-  milestoneDate: {
-    fontSize: 10,
-    color: STATUS_COMPLETED,
-  },
-  milestoneDue: {
-    fontSize: 10,
-    color: STATUS_PENDING,
-  },
-  skillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  modalSkillChip: {
-    backgroundColor: `${BLUE}10`,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: `${BLUE}20`,
-  },
-  modalSkillText: {
-    fontSize: 12,
-    color: BLUE,
-    fontWeight: '500',
-  },
-  messagesContainer: {
-    maxHeight: 200,
-    marginBottom: 12,
-  },
-  noMessages: {
-    textAlign: 'center',
-    color: TEXT_LIGHT,
-    paddingVertical: 20,
-  },
-  messageInputContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  messageInput: {
-    flex: 1,
-    backgroundColor: BG,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    color: TEXT_MAIN,
-    fontSize: 13,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: BLUE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  modalActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  modalSubmitBtn: {
-    backgroundColor: BLUE,
-  },
-  modalSubmitText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: WHITE,
-  },
-  modalCompleteBtn: {
-    backgroundColor: STATUS_COMPLETED,
-  },
-  modalCompleteText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: WHITE,
-  },
-  completedSection: {
-    alignItems: 'center',
-    paddingVertical: 30,
-  },
-  completedTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  completedText: {
-    fontSize: 14,
-    color: TEXT_MUTED,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  leaveReviewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: `${BLUE}10`,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: `${BLUE}20`,
-  },
-  leaveReviewText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: BLUE,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyIconWrap: {
-    width: 80, height: 80,
-    backgroundColor: `${BLUE}10`,
-    borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: TEXT_MUTED,
-    textAlign: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 40,
-  },
-  browseJobsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: BLUE,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  browseJobsText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: WHITE,
+  grid: { flexDirection:'row', flexWrap:'wrap', gap:10, marginTop:4 },
+
+  actionRow: {
+    flexDirection:'row',
+    gap:10,
+    marginTop:4,
   },
 
-  // Bottom Tab Bar Styles
+  cta: {
+    flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8,
+    paddingVertical:14, borderRadius:12, marginTop:4,
+    shadowColor:BLUE, shadowOffset:{width:0,height:4}, shadowOpacity:0.25, shadowRadius:12, elevation:4,
+  },
+  ctaText: { fontSize:15, fontWeight:'700', color:WHITE },
+});
+
+const grid = StyleSheet.create({
+  item:  { width:'48%' },
+  label: { fontSize:10, color:TEXT_LIGHT, textTransform:'uppercase', letterSpacing:0.5, marginBottom:2 },
+  value: { fontSize:13, fontWeight:'600', color:TEXT_MAIN },
+});
+
+// ─── Bottom Tab Bar Styles - Same as MyJobs ──────────────────────────────────
+const styles = StyleSheet.create({
   tabSafe: { backgroundColor: 'transparent', position: 'absolute', bottom: 0, left: 0, right: 0 },
   tabBar: {
     flexDirection: 'row',

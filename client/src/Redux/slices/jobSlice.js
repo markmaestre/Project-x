@@ -1,6 +1,6 @@
+// Redux/slices/jobSlice.js
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../services/api';
-
 
 const createJobFormData = (jobData) => {
   const formData = new FormData();
@@ -278,6 +278,180 @@ export const searchJobs = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.error('Search jobs error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// ==================== NEW JOB PROGRESS & UPDATES ACTIONS ====================
+
+// Update job progress
+export const updateJobProgress = createAsyncThunk(
+  'jobs/updateJobProgress',
+  async ({ jobId, progress, notes }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.patch(`/jobs/${jobId}/progress`, 
+        { progress, notes },
+        {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('Update job progress error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Add job update with files
+export const addJobUpdate = createAsyncThunk(
+  'jobs/addJobUpdate',
+  async ({ jobId, formData }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.patch(`/jobs/${jobId}/updates`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Add job update error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Update a specific job update
+export const updateJobUpdate = createAsyncThunk(
+  'jobs/updateJobUpdate',
+  async ({ jobId, updateId, data }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.patch(`/jobs/${jobId}/updates/${updateId}`, 
+        data,
+        {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('Update job update error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Delete a job update
+export const deleteJobUpdate = createAsyncThunk(
+  'jobs/deleteJobUpdate',
+  async ({ jobId, updateId }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.delete(`/jobs/${jobId}/updates/${updateId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Delete job update error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Upload attachments to a job
+export const uploadJobAttachments = createAsyncThunk(
+  'jobs/uploadJobAttachments',
+  async ({ jobId, formData }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.patch(`/jobs/${jobId}/attachments`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Upload attachments error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Delete an attachment
+export const deleteJobAttachment = createAsyncThunk(
+  'jobs/deleteJobAttachment',
+  async ({ jobId, attachmentId }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.delete(`/jobs/${jobId}/attachments/${attachmentId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Delete attachment error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Get job progress and updates
+export const getJobProgress = createAsyncThunk(
+  'jobs/getJobProgress',
+  async (jobId, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.get(`/jobs/${jobId}/progress`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Get job progress error:', error.response?.data);
       return rejectWithValue(error.response?.data || { message: error.message });
     }
   }
@@ -582,6 +756,177 @@ const jobSlice = createSlice({
         state.jobs.currentPage = action.payload.currentPage;
       })
       .addCase(searchJobs.rejected, (state, action) => {
+        state.jobs.isLoading = false;
+        state.jobs.error = action.payload;
+      })
+
+      // ==================== NEW JOB PROGRESS & UPDATES REDUCERS ====================
+      
+      // Update Job Progress
+      .addCase(updateJobProgress.pending, (state) => {
+        state.jobs.isLoading = true;
+        state.jobs.error = null;
+      })
+      .addCase(updateJobProgress.fulfilled, (state, action) => {
+        state.jobs.isLoading = false;
+        if (state.jobs.selectedJob?._id === action.payload.job._id) {
+          state.jobs.selectedJob = action.payload.job;
+        }
+        // Update in lists
+        const updateJobInList = (jobList) => {
+          const index = jobList.findIndex(job => job._id === action.payload.job._id);
+          if (index !== -1) {
+            jobList[index] = action.payload.job;
+          }
+        };
+        updateJobInList(state.jobs.list);
+        updateJobInList(state.jobs.clientJobs);
+      })
+      .addCase(updateJobProgress.rejected, (state, action) => {
+        state.jobs.isLoading = false;
+        state.jobs.error = action.payload;
+      })
+      
+      // Add Job Update
+      .addCase(addJobUpdate.pending, (state) => {
+        state.jobs.isLoading = true;
+        state.jobs.error = null;
+      })
+      .addCase(addJobUpdate.fulfilled, (state, action) => {
+        state.jobs.isLoading = false;
+        if (state.jobs.selectedJob?._id === action.payload.job._id) {
+          state.jobs.selectedJob = action.payload.job;
+        }
+        // Update in lists
+        const updateJobInList = (jobList) => {
+          const index = jobList.findIndex(job => job._id === action.payload.job._id);
+          if (index !== -1) {
+            jobList[index] = action.payload.job;
+          }
+        };
+        updateJobInList(state.jobs.list);
+        updateJobInList(state.jobs.clientJobs);
+      })
+      .addCase(addJobUpdate.rejected, (state, action) => {
+        state.jobs.isLoading = false;
+        state.jobs.error = action.payload;
+      })
+      
+      // Update Job Update
+      .addCase(updateJobUpdate.pending, (state) => {
+        state.jobs.isLoading = true;
+        state.jobs.error = null;
+      })
+      .addCase(updateJobUpdate.fulfilled, (state, action) => {
+        state.jobs.isLoading = false;
+        if (state.jobs.selectedJob?._id === action.payload.job._id) {
+          state.jobs.selectedJob = action.payload.job;
+        }
+        // Update in lists
+        const updateJobInList = (jobList) => {
+          const index = jobList.findIndex(job => job._id === action.payload.job._id);
+          if (index !== -1) {
+            jobList[index] = action.payload.job;
+          }
+        };
+        updateJobInList(state.jobs.list);
+        updateJobInList(state.jobs.clientJobs);
+      })
+      .addCase(updateJobUpdate.rejected, (state, action) => {
+        state.jobs.isLoading = false;
+        state.jobs.error = action.payload;
+      })
+      
+      // Delete Job Update
+      .addCase(deleteJobUpdate.pending, (state) => {
+        state.jobs.isLoading = true;
+        state.jobs.error = null;
+      })
+      .addCase(deleteJobUpdate.fulfilled, (state, action) => {
+        state.jobs.isLoading = false;
+        if (state.jobs.selectedJob?._id === action.payload.job._id) {
+          state.jobs.selectedJob = action.payload.job;
+        }
+        // Update in lists
+        const updateJobInList = (jobList) => {
+          const index = jobList.findIndex(job => job._id === action.payload.job._id);
+          if (index !== -1) {
+            jobList[index] = action.payload.job;
+          }
+        };
+        updateJobInList(state.jobs.list);
+        updateJobInList(state.jobs.clientJobs);
+      })
+      .addCase(deleteJobUpdate.rejected, (state, action) => {
+        state.jobs.isLoading = false;
+        state.jobs.error = action.payload;
+      })
+      
+      // Upload Job Attachments
+      .addCase(uploadJobAttachments.pending, (state) => {
+        state.jobs.isLoading = true;
+        state.jobs.error = null;
+      })
+      .addCase(uploadJobAttachments.fulfilled, (state, action) => {
+        state.jobs.isLoading = false;
+        if (state.jobs.selectedJob?._id === action.payload.job._id) {
+          state.jobs.selectedJob = action.payload.job;
+        }
+        // Update in lists
+        const updateJobInList = (jobList) => {
+          const index = jobList.findIndex(job => job._id === action.payload.job._id);
+          if (index !== -1) {
+            jobList[index] = action.payload.job;
+          }
+        };
+        updateJobInList(state.jobs.list);
+        updateJobInList(state.jobs.clientJobs);
+      })
+      .addCase(uploadJobAttachments.rejected, (state, action) => {
+        state.jobs.isLoading = false;
+        state.jobs.error = action.payload;
+      })
+      
+      // Delete Job Attachment
+      .addCase(deleteJobAttachment.pending, (state) => {
+        state.jobs.isLoading = true;
+        state.jobs.error = null;
+      })
+      .addCase(deleteJobAttachment.fulfilled, (state, action) => {
+        state.jobs.isLoading = false;
+        if (state.jobs.selectedJob?._id === action.payload.job._id) {
+          state.jobs.selectedJob = action.payload.job;
+        }
+        // Update in lists
+        const updateJobInList = (jobList) => {
+          const index = jobList.findIndex(job => job._id === action.payload.job._id);
+          if (index !== -1) {
+            jobList[index] = action.payload.job;
+          }
+        };
+        updateJobInList(state.jobs.list);
+        updateJobInList(state.jobs.clientJobs);
+      })
+      .addCase(deleteJobAttachment.rejected, (state, action) => {
+        state.jobs.isLoading = false;
+        state.jobs.error = action.payload;
+      })
+      
+      // Get Job Progress
+      .addCase(getJobProgress.pending, (state) => {
+        state.jobs.isLoading = true;
+        state.jobs.error = null;
+      })
+      .addCase(getJobProgress.fulfilled, (state, action) => {
+        state.jobs.isLoading = false;
+        if (state.jobs.selectedJob) {
+          state.jobs.selectedJob.progress = action.payload.progress;
+          state.jobs.selectedJob.updates = action.payload.updates;
+          state.jobs.selectedJob.attachments = action.payload.attachments;
+          state.jobs.selectedJob.status = action.payload.status;
+        }
+      })
+      .addCase(getJobProgress.rejected, (state, action) => {
         state.jobs.isLoading = false;
         state.jobs.error = action.payload;
       });

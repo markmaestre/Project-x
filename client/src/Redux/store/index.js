@@ -4,6 +4,7 @@ import jobReducer from '../slices/jobSlice';
 import offerReducer from '../slices/offerSlice';
 import applicationReducer from '../slices/applicationSlice';
 import messageReducer from '../slices/messageSlice';
+import ratingReducer from '../slices/ratingSlice';
 
 
 export const store = configureStore({
@@ -13,5 +14,7 @@ export const store = configureStore({
     offers: offerReducer,
     applications: applicationReducer,
     messages: messageReducer,
+    ratings: ratingReducer,
+    
   },
 });

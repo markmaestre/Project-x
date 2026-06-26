@@ -1,3 +1,4 @@
+// routes/applicationRoutes.js
 import express from "express";
 import mongoose from "mongoose";
 import multer from "multer";
@@ -415,11 +416,10 @@ router.delete("/applications/save/:jobId", authMiddleware, async (req, res) => {
   }
 });
 
-// ==================== CLIENT ROUTES (keep your existing ones) ====================
+// ==================== CLIENT ROUTES ====================
 
 // Get applications for a specific job (Client only)
 router.get("/jobs/:jobId/applications", authMiddleware, async (req, res) => {
-  // ... keep your existing code
   try {
     const { jobId } = req.params;
 
@@ -445,7 +445,7 @@ router.get("/jobs/:jobId/applications", authMiddleware, async (req, res) => {
     if (status && status !== 'All') query.status = status;
 
     const applications = await Application.find(query)
-      .populate("freelancer_id", "first_name last_name username email_address profile_picture skills experience_level hourly_rate bio_about_me")
+      .populate("freelancer_id", "first_name last_name username email_address profile_picture skills experience_level hourly_rate bio_about_me resume resume_cv_url")
       .sort({ applied_at: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -473,7 +473,7 @@ router.get("/jobs/:jobId/applications", authMiddleware, async (req, res) => {
 router.patch("/applications/:applicationId/status", authMiddleware, async (req, res) => {
   try {
     const { applicationId } = req.params;
-    const { status } = req.body;
+    const { status, interviewData } = req.body;
 
     if (req.user.role !== "client") {
       return res.status(403).json({ message: "Access denied. Clients only." });
@@ -483,12 +483,16 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
       return res.status(400).json({ message: "Invalid application ID" });
     }
 
-    const validStatuses = ["pending", "reviewed", "offered", "rejected", "accepted"];
+    // Updated valid statuses - replaced 'accepted' with 'completed'
+    const validStatuses = ["pending", "reviewed", "interview", "offered", "hired", "rejected", "completed"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    const application = await Application.findById(applicationId).populate("job_id", "client_id title");
+    const application = await Application.findById(applicationId)
+      .populate("job_id", "client_id title status")
+      .populate("freelancer_id", "first_name last_name email_address");
+
     if (!application) {
       return res.status(404).json({ message: "Application not found" });
     }
@@ -498,9 +502,41 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
     }
 
     application.status = status;
+    
+    // If status is 'interview', save interview data
+    if (status === 'interview' && interviewData) {
+      application.interview_data = {
+        scheduled_date: interviewData.scheduledDate,
+        meeting_link: interviewData.meetingLink,
+        notes: interviewData.notes,
+        sent_at: new Date(),
+      };
+    }
+
+    // If status is 'hired', update job status to 'in_progress'
+    if (status === 'hired') {
+      const job = await Job.findById(application.job_id._id);
+      if (job && job.status === 'open') {
+        job.status = 'in_progress';
+        await job.save();
+      }
+    }
+
+    // If status is 'completed', update job status to 'completed'
+    if (status === 'completed') {
+      const job = await Job.findById(application.job_id._id);
+      if (job) {
+        job.status = 'completed';
+        await job.save();
+      }
+    }
+
     await application.save();
 
-    res.json({ message: `Application status updated to ${status}`, application });
+    res.json({ 
+      message: `Application status updated to ${status}`, 
+      application 
+    });
   } catch (error) {
     console.error("Error updating application status:", error);
     res.status(500).json({ message: "Error updating application status", error: error.message });
@@ -616,6 +652,93 @@ router.get("/applications/:applicationId/resume", authMiddleware, async (req, re
   } catch (error) {
     console.error("Error fetching resume:", error);
     res.status(500).json({ message: "Error fetching resume", error: error.message });
+  }
+});
+
+// Mark job as completed (Client only)
+router.patch("/jobs/:jobId/complete", authMiddleware, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+
+    if (req.user.role !== "client") {
+      return res.status(403).json({ message: "Access denied. Clients only." });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      return res.status(400).json({ message: "Invalid job ID" });
+    }
+
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    if (job.client_id.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Access denied. This job does not belong to you." });
+    }
+
+    job.status = "completed";
+    await job.save();
+
+    // Update all applications for this job to 'completed'
+    await Application.updateMany(
+      { job_id: jobId, status: { $in: ['hired', 'offered'] } },
+      { status: 'completed' }
+    );
+
+    res.json({
+      message: "Job marked as completed",
+      job
+    });
+  } catch (error) {
+    console.error("Error completing job:", error);
+    res.status(500).json({ message: "Error completing job", error: error.message });
+  }
+});
+
+// Get all applications for a client's jobs (Client only)
+router.get("/client/applications", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "client") {
+      return res.status(403).json({ message: "Access denied. Clients only." });
+    }
+
+    const { status, page = 1, limit = 20 } = req.query;
+
+    // Get all jobs for this client
+    const jobs = await Job.find({ client_id: req.user.id }).select('_id');
+    const jobIds = jobs.map(job => job._id);
+
+    if (jobIds.length === 0) {
+      return res.json({
+        applications: [],
+        totalPages: 0,
+        currentPage: page,
+        totalApplications: 0
+      });
+    }
+
+    const query = { job_id: { $in: jobIds } };
+    if (status && status !== 'All') query.status = status;
+
+    const applications = await Application.find(query)
+      .populate("job_id", "title description budget_type budget_amount")
+      .populate("freelancer_id", "first_name last_name username email_address profile_picture skills experience_level")
+      .sort({ applied_at: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Application.countDocuments(query);
+
+    res.json({
+      applications,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      totalApplications: total
+    });
+  } catch (error) {
+    console.error("Error fetching client applications:", error);
+    res.status(500).json({ message: "Error fetching applications", error: error.message });
   }
 });
 

@@ -226,7 +226,7 @@ router.get("/offers/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// Update offer status (Client can cancel, Freelancer can accept/decline)
+// Update offer status (Client can cancel/expire/hire, Freelancer can accept/decline)
 router.patch("/offers/:id/status", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
@@ -236,7 +236,7 @@ router.patch("/offers/:id/status", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Invalid offer ID" });
     }
 
-    const validStatuses = ["pending", "accepted", "declined", "expired"];
+    const validStatuses = ["pending", "accepted", "declined", "expired", "hired"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ 
         message: "Invalid status. Must be one of: " + validStatuses.join(", ") 
@@ -255,9 +255,9 @@ router.patch("/offers/:id/status", authMiddleware, async (req, res) => {
       offer = clientOffer;
       isClientAction = true;
 
-      // Clients can only cancel pending offers
-      if (status !== "cancelled" && status !== "expired") {
-        return res.status(403).json({ message: "Clients can only cancel or expire offers" });
+      // Clients can cancel, expire, or hire
+      if (status !== "cancelled" && status !== "expired" && status !== "hired") {
+        return res.status(403).json({ message: "Clients can only cancel, expire, or hire offers" });
       }
     } else if (req.user.role === "freelancer") {
       const { error, offer: freelancerOffer, status: errorStatus } = await checkFreelancerOfferOwnership(id, req.user.id);
@@ -289,6 +289,16 @@ router.patch("/offers/:id/status", authMiddleware, async (req, res) => {
     offer.status = status;
     offer.responded_at = new Date();
     await offer.save();
+
+    // If offer is hired, assign freelancer to job
+    if (status === "hired") {
+      const job = await Job.findById(offer.job_id);
+      if (job) {
+        job.assigned_freelancer_id = offer.freelancer_id;
+        job.status = "in_progress";
+        await job.save();
+      }
+    }
 
     // If offer is accepted, update the job status
     if (status === "accepted") {
@@ -380,12 +390,16 @@ router.get("/offers/stats/dashboard", authMiddleware, async (req, res) => {
         client_id: req.user.id, 
         status: "declined" 
       });
+      const hiredOffers = await Offer.countDocuments({ 
+        client_id: req.user.id, 
+        status: "hired" 
+      });
       const totalOffers = await Offer.countDocuments({ client_id: req.user.id });
 
-      // Calculate total amount spent on accepted offers
+      // Calculate total amount spent on accepted/hired offers
       const acceptedOffersData = await Offer.find({ 
         client_id: req.user.id, 
-        status: "accepted" 
+        status: { $in: ["accepted", "hired"] } 
       });
       const totalSpent = acceptedOffersData.reduce((sum, offer) => sum + (offer.amount || 0), 0);
 
@@ -393,6 +407,7 @@ router.get("/offers/stats/dashboard", authMiddleware, async (req, res) => {
         pendingOffers,
         acceptedOffers,
         declinedOffers,
+        hiredOffers,
         totalOffers,
         totalSpent
       });
@@ -409,12 +424,16 @@ router.get("/offers/stats/dashboard", authMiddleware, async (req, res) => {
         freelancer_id: req.user.id, 
         status: "declined" 
       });
+      const hiredOffers = await Offer.countDocuments({ 
+        freelancer_id: req.user.id, 
+        status: "hired" 
+      });
       const totalOffers = await Offer.countDocuments({ freelancer_id: req.user.id });
 
-      // Calculate total earnings from accepted offers
+      // Calculate total earnings from accepted/hired offers
       const acceptedOffersData = await Offer.find({ 
         freelancer_id: req.user.id, 
-        status: "accepted" 
+        status: { $in: ["accepted", "hired"] } 
       });
       const totalEarnings = acceptedOffersData.reduce((sum, offer) => sum + (offer.amount || 0), 0);
 
@@ -422,6 +441,7 @@ router.get("/offers/stats/dashboard", authMiddleware, async (req, res) => {
         pendingOffers,
         acceptedOffers,
         declinedOffers,
+        hiredOffers,
         totalOffers,
         totalEarnings
       });
@@ -455,7 +475,7 @@ router.delete("/offers/:id", authMiddleware, async (req, res) => {
     // Only allow deletion of pending or expired offers
     if (offer.status !== "pending" && offer.status !== "expired") {
       return res.status(400).json({ 
-        message: "Cannot delete offers that are already accepted or declined" 
+        message: "Cannot delete offers that are already accepted, hired, or declined" 
       });
     }
 

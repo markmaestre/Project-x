@@ -11,6 +11,7 @@ import {
   Image,
   Modal,
   StatusBar,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,20 +45,259 @@ const GREEN_SOFT = '#D1FAE5';
 const GREEN_MID  = '#86EFAC';
 const GREEN_DARK = '#059669';
 const BG_GRAY    = '#F9FAFB';
+const RED        = '#DC2626';
+const RED_SOFT   = '#FEF2F2';
 // ─────────────────────────────────────────────────────────────────────────────────
 
 const STATUS = {
   pending:  { bg: `${BLUE}10`, border: `${BLUE}30`, text: BLUE, dot: BLUE, label: 'Under Review',      icon: 'time-outline' },
   reviewed: { bg: '#60a5fa10',  border: '#60a5fa30', text: '#60a5fa', dot: '#60a5fa', label: 'Reviewed',           icon: 'eye-outline' },
-  offered:  { bg: `${GOLD}10`,  border: `${GOLD}30`, text: GOLD_DK, dot: GOLD_DK, label: 'Interview / Offer',   icon: 'star-outline' },
+  interview: { bg: `${GOLD}10`,  border: `${GOLD}30`, text: GOLD_DK, dot: GOLD_DK, label: 'Interview',   icon: 'calendar-outline' },
+  offered:  { bg: `${GOLD}10`,  border: `${GOLD}30`, text: GOLD_DK, dot: GOLD_DK, label: 'Offer Sent',   icon: 'gift-outline' },
   accepted: { bg: `${GREEN}14`, border: `${GREEN}45`, text: GREEN, dot: GREEN, label: 'Accepted',            icon: 'checkmark-circle-outline' },
+  hired:    { bg: `${GREEN}14`, border: `${GREEN}45`, text: GREEN, dot: GREEN, label: 'Hired',            icon: 'checkmark-circle-outline' },
   rejected: { bg: '#f8717110',  border: '#f8717130', text: '#f87171', dot: '#f87171', label: 'Not Selected',        icon: 'close-circle-outline' },
 };
 const getStatus = (s) => STATUS[s] || { bg: `${BLUE}15`, border: BORDER, text: TEXT_MUTED, dot: TEXT_LIGHT, label: s || 'Applied', icon: 'document-text-outline' };
 
 const TABS = ['Applied', 'Saved'];
 
-// ── Bottom Tab Bar with Centered My Jobs Button (BALANCED VERSION) ─────────────────
+// ── Status Timeline Component with Interview Details ──
+const StatusTimeline = ({ history, currentStatus, interviewDetails }) => {
+  const STATUS_ICONS = {
+    pending: 'time-outline',
+    reviewed: 'eye-outline',
+    interview: 'calendar-outline',
+    offered: 'gift-outline',
+    accepted: 'checkmark-circle-outline',
+    hired: 'checkmark-done-circle-outline',
+    rejected: 'close-circle-outline',
+  };
+
+  const STATUS_COLORS = {
+    pending: '#0055A5',
+    reviewed: '#60a5fa',
+    interview: '#C89520',
+    offered: '#f59e0b',
+    accepted: '#059669',
+    hired: '#10b981',
+    rejected: '#f87171',
+  };
+
+  const STATUS_LABELS = {
+    pending: 'Application Submitted',
+    reviewed: 'Shortlisted',
+    interview: 'Interview Scheduled',
+    offered: 'Offer Sent',
+    accepted: 'Accepted',
+    hired: 'Hired',
+    rejected: 'Not Selected',
+  };
+
+  const formatDate = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const handleOpenLink = (url) => {
+    if (url) {
+      Linking.openURL(url).catch(() => {
+        Alert.alert('Error', 'Unable to open the meeting link');
+      });
+    }
+  };
+
+  if (!history || history.length === 0) {
+    const color = STATUS_COLORS[currentStatus] || '#0055A5';
+    const label = STATUS_LABELS[currentStatus] || currentStatus || 'Pending';
+    const icon = STATUS_ICONS[currentStatus] || 'ellipse-outline';
+    
+    return (
+      <View style={tl.container}>
+        <View style={tl.timelineItem}>
+          <View style={[tl.dot, { backgroundColor: color }]}>
+            <Ionicons name={icon} size={12} color="#fff" />
+          </View>
+          <View style={tl.timelineContent}>
+            <Text style={tl.statusLabel}>{label}</Text>
+            <Text style={tl.statusDate}>Current Status</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  const sortedHistory = [...history].sort((a, b) => 
+    new Date(a.changed_at) - new Date(b.changed_at)
+  );
+
+  return (
+    <View style={tl.container}>
+      {sortedHistory.map((item, index) => {
+        const isLast = index === sortedHistory.length - 1;
+        const status = item.status;
+        const color = STATUS_COLORS[status] || '#0055A5';
+        const icon = STATUS_ICONS[status] || 'ellipse-outline';
+        const label = STATUS_LABELS[status] || status;
+        
+        const isInterview = status === 'interview' && item.interview_details;
+        const isOffer = status === 'offered' && item.offer_details;
+
+        return (
+          <View key={index} style={tl.timelineItem}>
+            {!isLast && <View style={[tl.timelineLine, { backgroundColor: color }]} />}
+            
+            <View style={[tl.dot, { backgroundColor: color }]}>
+              <Ionicons name={icon} size={12} color="#fff" />
+            </View>
+            
+            <View style={tl.timelineContent}>
+              <Text style={tl.statusLabel}>{label}</Text>
+              <Text style={tl.statusDate}>{formatDate(item.changed_at)}</Text>
+              
+              {isInterview && item.interview_details && (
+                <View style={tl.detailBox}>
+                  <View style={tl.detailRow}>
+                    <Ionicons name="calendar-outline" size={12} color={STATUS_COLORS.interview} />
+                    <Text style={tl.detailText}>
+                      📅 {formatDate(item.interview_details.scheduled_date)}
+                    </Text>
+                  </View>
+                  {item.interview_details.meeting_link && (
+                    <TouchableOpacity 
+                      style={tl.detailRow} 
+                      onPress={() => handleOpenLink(item.interview_details.meeting_link)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="link-outline" size={12} color={BLUE} />
+                      <Text style={[tl.detailText, { color: BLUE, textDecorationLine: 'underline' }]} numberOfLines={1}>
+                        {item.interview_details.meeting_link}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {item.interview_details.notes && (
+                    <View style={tl.detailRow}>
+                      <Ionicons name="document-text-outline" size={12} color={STATUS_COLORS.interview} />
+                      <Text style={tl.detailText} numberOfLines={3}>
+                        📝 {item.interview_details.notes}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              
+              {isOffer && item.offer_details && (
+                <View style={tl.detailBox}>
+                  <View style={tl.detailRow}>
+                    <Ionicons name="cash-outline" size={12} color={STATUS_COLORS.offered} />
+                    <Text style={[tl.detailText, { fontWeight: 'bold', color: STATUS_COLORS.offered }]}>
+                      ₱{Number(item.offer_details.amount).toLocaleString()}
+                    </Text>
+                  </View>
+                  {item.offer_details.message && (
+                    <View style={tl.detailRow}>
+                      <Ionicons name="chatbubble-outline" size={12} color={STATUS_COLORS.offered} />
+                      <Text style={tl.detailText} numberOfLines={2}>
+                        {item.offer_details.message}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              
+              {item.note && !isInterview && !isOffer && (
+                <Text style={tl.noteText}>{item.note}</Text>
+              )}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
+const tl = StyleSheet.create({
+  container: {
+    paddingVertical: 8,
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    paddingBottom: 20,
+    position: 'relative',
+  },
+  timelineLine: {
+    position: 'absolute',
+    left: 15,
+    top: 30,
+    bottom: 0,
+    width: 2,
+  },
+  dot: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    zIndex: 2,
+    borderWidth: 2,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  timelineContent: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  statusLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#071A3E',
+    marginBottom: 2,
+  },
+  statusDate: {
+    fontSize: 11,
+    color: '#7A90A8',
+    marginBottom: 4,
+  },
+  detailBox: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: '#C8D8E8',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  detailText: {
+    fontSize: 12,
+    color: '#3A5070',
+    flex: 1,
+  },
+  noteText: {
+    fontSize: 12,
+    color: '#7A90A8',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+});
+
+// ── Bottom Tab Bar ─────────────────
 function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   const tabs = [
     { key: 'FreelancerDashboard', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
@@ -70,7 +310,7 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   return (
     <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
       <View style={styles.tabBar}>
-        {tabs.map((tab, index) => {
+        {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
           const isMyJobs = tab.key === 'MyJobs';
           const hasBadge = tab.key === 'Messages' && pendingOffers > 0;
@@ -143,6 +383,18 @@ const budget = (job) =>
     ? `₱${Number(job.budget_amount).toLocaleString()}${job.budget_type === 'hourly' ? '/hr' : ''}`
     : '—';
 
+const formatDate = (date) => {
+  if (!date) return 'N/A';
+  const d = new Date(date);
+  return d.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
 // Sub-components
 const Pill = ({ icon, label, color = TEXT_MUTED }) => (
   <View style={pill.wrap}>
@@ -158,14 +410,23 @@ const pill = StyleSheet.create({
 
 const Divider = () => <View style={{ height: 1, backgroundColor: BORDER, marginVertical: 10 }} />;
 
-// Application Card
-const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage }) => {
+// Application Card - UPDATED with Interview Details
+const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onViewTimeline }) => {
   const job = application.job_id;
   const st  = getStatus(application.status);
-  const isOffered = application.status === 'offered';
+  const isOffered = application.status === 'offered' || application.status === 'interview';
+  const hasHistory = application.status_history && application.status_history.length > 0;
+  
+  // Get interview details from application
+  const interviewDetails = application.interview_details || 
+                          (application.status_history?.find(h => h.status === 'interview')?.interview_details);
 
   return (
-    <View style={ac.card}>
+    <TouchableOpacity 
+      style={ac.card} 
+      onPress={() => onViewTimeline(application)}
+      activeOpacity={0.7}
+    >
       <View style={ac.topRow}>
         <View style={ac.logoBox}>
           <Ionicons name={getCategoryIcon(job?.title)} size={22} color={BLUE} />
@@ -173,7 +434,9 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage }) =>
         <View style={ac.topMeta}>
           <Text style={ac.jobTitle} numberOfLines={2}>{job?.title || 'Unknown Job'}</Text>
           <TouchableOpacity style={ac.clientRow} onPress={() => onViewClient(job)} activeOpacity={0.7}>
-            <Text style={ac.clientName}>{job?.client_id?.company_name || job?.client_id?.first_name || 'Client'}</Text>
+            <Text style={ac.clientName}>
+              {job?.client_id?.company_name || job?.client_id?.first_name || 'Client'}
+            </Text>
             <Ionicons name="chevron-forward" size={11} color={BLUE} />
           </TouchableOpacity>
         </View>
@@ -189,10 +452,53 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage }) =>
         <Pill icon="calendar-outline" label={`Applied ${timeAgo(application.applied_at)}`} />
       </View>
 
-      {isOffered && (
+      {/* Show Interview Details if status is interview */}
+      {application.status === 'interview' && interviewDetails && (
+        <View style={ac.interviewBanner}>
+          <Ionicons name="calendar-outline" size={14} color={GOLD_DK} />
+          <View style={ac.interviewContent}>
+            <Text style={ac.interviewTitle}>Interview Scheduled</Text>
+            <Text style={ac.interviewDate}>
+              {formatDate(interviewDetails.scheduled_date || interviewDetails.interview_date)}
+            </Text>
+            {interviewDetails.meeting_link && (
+              <TouchableOpacity 
+                onPress={() => Linking.openURL(interviewDetails.meeting_link)}
+                activeOpacity={0.7}
+              >
+                <Text style={ac.interviewLink} numberOfLines={1}>
+                  🔗 {interviewDetails.meeting_link}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {interviewDetails.notes && (
+              <Text style={ac.interviewNotes} numberOfLines={2}>
+                📝 {interviewDetails.notes}
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* View History Button */}
+      <TouchableOpacity 
+        style={ac.historyBtn} 
+        onPress={() => onViewTimeline(application)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="time-outline" size={14} color={BLUE} />
+        <Text style={ac.historyBtnText}>
+          {hasHistory ? `View Status History (${application.status_history.length} updates)` : 'View Status History'}
+        </Text>
+        <Ionicons name="chevron-forward" size={14} color={BLUE} />
+      </TouchableOpacity>
+
+      {isOffered && application.status !== 'interview' && (
         <View style={ac.offerBanner}>
           <Ionicons name="star" size={13} color={GOLD_DK} />
-          <Text style={ac.offerText}>You received an offer — check your messages.</Text>
+          <Text style={ac.offerText}>
+            You received an offer — check your messages.
+          </Text>
         </View>
       )}
 
@@ -215,7 +521,7 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage }) =>
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -231,6 +537,60 @@ const ac = StyleSheet.create({
   dot:        { width: 5, height: 5, borderRadius: 3 },
   statusText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4 },
   pillRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  interviewBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: 'rgba(200,149,32,0.08)',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(200,149,32,0.2)',
+  },
+  interviewContent: {
+    flex: 1,
+  },
+  interviewTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: GOLD_DK,
+    marginBottom: 2,
+  },
+  interviewDate: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+    marginBottom: 2,
+  },
+  interviewLink: {
+    fontSize: 11,
+    color: BLUE,
+    textDecorationLine: 'underline',
+    marginBottom: 2,
+  },
+  interviewNotes: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+    fontStyle: 'italic',
+  },
+  historyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(0,104,181,0.05)',
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,104,181,0.15)',
+    marginBottom: 8,
+  },
+  historyBtnText: {
+    fontSize: 12,
+    color: BLUE,
+    fontWeight: '600',
+    flex: 1,
+  },
   offerBanner:{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(200,149,32,0.08)', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, marginBottom: 4, borderWidth: 0.75, borderColor: 'rgba(200,149,32,0.2)' },
   offerText:  { fontSize: 11, color: GOLD_DK, flex: 1, fontWeight: '500' },
   actions:    { flexDirection: 'row', gap: 8 },
@@ -240,59 +600,64 @@ const ac = StyleSheet.create({
   btnBlueText:{ fontSize: 12, fontWeight: '700', color: WHITE },
 });
 
-// Saved Job Card
-const SavedJobCard = ({ job, onViewJob, onViewClient, onUnsave, onApply }) => (
-  <View style={sj.card}>
-    <View style={sj.topRow}>
-      <View style={sj.logoBox}>
-        <Ionicons name={getCategoryIcon(job.title)} size={22} color={BLUE} />
-      </View>
-      <View style={sj.topMeta}>
-        <Text style={sj.jobTitle} numberOfLines={2}>{job.title}</Text>
-        <TouchableOpacity style={sj.clientRow} onPress={() => onViewClient(job)} activeOpacity={0.7}>
-          <Text style={sj.clientName}>{job.client_id?.company_name || job.client_id?.first_name || 'Client'}</Text>
-          <Ionicons name="chevron-forward" size={11} color={BLUE} />
+// Saved Job Card - FIXED
+const SavedJobCard = ({ job, onViewJob, onViewClient, onUnsave, onApply }) => {
+  const client = job?.client_id;
+  const clientName = client?.company_name || client?.first_name || 'Client';
+  
+  return (
+    <View style={sj.card}>
+      <View style={sj.topRow}>
+        <View style={sj.logoBox}>
+          <Ionicons name={getCategoryIcon(job?.title || '')} size={22} color={BLUE} />
+        </View>
+        <View style={sj.topMeta}>
+          <Text style={sj.jobTitle} numberOfLines={2}>{job?.title || 'Unknown Job'}</Text>
+          <TouchableOpacity style={sj.clientRow} onPress={() => onViewClient(job)} activeOpacity={0.7}>
+            <Text style={sj.clientName}>{clientName}</Text>
+            <Ionicons name="chevron-forward" size={11} color={BLUE} />
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity onPress={onUnsave} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Ionicons name="bookmark" size={20} color={GOLD_DK} />
         </TouchableOpacity>
       </View>
-      <TouchableOpacity onPress={onUnsave} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-        <Ionicons name="bookmark" size={20} color={GOLD_DK} />
-      </TouchableOpacity>
-    </View>
 
-    <View style={sj.pillRow}>
-      <Pill icon="cash-outline"     label={budget(job)}                color={GOLD_DK} />
-      <Pill icon="location-outline" label={job.work_setup || 'Remote'}             />
-    </View>
-
-    {job.required_skills?.length > 0 && (
-      <View style={sj.skillsRow}>
-        {job.required_skills.slice(0, 3).map((s, i) => (
-          <View key={i} style={sj.skill}>
-            <Text style={sj.skillText}>{s}</Text>
-          </View>
-        ))}
-        {job.required_skills.length > 3 && (
-          <View style={sj.skill}>
-            <Text style={sj.skillText}>+{job.required_skills.length - 3}</Text>
-          </View>
-        )}
+      <View style={sj.pillRow}>
+        <Pill icon="cash-outline" label={budget(job)} color={GOLD_DK} />
+        <Pill icon="location-outline" label={job?.work_setup || 'Remote'} />
       </View>
-    )}
 
-    <Divider />
+      {job?.required_skills?.length > 0 && (
+        <View style={sj.skillsRow}>
+          {job.required_skills.slice(0, 3).map((s, i) => (
+            <View key={i} style={sj.skill}>
+              <Text style={sj.skillText}>{s}</Text>
+            </View>
+          ))}
+          {job.required_skills.length > 3 && (
+            <View style={sj.skill}>
+              <Text style={sj.skillText}>+{job.required_skills.length - 3}</Text>
+            </View>
+          )}
+        </View>
+      )}
 
-    <View style={sj.actions}>
-      <TouchableOpacity style={sj.btnOutline} onPress={() => onViewJob(job)} activeOpacity={0.75}>
-        <Ionicons name="eye-outline" size={13} color={TEXT_MUTED} />
-        <Text style={sj.btnOutlineText}>View Details</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={sj.btnBlue} onPress={onApply} activeOpacity={0.85}>
-        <Text style={sj.btnBlueText}>Apply Now</Text>
-        <Ionicons name="arrow-forward" size={13} color={WHITE} />
-      </TouchableOpacity>
+      <Divider />
+
+      <View style={sj.actions}>
+        <TouchableOpacity style={sj.btnOutline} onPress={() => onViewJob(job)} activeOpacity={0.75}>
+          <Ionicons name="eye-outline" size={13} color={TEXT_MUTED} />
+          <Text style={sj.btnOutlineText}>View Details</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={sj.btnBlue} onPress={onApply} activeOpacity={0.85}>
+          <Text style={sj.btnBlueText}>Apply Now</Text>
+          <Ionicons name="arrow-forward" size={13} color={WHITE} />
+        </TouchableOpacity>
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 const sj = StyleSheet.create({
   card:       { backgroundColor: CARD, borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: BORDER, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
@@ -332,6 +697,154 @@ const sc = StyleSheet.create({
   label: { fontSize: 9, color: TEXT_LIGHT, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
 });
 
+// ── Timeline Modal ──
+const TimelineModal = ({ application, visible, onClose }) => {
+  if (!application) return null;
+  
+  // Get interview details from application
+  const interviewDetails = application.interview_details || 
+                          (application.status_history?.find(h => h.status === 'interview')?.interview_details);
+  
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={md.overlay}>
+        <View style={[md.sheet, { maxHeight: '85%' }]}>
+          <View style={md.handle} />
+          <View style={md.header}>
+            <Text style={md.title}>Application Status History</Text>
+            <TouchableOpacity style={md.closeBtn} onPress={onClose}>
+              <Ionicons name="close" size={18} color={TEXT_MUTED} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+            <View style={tm.jobInfo}>
+              <Text style={tm.jobTitle}>{application.job_id?.title || 'Unknown Job'}</Text>
+              <View style={tm.statusRow}>
+                <View style={[tm.statusBadge, { backgroundColor: getStatus(application.status).bg, borderColor: getStatus(application.status).border }]}>
+                  <View style={[tm.statusDot, { backgroundColor: getStatus(application.status).dot }]} />
+                  <Text style={[tm.statusText, { color: getStatus(application.status).text }]}>
+                    {getStatus(application.status).label}
+                  </Text>
+                </View>
+                <Text style={tm.appliedDate}>Applied {timeAgo(application.applied_at)}</Text>
+              </View>
+            </View>
+            
+            {/* Show Interview Details at the top if status is interview */}
+            {application.status === 'interview' && interviewDetails && (
+              <View style={tm.interviewSection}>
+                <Text style={tm.sectionTitle}>📅 Interview Details</Text>
+                <View style={tm.interviewCard}>
+                  <View style={tm.detailRow}>
+                    <Ionicons name="calendar-outline" size={16} color={GOLD_DK} />
+                    <Text style={tm.detailText}>
+                      {formatDate(interviewDetails.scheduled_date || interviewDetails.interview_date)}
+                    </Text>
+                  </View>
+                  {interviewDetails.meeting_link && (
+                    <TouchableOpacity 
+                      style={tm.detailRow} 
+                      onPress={() => Linking.openURL(interviewDetails.meeting_link)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="link-outline" size={16} color={BLUE} />
+                      <Text style={[tm.detailText, { color: BLUE, textDecorationLine: 'underline' }]}>
+                        {interviewDetails.meeting_link}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {interviewDetails.notes && (
+                    <View style={tm.detailRow}>
+                      <Ionicons name="document-text-outline" size={16} color={TEXT_MUTED} />
+                      <Text style={tm.detailText}>{interviewDetails.notes}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+            
+            <StatusTimeline 
+              history={application.status_history} 
+              currentStatus={application.status}
+              interviewDetails={interviewDetails}
+            />
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const tm = StyleSheet.create({
+  jobInfo: {
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  jobTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    marginBottom: 8,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  appliedDate: {
+    fontSize: 12,
+    color: TEXT_LIGHT,
+  },
+  interviewSection: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    marginBottom: 8,
+  },
+  interviewCard: {
+    backgroundColor: 'rgba(200,149,32,0.05)',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(200,149,32,0.2)',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  detailText: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    flex: 1,
+  },
+});
+
 // Job Details Modal
 const JobModal = ({ job, visible, onClose, onViewClient }) => {
   if (!job) return null;
@@ -355,7 +868,9 @@ const JobModal = ({ job, visible, onClose, onViewClient }) => {
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={md.title}>{job.title}</Text>
                 <TouchableOpacity style={md.clientRow} onPress={() => onViewClient(job)} activeOpacity={0.7}>
-                  <Text style={md.clientName}>{client?.company_name || client?.first_name || 'View Client'}</Text>
+                  <Text style={md.clientName}>
+                    {client?.company_name || client?.first_name || 'View Client'}
+                  </Text>
                   <Ionicons name="person-circle-outline" size={14} color={BLUE} />
                 </TouchableOpacity>
               </View>
@@ -423,7 +938,8 @@ const ClientModal = ({ job, visible, onClose, onMessage }) => {
             </TouchableOpacity>
             <View style={s.empty}>
               <Ionicons name="person-outline" size={48} color={TEXT_LIGHT} />
-              <Text style={s.emptyTitle}>Client information not available</Text>
+              <Text style={s.emptyTitle}>Client Information Unavailable</Text>
+              <Text style={s.emptyDesc}>The client details are not available at this time.</Text>
               <TouchableOpacity style={s.clearBtn} onPress={onClose}>
                 <Text style={s.clearBtnText}>Close</Text>
               </TouchableOpacity>
@@ -546,9 +1062,9 @@ const md = StyleSheet.create({
   sheet:         { backgroundColor: WHITE, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, maxHeight: '90%', borderTopWidth: 1.5, borderColor: BORDER },
   handle:        { width: 36, height: 4, borderRadius: 2, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 16 },
   closeBtn:      { position: 'absolute', top: 14, right: 14, width: 30, height: 30, borderRadius: 15, backgroundColor: BG, alignItems: 'center', justifyContent: 'center', zIndex: 10, borderWidth: 0.5, borderColor: BORDER },
-  header:        { flexDirection: 'row', gap: 12, marginBottom: 10, alignItems: 'flex-start' },
+  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
+  title:         { fontSize: 17, fontWeight: '700', color: TEXT_MAIN },
   logoBox:       { width: 52, height: 52, borderRadius: 12, backgroundColor: 'rgba(0,104,181,0.08)', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 0.5, borderColor: 'rgba(0,104,181,0.2)' },
-  title:         { fontSize: 17, fontWeight: '800', color: TEXT_MAIN, lineHeight: 23 },
   clientRow:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
   clientName:    { fontSize: 12, color: TEXT_MUTED },
   salary:        { fontSize: 22, fontWeight: '800', color: GOLD_DK, marginBottom: 10, letterSpacing: -0.5 },
@@ -592,11 +1108,11 @@ export default function MyApplications({ onNavigate, route }) {
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [showJobModal,   setShowJobModal]   = useState(false);
   const [showClientModal,setShowClientModal]= useState(false);
+  const [showTimelineModal, setShowTimelineModal] = useState(false);
   const [selectedJob,    setSelectedJob]    = useState(null);
-  const [selectedClient, setSelectedClient] = useState(null);
-  const [stats,          setStats]          = useState({ total: 0, pending: 0, reviewed: 0, offered: 0, accepted: 0, rejected: 0 });
+  const [selectedApplication, setSelectedApplication] = useState(null);
+  const [stats,          setStats]          = useState({ total: 0, pending: 0, reviewed: 0, interview: 0, offered: 0, accepted: 0, hired: 0, rejected: 0 });
 
-  // Restore active tab when coming back from other screens
   useEffect(() => {
     if (route?.params?.returnState?.activeTab) {
       setActiveTab(route.params.returnState.activeTab);
@@ -605,11 +1121,19 @@ export default function MyApplications({ onNavigate, route }) {
 
   const fetchData = useCallback(async () => {
     try {
-      await Promise.all([
+      console.log('Fetching applications and saved jobs...');
+      
+      const [appsResult, savedResult] = await Promise.all([
         dispatch(getFreelancerApplications({})).unwrap(),
         dispatch(getSavedJobs()).unwrap(),
       ]);
-    } catch (e) { console.error(e); }
+      
+      console.log('Applications loaded:', appsResult?.applications?.length || 0);
+      console.log('Saved jobs loaded:', savedResult?.savedJobs?.length || 0);
+      
+    } catch (e) { 
+      console.error('Error fetching data:', e);
+    }
   }, [dispatch]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -619,8 +1143,10 @@ export default function MyApplications({ onNavigate, route }) {
       total:    applications.length,
       pending:  applications.filter(a => a.status === 'pending').length,
       reviewed: applications.filter(a => a.status === 'reviewed').length,
+      interview: applications.filter(a => a.status === 'interview').length,
       offered:  applications.filter(a => a.status === 'offered').length,
       accepted: applications.filter(a => a.status === 'accepted').length,
+      hired:    applications.filter(a => a.status === 'hired').length,
       rejected: applications.filter(a => a.status === 'rejected').length,
     });
   }, [applications]);
@@ -650,13 +1176,22 @@ export default function MyApplications({ onNavigate, route }) {
   
   const openClientModal = (job) => { 
     setSelectedJob(job); 
-    setSelectedClient(job?.client_id);
     setShowClientModal(true); 
   };
   
   const closeClientModal = () => {
     setShowClientModal(false);
-    setSelectedClient(null);
+    setSelectedJob(null);
+  };
+
+  const openTimelineModal = (application) => {
+    setSelectedApplication(application);
+    setShowTimelineModal(true);
+  };
+
+  const closeTimelineModal = () => {
+    setShowTimelineModal(false);
+    setSelectedApplication(null);
   };
 
   const handleTabBarPress = (key) => {
@@ -682,12 +1217,14 @@ export default function MyApplications({ onNavigate, route }) {
     { key: 'total',    label: 'Total',     count: stats.total,    color: BLUE,  icon: 'grid-outline' },
     { key: 'pending',  label: 'Pending',   count: stats.pending,  color: BLUE,  icon: 'time-outline' },
     { key: 'reviewed', label: 'Reviewed',  count: stats.reviewed, color: '#60a5fa',   icon: 'eye-outline' },
-    { key: 'offered',  label: 'Interview', count: stats.offered,  color: GOLD_DK,   icon: 'star-outline' },
+    { key: 'interview', label: 'Interview', count: stats.interview, color: GOLD_DK,   icon: 'calendar-outline' },
+    { key: 'offered',  label: 'Offers',    count: stats.offered,  color: '#f59e0b',   icon: 'gift-outline' },
     { key: 'accepted', label: 'Accepted',  count: stats.accepted, color: GREEN,   icon: 'checkmark-circle-outline' },
+    { key: 'hired',    label: 'Hired',     count: stats.hired,    color: '#10b981', icon: 'checkmark-done-circle-outline' },
     { key: 'rejected', label: 'Rejected',  count: stats.rejected, color: '#f87171',   icon: 'close-circle-outline' },
   ];
 
-  const pendingOffers = stats.offered;
+  const pendingOffers = stats.interview + stats.offered;
 
   if (isLoading && !refreshing) {
     return (
@@ -741,7 +1278,6 @@ export default function MyApplications({ onNavigate, route }) {
           </TouchableOpacity>
         </View>
 
-        {/* Stats Row */}
         <View style={s.statsBorder}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.statsScroll}>
             {STAT_CARDS.map(sc => (
@@ -761,7 +1297,6 @@ export default function MyApplications({ onNavigate, route }) {
           </ScrollView>
         </View>
 
-        {/* Active filter chip */}
         {selectedStatus && (
           <View style={s.filterBar}>
             <Ionicons name="funnel-outline" size={13} color={BLUE} />
@@ -772,7 +1307,6 @@ export default function MyApplications({ onNavigate, route }) {
           </View>
         )}
 
-        {/* Tabs */}
         <View style={s.tabRow}>
           {TABS.map(tab => {
             const isActive = activeTab === tab;
@@ -795,7 +1329,6 @@ export default function MyApplications({ onNavigate, route }) {
           })}
         </View>
 
-        {/* Content */}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={s.list}
@@ -827,6 +1360,7 @@ export default function MyApplications({ onNavigate, route }) {
                   userRole: 'client',
                   returnState: { activeTab }
                 })}
+                onViewTimeline={(app) => openTimelineModal(app)}
               />
             ))
           ) : (
@@ -855,14 +1389,12 @@ export default function MyApplications({ onNavigate, route }) {
         </ScrollView>
       </View>
 
-      {/* ── Bottom Tab Bar (Balanced Version) ── */}
       <BottomTabBar 
         activeTab="MyApplications" 
         onTabPress={handleTabBarPress} 
         pendingOffers={pendingOffers}
       />
 
-      {/* Modals */}
       <JobModal
         job={selectedJob}
         visible={showJobModal}
@@ -872,6 +1404,7 @@ export default function MyApplications({ onNavigate, route }) {
           openClientModal(job);
         }}
       />
+
       <ClientModal
         job={selectedJob}
         visible={showClientModal}
@@ -886,11 +1419,17 @@ export default function MyApplications({ onNavigate, route }) {
           });
         }}
       />
+
+      <TimelineModal
+        application={selectedApplication}
+        visible={showTimelineModal}
+        onClose={closeTimelineModal}
+      />
     </SafeAreaView>
   );
 }
 
-// Screen-level Styles (Balanced Bottom Tab Bar)
+// Screen-level Styles
 const s = StyleSheet.create({
   safe:         { flex: 1, backgroundColor: NAVY },
   root:         { flex: 1, backgroundColor: BG },
@@ -926,7 +1465,6 @@ const s = StyleSheet.create({
   clearBtn:     { backgroundColor: BLUE, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 10, shadowColor: BLUE, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 20, elevation: 2 },
   clearBtnText: { fontSize: 13, fontWeight: '700', color: WHITE },
 
-  // ── Balanced Bottom Tab Bar Styles (hindi masyadong baba, hindi nakalutang) ──
   tabSafe: { 
     backgroundColor: CARD,
     borderTopWidth: 1,

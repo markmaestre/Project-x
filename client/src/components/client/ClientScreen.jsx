@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Modal,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,7 +49,18 @@ const GREEN_STATUS = '#1A8754';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-// ── Helper Functions (unchanged) ─────────────────────────────────────────────
+// ── Benefit icon map (replacing emojis) ──────────────────────────────────────
+const BENEFIT_CONFIG = {
+  health_insurance:       { icon: 'medkit-outline',         label: 'Health Insurance' },
+  paid_time_off:          { icon: 'sunny-outline',           label: 'Paid Time Off' },
+  remote_stipend:         { icon: 'laptop-outline',          label: 'Remote Stipend' },
+  equipment_provided:     { icon: 'desktop-outline',         label: 'Equipment Provided' },
+  bonus_eligible:         { icon: 'trophy-outline',          label: 'Bonus Eligible' },
+  retirement_plan:        { icon: 'wallet-outline',          label: 'Retirement Plan' },
+  professional_development:{ icon: 'school-outline',         label: 'Professional Dev.' },
+};
+
+// ── Helper Functions ──────────────────────────────────────────────────────────
 const formatLocation = (location) => {
   if (!location) return null;
   if (typeof location === 'string') return location;
@@ -87,21 +99,21 @@ const formatPayInformation = (payInfo, budgetAmount) => {
 // ── Bottom tabs ───────────────────────────────────────────────────────────────
 const TABS = [
   { key: 'Home',          label: 'Home',     icon: 'home',          iconOutline: 'home-outline'          },
-  { key: 'Hiredtalents',   label: 'Hired',    icon: 'people',        iconOutline: 'people-outline'        },
-   { key: 'PostJob',       label: 'Post Job', icon: 'add-circle',    iconOutline: 'add-circle-outline'    },
+  { key: 'Hiredtalents',  label: 'Hired',    icon: 'people',        iconOutline: 'people-outline'        },
+  { key: 'PostJob',       label: 'Post Job', icon: 'add-circle',    iconOutline: 'add-circle-outline'    },
   { key: 'Message',       label: 'Messages', icon: 'chatbubble',    iconOutline: 'chatbubble-outline'    },
   { key: 'ClientProfile', label: 'Profile',  icon: 'person',        iconOutline: 'person-outline'        },
 ];
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 const jobStatusColor = (s) =>
-  s === 'open'        ? BLUE
+  s === 'open'          ? BLUE
   : s === 'in_progress' ? AMBER
   : s === 'completed'   ? GREEN_STATUS
   : RED;
 
 const jobStatusLabel = (s) =>
-  s === 'open'        ? 'Open'
+  s === 'open'          ? 'Open'
   : s === 'in_progress' ? 'In Progress'
   : s === 'completed'   ? 'Completed'
   : s === 'cancelled'   ? 'Cancelled'
@@ -109,6 +121,16 @@ const jobStatusLabel = (s) =>
 
 // ── Job Detail Bottom Sheet ───────────────────────────────────────────────────
 function JobDetailSheet({ job, visible, onClose, onEditJob, onViewApplicants }) {
+  // Handle hardware back press to close sheet instead of navigating away
+  useEffect(() => {
+    if (!visible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true; // prevent default back action
+    });
+    return () => sub.remove();
+  }, [visible, onClose]);
+
   if (!job) return null;
 
   const sColor = jobStatusColor(job.status);
@@ -126,7 +148,7 @@ function JobDetailSheet({ job, visible, onClose, onEditJob, onViewApplicants }) 
       <View style={sheet.overlay}>
         <TouchableOpacity style={sheet.backdrop} activeOpacity={1} onPress={onClose} />
         <View style={sheet.container}>
-          {/* Gold shimmer bar at top of sheet */}
+          {/* Gold shimmer bar */}
           <View style={sheet.goldBar} />
           <View style={sheet.handle} />
 
@@ -257,24 +279,23 @@ function JobDetailSheet({ job, visible, onClose, onEditJob, onViewApplicants }) 
               </View>
             )}
 
-            {/* Benefits */}
+            {/* Benefits — icons instead of emojis */}
             {job.pay_information?.benefits?.length > 0 && (
               <View style={sheet.section}>
                 <Text style={sheet.sectionLabel}>Benefits</Text>
                 <View style={sheet.tagRow}>
                   {job.pay_information.benefits.map((benefit, i) => {
-                    const benefitLabels = {
-                      health_insurance: '🏥 Health Insurance',
-                      paid_time_off: '🌴 Paid Time Off',
-                      remote_stipend: '💻 Remote Stipend',
-                      equipment_provided: '🖥️ Equipment Provided',
-                      bonus_eligible: '🎯 Bonus Eligible',
-                      retirement_plan: '💰 Retirement Plan',
-                      professional_development: '📚 Professional Development',
-                    };
+                    const config = BENEFIT_CONFIG[benefit];
                     return (
-                      <View key={i} style={sheet.tag}>
-                        <Text style={sheet.tagText}>{benefitLabels[benefit] || benefit}</Text>
+                      <View key={i} style={sheet.benefitTag}>
+                        <Ionicons
+                          name={config?.icon || 'checkmark-circle-outline'}
+                          size={13}
+                          color={BLUE}
+                        />
+                        <Text style={sheet.tagText}>
+                          {config?.label || benefit}
+                        </Text>
                       </View>
                     );
                   })}
@@ -364,8 +385,8 @@ function JobDetailSheet({ job, visible, onClose, onEditJob, onViewApplicants }) 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function ClientScreen({ onNavigate }) {
   const dispatch = useDispatch();
-  const { user }                                                    = useSelector(s => s.auth);
-  const { clientJobs, isLoading: jobsLoading }                      = useSelector(s => s.jobs.jobs);
+  const { user }                       = useSelector(s => s.auth);
+  const { clientJobs, isLoading: jobsLoading } = useSelector(s => s.jobs.jobs);
 
   const [activeTab,    setActiveTab]    = useState('Home');
   const [refreshing,   setRefreshing]   = useState(false);
@@ -373,7 +394,6 @@ export default function ClientScreen({ onNavigate }) {
   const [sheetVisible, setSheetVisible] = useState(false);
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
-  const fullName = `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -382,6 +402,27 @@ export default function ClientScreen({ onNavigate }) {
   }, [dispatch]);
 
   useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
+
+  // ── Android hardware back button — stay on Home, show exit prompt ──────────
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (sheetVisible) return false;
+      if (activeTab !== 'Home') {
+        setActiveTab('Home');
+        return true;
+      }
+      Alert.alert(
+        'Exit App',
+        'Are you sure you want to exit?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
+        ]
+      );
+      return true;
+    });
+    return () => sub.remove();
+  }, [activeTab, sheetVisible]);
 
   const activePostings = clientJobs?.filter(j => j.status === 'open').length || 0;
   const isLoading      = jobsLoading;
@@ -395,11 +436,11 @@ export default function ClientScreen({ onNavigate }) {
   const handleTabPress = (key) => {
     setActiveTab(key);
     if (key === 'PostJob')       onNavigate('PostJob');
-    if (key === 'Hiredtalents')   onNavigate('Hiredtalents');
+    if (key === 'Hiredtalents')  onNavigate('Hiredtalents');
     if (key === 'Message')       onNavigate('Message');
     if (key === 'ClientProfile') onNavigate('ClientProfile');
   };
-  
+
   const handleLogout = () =>
     Alert.alert('Logout', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
@@ -416,8 +457,10 @@ export default function ClientScreen({ onNavigate }) {
     if (typeof job.location === 'string') return job.location;
     return job.location.specific_area || job.location.city || null;
   };
-  const getJobTypeDisplay    = (job) => formatJobType(job.job_type);
-  const getBudgetDisplay     = (job) => {
+
+  const getJobTypeDisplay = (job) => formatJobType(job.job_type);
+
+  const getBudgetDisplay = (job) => {
     if (job.pay_information?.salary_range) {
       const { min, max, currency = 'PHP' } = job.pay_information.salary_range;
       if (min && max) return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()}`;
@@ -426,17 +469,17 @@ export default function ClientScreen({ onNavigate }) {
     if (job.budget_amount) return `₱${job.budget_amount.toLocaleString()}`;
     return null;
   };
-  const getApplicantsCount   = (job) =>
+
+  const getApplicantsCount = (job) =>
     job.total_applicants || job.applicants_count || job.applications?.length || 0;
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.root}>
 
         {/* ── Top Bar ───────────────────────────────────────────────── */}
         <View style={styles.topbar}>
-          {/* Gold shimmer accent at very top of topbar */}
           <View style={styles.topbarGoldLine} />
           <View style={styles.topbarInner}>
             <View style={styles.topbarLeft}>
@@ -509,12 +552,12 @@ export default function ClientScreen({ onNavigate }) {
             </View>
           ) : clientJobs && clientJobs.length > 0 ? (
             clientJobs.map((job, idx) => {
-              const locationDisplay  = getLocationDisplay(job);
-              const jobTypeDisplay   = getJobTypeDisplay(job);
-              const budgetDisplay    = getBudgetDisplay(job);
-              const applicantsCount  = getApplicantsCount(job);
-              const sColor           = jobStatusColor(job.status);
-              const sLabel           = jobStatusLabel(job.status);
+              const locationDisplay = getLocationDisplay(job);
+              const jobTypeDisplay  = getJobTypeDisplay(job);
+              const budgetDisplay   = getBudgetDisplay(job);
+              const applicantsCount = getApplicantsCount(job);
+              const sColor          = jobStatusColor(job.status);
+              const sLabel          = jobStatusLabel(job.status);
 
               return (
                 <TouchableOpacity
@@ -523,10 +566,8 @@ export default function ClientScreen({ onNavigate }) {
                   onPress={() => openJobDetail(job)}
                   activeOpacity={0.85}
                 >
-                  {/* Gold accent top bar on each card */}
                   <View style={styles.jobCardGoldBar} />
 
-                  {/* Status row */}
                   <View style={styles.jobCardTop}>
                     <View style={[styles.statusPill, { backgroundColor: sColor + '18' }]}>
                       <View style={[styles.statusDot, { backgroundColor: sColor }]} />
@@ -605,8 +646,8 @@ export default function ClientScreen({ onNavigate }) {
         <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
           <View style={styles.tabBar}>
             {TABS.map(tab => {
-              const active   = activeTab === tab.key;
-              const isPost   = tab.key === 'PostJob';
+              const active = activeTab === tab.key;
+              const isPost = tab.key === 'PostJob';
               return (
                 <TouchableOpacity
                   key={tab.key}
@@ -615,7 +656,6 @@ export default function ClientScreen({ onNavigate }) {
                   activeOpacity={0.7}
                 >
                   {active && <View style={styles.tabActiveBar} />}
-                  {/* Post Job gets a gold FAB treatment */}
                   {isPost ? (
                     <View style={styles.tabFab}>
                       <Ionicons name={active ? tab.icon : tab.iconOutline} size={22} color={WHITE} />
@@ -660,7 +700,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: WHITE },
   root: { flex: 1, backgroundColor: OFF_WHITE },
 
-  // ── Top Bar ───────────────────────────────────────────────────────────────
   topbar: {
     backgroundColor: WHITE,
     borderBottomWidth: 1,
@@ -671,53 +710,27 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  // Gold shimmer stripe at the very top of the topbar
-  topbarGoldLine: {
-    height: 2.5,
-    backgroundColor: GOLD_LIGHT,
-    opacity: 0.9,
-  },
+  topbarGoldLine: { height: 2.5, backgroundColor: GOLD_LIGHT, opacity: 0.9 },
   topbarInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 11,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 11,
   },
   topbarLeft:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
   logoBox: {
-    width: 32, height: 32,
-    backgroundColor: BLUE,
-    borderRadius: 9,
+    width: 32, height: 32, backgroundColor: BLUE, borderRadius: 9,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: BLUE_LIGHT,
     shadowColor: BLUE_DARK,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.28, shadowRadius: 5, elevation: 3,
   },
-  logoLetter: {
-    fontSize: 16, fontWeight: '800', color: WHITE,
-  },
-  topbarBrand: {
-    fontSize: 13, fontWeight: '800',
-    letterSpacing: 3, color: TEXT_MAIN,
-    lineHeight: 16,
-  },
-  topbarSub: {
-    fontSize: 9, fontWeight: '600',
-    letterSpacing: 1.5, color: TEXT_LIGHT,
-    lineHeight: 12,
-  },
+  logoLetter: { fontSize: 16, fontWeight: '800', color: WHITE },
+  topbarBrand: { fontSize: 13, fontWeight: '800', letterSpacing: 3, color: TEXT_MAIN, lineHeight: 16 },
+  topbarSub:   { fontSize: 9, fontWeight: '600', letterSpacing: 1.5, color: TEXT_LIGHT, lineHeight: 12 },
   topbarRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   notifBtn:    { position: 'relative', padding: 4 },
-  notifDot: {
-    position: 'absolute', top: 4, right: 4,
-    width: 9, height: 9, borderRadius: 5,
-    backgroundColor: RED, borderWidth: 2, borderColor: WHITE,
-  },
   avatarBtn: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: BLUE_SOFT,
+    width: 34, height: 34, borderRadius: 17, backgroundColor: BLUE_SOFT,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: BLUE_MID,
   },
@@ -726,7 +739,6 @@ const styles = StyleSheet.create({
 
   scroll: { paddingBottom: 32 },
 
-  // ── Welcome ───────────────────────────────────────────────────────────────
   welcomeSection: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 20, marginBottom: 16,
@@ -735,9 +747,7 @@ const styles = StyleSheet.create({
   welcomeName: { fontSize: 24, fontWeight: '800', color: TEXT_MAIN, letterSpacing: -0.5 },
   postJobCta: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: GOLD,
-    paddingHorizontal: 14, paddingVertical: 9,
-    borderRadius: 12,
+    backgroundColor: GOLD, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12,
     shadowColor: GOLD_DARK,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.30, shadowRadius: 6, elevation: 3,
@@ -745,10 +755,8 @@ const styles = StyleSheet.create({
   },
   postJobCtaText: { fontSize: 13, fontWeight: '700', color: WHITE },
 
-  // ── Stats Strip ───────────────────────────────────────────────────────────
   statsStrip: {
-    flexDirection: 'row',
-    backgroundColor: WHITE,
+    flexDirection: 'row', backgroundColor: WHITE,
     marginHorizontal: 16, marginBottom: 24,
     borderRadius: 14, overflow: 'hidden',
     borderWidth: 1.5, borderColor: BORDER,
@@ -756,55 +764,43 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
-  statBox: { flex: 1, alignItems: 'center', paddingVertical: 14 },
-  statDivider: { width: 1, backgroundColor: BORDER, marginVertical: 10 },
-  statVal: {
-    fontSize: 20, fontWeight: '800',
-    color: GOLD, letterSpacing: -0.4, marginBottom: 2,
-  },
-  statLbl: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500', letterSpacing: 0.3 },
+  statBox:    { flex: 1, alignItems: 'center', paddingVertical: 14 },
+  statDivider:{ width: 1, backgroundColor: BORDER, marginVertical: 10 },
+  statVal:    { fontSize: 20, fontWeight: '800', color: GOLD, letterSpacing: -0.4, marginBottom: 2 },
+  statLbl:    { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500', letterSpacing: 0.3 },
 
-  // ── Section Header ────────────────────────────────────────────────────────
   sectionHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
     paddingHorizontal: 20, marginBottom: 12,
   },
-  sectionEyebrow: {
-    fontSize: 10, fontWeight: '700',
-    letterSpacing: 2.5, color: BLUE,
-    marginBottom: 2,
-  },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: TEXT_MAIN, letterSpacing: -0.3 },
-  sectionLink:  { fontSize: 13, color: GOLD, fontWeight: '600' },
+  sectionEyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 2.5, color: BLUE, marginBottom: 2 },
+  sectionTitle:   { fontSize: 18, fontWeight: '700', color: TEXT_MAIN, letterSpacing: -0.3 },
 
   loadingBox:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 32 },
   loadingText: { fontSize: 14, color: TEXT_MUTED },
 
-  // ── Job Cards ─────────────────────────────────────────────────────────────
   jobCard: {
-    backgroundColor: WHITE,
-    marginHorizontal: 16, marginBottom: 12,
+    backgroundColor: WHITE, marginHorizontal: 16, marginBottom: 12,
     borderRadius: 16, padding: 16, paddingTop: 20,
-    borderWidth: 1.5, borderColor: BORDER,
-    overflow: 'hidden',
+    borderWidth: 1.5, borderColor: BORDER, overflow: 'hidden',
     shadowColor: BLUE_DARK,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
   jobCardGoldBar: {
-    position: 'absolute', top: 0, left: 0, right: 0,
-    height: 3, backgroundColor: GOLD_LIGHT,
+    position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+    backgroundColor: GOLD_LIGHT,
     borderTopLeftRadius: 16, borderTopRightRadius: 16,
   },
-  jobCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-  statusDot:  { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 11, fontWeight: '700' },
-  moreBtn:    { padding: 2 },
-  jobTitle:   { fontSize: 17, fontWeight: '700', color: TEXT_MAIN, marginBottom: 6, lineHeight: 23, letterSpacing: -0.2 },
-  jobMeta:    { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 10 },
-  jobMetaItem:{ flexDirection: 'row', alignItems: 'center', gap: 4 },
-  jobMetaText:{ fontSize: 12, color: TEXT_MUTED },
+  jobCardTop:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  statusPill:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  statusDot:      { width: 6, height: 6, borderRadius: 3 },
+  statusText:     { fontSize: 11, fontWeight: '700' },
+  moreBtn:        { padding: 2 },
+  jobTitle:       { fontSize: 17, fontWeight: '700', color: TEXT_MAIN, marginBottom: 6, lineHeight: 23, letterSpacing: -0.2 },
+  jobMeta:        { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 10 },
+  jobMetaItem:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  jobMetaText:    { fontSize: 12, color: TEXT_MUTED },
   budgetChip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: GOLD_SOFT, alignSelf: 'flex-start',
@@ -818,25 +814,19 @@ const styles = StyleSheet.create({
   viewDetailChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   viewDetailText: { fontSize: 12, color: BLUE, fontWeight: '600' },
 
-  // ── Empty State ───────────────────────────────────────────────────────────
   emptyCard: {
-    backgroundColor: WHITE,
-    marginHorizontal: 16, borderRadius: 18,
-    borderWidth: 1.5, borderColor: BORDER,
-    padding: 36, alignItems: 'center',
+    backgroundColor: WHITE, marginHorizontal: 16, borderRadius: 18,
+    borderWidth: 1.5, borderColor: BORDER, padding: 36, alignItems: 'center',
   },
   emptyIconWrap: {
-    width: 64, height: 64, borderRadius: 18,
-    backgroundColor: BLUE_SOFT,
+    width: 64, height: 64, borderRadius: 18, backgroundColor: BLUE_SOFT,
     borderWidth: 1.5, borderColor: BLUE_MID,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 14,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: TEXT_MAIN, marginBottom: 6 },
   emptySub:   { fontSize: 13, color: TEXT_MUTED, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
   emptyBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: BLUE,
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BLUE,
     paddingVertical: 11, paddingHorizontal: 22, borderRadius: 12,
     shadowColor: BLUE_DARK,
     shadowOffset: { width: 0, height: 3 },
@@ -844,29 +834,17 @@ const styles = StyleSheet.create({
   },
   emptyBtnText: { fontSize: 14, fontWeight: '700', color: WHITE },
 
-  // ── Tab Bar ───────────────────────────────────────────────────────────────
   tabSafe: { backgroundColor: WHITE },
   tabBar: {
     flexDirection: 'row', backgroundColor: WHITE,
     borderTopWidth: 1.5, borderTopColor: BORDER,
     paddingTop: 6, paddingBottom: 4, paddingHorizontal: 8,
   },
-  tabItem: {
-    flex: 1, alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingVertical: 4, position: 'relative',
-  },
-  // Blue active indicator bar at top of tab
-  tabActiveBar: {
-    position: 'absolute', top: 0,
-    width: 24, height: 3,
-    backgroundColor: BLUE, borderRadius: 999,
-  },
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingVertical: 4, position: 'relative' },
+  tabActiveBar: { position: 'absolute', top: 0, width: 24, height: 3, backgroundColor: BLUE, borderRadius: 999 },
   tabIconWrap: { position: 'relative', marginBottom: 3, marginTop: 6 },
-  // Gold FAB for Post Job tab
   tabFab: {
-    width: 44, height: 36, borderRadius: 12,
-    backgroundColor: GOLD,
+    width: 44, height: 36, borderRadius: 12, backgroundColor: GOLD,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 3, marginTop: 2,
     shadowColor: GOLD_DARK,
@@ -877,11 +855,6 @@ const styles = StyleSheet.create({
   tabLabel:      { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500' },
   tabLabelActive:{ color: BLUE, fontWeight: '700' },
   tabLabelPost:  { color: GOLD, fontWeight: '700' },
-  tabBadgeDot: {
-    position: 'absolute', top: -1, right: -3,
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: RED, borderWidth: 1.5, borderColor: WHITE,
-  },
 });
 
 // ── Sheet Styles ──────────────────────────────────────────────────────────────
@@ -892,29 +865,18 @@ const sheet = StyleSheet.create({
     backgroundColor: WHITE,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     maxHeight: SCREEN_H * 0.88,
-    paddingTop: 0,
-    overflow: 'hidden',
+    paddingTop: 0, overflow: 'hidden',
   },
-  // Gold shimmer bar at the very top of the bottom sheet
-  goldBar: {
-    height: 3.5, backgroundColor: GOLD_LIGHT,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-  },
+  goldBar: { height: 3.5, backgroundColor: GOLD_LIGHT, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   handle: {
-    width: 40, height: 4, borderRadius: 999,
-    backgroundColor: BORDER,
+    width: 40, height: 4, borderRadius: 999, backgroundColor: BORDER,
     alignSelf: 'center', marginTop: 12, marginBottom: 16,
   },
 
-  header: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    paddingHorizontal: 20, marginBottom: 14, gap: 12,
-  },
+  header:     { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, marginBottom: 14, gap: 12 },
   jobIconBox: {
-    width: 48, height: 48, borderRadius: 14,
-    backgroundColor: BLUE_SOFT,
-    borderWidth: 1.5, borderColor: BLUE_MID,
-    alignItems: 'center', justifyContent: 'center',
+    width: 48, height: 48, borderRadius: 14, backgroundColor: BLUE_SOFT,
+    borderWidth: 1.5, borderColor: BLUE_MID, alignItems: 'center', justifyContent: 'center',
   },
   headerInfo: { flex: 1 },
   jobTitle:   { fontSize: 17, fontWeight: '700', color: TEXT_MAIN, lineHeight: 23, marginBottom: 6 },
@@ -922,28 +884,24 @@ const sheet = StyleSheet.create({
   statusDot:  { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 11, fontWeight: '700' },
   closeBtn: {
-    width: 32, height: 32, borderRadius: 10,
-    backgroundColor: SURFACE,
+    width: 32, height: 32, borderRadius: 10, backgroundColor: SURFACE,
     alignItems: 'center', justifyContent: 'center',
   },
 
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 20, marginBottom: 16 },
+  metaRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 20, marginBottom: 16 },
   metaChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: SURFACE,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 999, borderWidth: 1, borderColor: BORDER,
+    flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: SURFACE,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: BORDER,
   },
   metaChipGold: { backgroundColor: GOLD_SOFT, borderColor: GOLD_MID },
-  metaText: { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
+  metaText:     { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
 
   divider: { height: 1, backgroundColor: BORDER, marginHorizontal: 20, marginBottom: 16 },
   body:    { paddingHorizontal: 20 },
 
   applicantsBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: BLUE_SOFT,
-    borderRadius: 14, padding: 14,
+    backgroundColor: BLUE_SOFT, borderRadius: 14, padding: 14,
     borderWidth: 1.5, borderColor: BLUE_MID, marginBottom: 20,
   },
   applicantsLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -951,16 +909,17 @@ const sheet = StyleSheet.create({
   applicantsSub:   { fontSize: 11, color: TEXT_MUTED },
 
   section:      { marginBottom: 20 },
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700',
-    color: BLUE, textTransform: 'uppercase',
-    letterSpacing: 1, marginBottom: 10,
-  },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  sectionLabel: { fontSize: 11, fontWeight: '700', color: BLUE, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
+  tagRow:       { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   tag: {
-    paddingVertical: 6, paddingHorizontal: 12,
-    backgroundColor: BLUE_SOFT,
-    borderRadius: 999,
+    paddingVertical: 6, paddingHorizontal: 12, backgroundColor: BLUE_SOFT,
+    borderRadius: 999, borderWidth: 1, borderColor: BLUE_MID,
+  },
+  // Benefit tags with icon — slightly wider padding to accommodate icon
+  benefitTag: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingVertical: 6, paddingHorizontal: 10,
+    backgroundColor: BLUE_SOFT, borderRadius: 999,
     borderWidth: 1, borderColor: BLUE_MID,
   },
   tagText:  { fontSize: 12, color: BLUE, fontWeight: '600' },
@@ -968,8 +927,7 @@ const sheet = StyleSheet.create({
 
   detailGrid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 12,
-    backgroundColor: SURFACE,
-    borderRadius: 16, padding: 16,
+    backgroundColor: SURFACE, borderRadius: 16, padding: 16,
     borderWidth: 1.5, borderColor: BORDER,
   },
   detailItem:  { flexDirection: 'row', alignItems: 'flex-start', gap: 10, width: '45%' },
@@ -984,15 +942,13 @@ const sheet = StyleSheet.create({
   editBtn: {
     flex: 1, height: 50, borderRadius: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: BLUE_SOFT,
-    borderWidth: 1.5, borderColor: BLUE_MID,
+    backgroundColor: BLUE_SOFT, borderWidth: 1.5, borderColor: BLUE_MID,
   },
   editBtnText: { fontSize: 14, fontWeight: '700', color: BLUE },
   applicantsBtn: {
     flex: 1, height: 50, borderRadius: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: BLUE,
-    overflow: 'hidden',
+    backgroundColor: BLUE, overflow: 'hidden',
     shadowColor: BLUE_DARK,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.30, shadowRadius: 8, elevation: 4,

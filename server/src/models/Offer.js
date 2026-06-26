@@ -28,12 +28,12 @@ const offerSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'accepted', 'declined', 'expired'],
+    enum: ['pending', 'accepted', 'declined', 'expired', 'hired'],
     default: 'pending',
   },
   expiry_date: {
     type: Date,
-    default: () => new Date(+new Date() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+    default: () => new Date(+new Date() + 7 * 24 * 60 * 60 * 1000), 
   },
   viewed_by_freelancer: {
     type: Boolean,

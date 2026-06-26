@@ -101,7 +101,7 @@ export default function Login({ onNavigate }) {
           } else if (normalizedRole === 'freelancer') {
             onNavigate('Freelancer');
           } else {
-            onNavigate('Home');
+            onNavigate('Login');
           }
         }, 100);
       } else if (login.rejected.match(result)) {

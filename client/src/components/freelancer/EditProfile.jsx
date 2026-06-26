@@ -433,7 +433,7 @@ export default function FreelancerProfile({ onNavigate }) {
       
       if (updateProfile.fulfilled.match(result)) {
         Alert.alert('Success', 'Your profile has been updated!', [
-          { text: 'OK', onPress: () => onNavigate('Freelancer') },
+          { text: 'OK', onPress: () => onNavigate('FreelancerProfile') },
         ]);
       } else {
         const errMsg = result.payload?.message || result.payload?.error || 'Failed to update profile. Please try again.';
@@ -463,7 +463,7 @@ export default function FreelancerProfile({ onNavigate }) {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => onNavigate('Freelancer')}
+            onPress={() => onNavigate('FreelancerProfile')}
             activeOpacity={0.7}
           >
             <View style={styles.iconWrap}>
