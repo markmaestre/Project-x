@@ -20,7 +20,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import * as DocumentPicker from 'expo-document-picker';
 import { Directory, Paths } from 'expo-file-system';
 import { logout } from '../../Redux/slices/authSlice';
-import { getReceivedOffers, getOfferStats } from '../../Redux/slices/offerSlice';
 import { getFreelancerJobs } from '../../Redux/slices/jobSlice';
 import { getFreelancerApplications, applyForJob } from '../../Redux/slices/applicationSlice';
 

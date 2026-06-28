@@ -6,9 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { getSentOffers, updateOfferStatus } from '../../Redux/slices/offerSlice';
 
-// ── Vantara Design tokens ──────────────────────────────────────────────────────────
 const NAVY       = '#071A3E';
 const NAVY2      = '#0D2151';
 const BLUE       = '#0055A5';

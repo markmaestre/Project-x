@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, TextInput, Alert, ActivityIndicator,
-  Switch,
+  Switch, BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -63,13 +63,14 @@ const URGENCY_LEVELS = [
   { label: 'Immediate', value: 'immediate', icon: 'alert-circle-outline', color: '#DC2626' },
 ];
 
+// Updated experience levels with lowercase values for API
 const EXPERIENCE_LEVELS = [
-  { label: 'Entry',        value: 'Entry',        icon: 'star-outline'     },
-  { label: 'Intermediate', value: 'Intermediate', icon: 'star-half-outline'},
-  { label: 'Expert',       value: 'Expert',       icon: 'star-outline'     },
-  { label: 'Senior',       value: 'Senior',       icon: 'trophy-outline'   },
-  { label: 'Lead',         value: 'Lead',         icon: 'people-outline'   },
-  { label: 'Director',     value: 'Director',     icon: 'business-outline' },
+  { label: 'Entry',        value: 'entry',        icon: 'star-outline'     },
+  { label: 'Intermediate', value: 'intermediate', icon: 'star-half-outline'},
+  { label: 'Expert',       value: 'expert',       icon: 'star-outline'     },
+  { label: 'Senior',       value: 'senior',       icon: 'trophy-outline'   },
+  { label: 'Lead',         value: 'lead',         icon: 'people-outline'   },
+  { label: 'Director',     value: 'director',     icon: 'business-outline' },
 ];
 
 const BUDGET_TYPES = [
@@ -101,7 +102,7 @@ const CONTACT_PREFERENCES = [
 
 const BENEFITS_OPTIONS = [
   { label: 'Health Insurance',       value: 'health_insurance',       icon: 'medkit-outline'    },
-  { label: 'Paid Time Off',          value: 'paid_time_off',          icon: 'beach-outline'     },
+  { label: 'Paid Time Off',          value: 'paid_time_off',          icon: 'calendar-outline'  },
   { label: 'Remote Stipend',         value: 'remote_stipend',         icon: 'wifi-outline'      },
   { label: 'Equipment Provided',     value: 'equipment_provided',     icon: 'desktop-outline'   },
   { label: 'Bonus Eligible',         value: 'bonus_eligible',         icon: 'gift-outline'      },
@@ -255,14 +256,18 @@ function TagInput({ tags, onAdd, onRemove, placeholder, value, onChange, icon })
       </View>
       {tags.length > 0 && (
         <View style={f.tagWrap}>
-          {tags.map((tag, i) => (
-            <View key={i} style={f.tag}>
-              <Text style={f.tagTxt}>{typeof tag === 'object' ? `${tag.language} (${tag.proficiency})` : tag}</Text>
-              <TouchableOpacity onPress={() => onRemove(typeof tag === 'object' ? i : tag)}>
-                <Ionicons name="close" size={13} color={BLUE} />
-              </TouchableOpacity>
-            </View>
-          ))}
+          {tags.map((tag, i) => {
+            const tagLabel = typeof tag === 'object' ? `${tag.language} (${tag.proficiency})` : tag;
+            const tagValue = typeof tag === 'object' ? i : tag;
+            return (
+              <View key={i} style={f.tag}>
+                <Text style={f.tagTxt}>{tagLabel}</Text>
+                <TouchableOpacity onPress={() => onRemove(tagValue)}>
+                  <Ionicons name="close" size={13} color={BLUE} />
+                </TouchableOpacity>
+              </View>
+            );
+          })}
         </View>
       )}
     </View>
@@ -355,6 +360,7 @@ function Step1({
   jobType, setJobType,
   workSetup, setWorkSetup,
   contactPreference, setContactPreference,
+  category, setCategory,
 }) {
   return (
     <View>
@@ -367,6 +373,15 @@ function Step1({
               placeholder="e.g. Senior React Native Developer"
               value={title}
               onChange={setTitle}
+            />
+          </View>
+          <View>
+            <FieldLabel label="Category" required />
+            <InputBox
+              icon="grid-outline"
+              placeholder="e.g. Technology, Design, Marketing"
+              value={category}
+              onChange={setCategory}
             />
           </View>
           <View>
@@ -769,9 +784,11 @@ function ReviewRow({ icon, label, value, accent }) {
 
 function Step3({ title, description, requiredSkills, jobType, workSetup, urgencyLevel,
   experienceLevel, budgetType, budgetAmount, estimatedDuration, contactPreference,
-  payInformation, location, requirements, educationRequirements, applicationSettings }) {
+  payInformation, location, requirements, educationRequirements, applicationSettings,
+  category }) {
 
   const urgency = URGENCY_LEVELS.find(u => u.value === urgencyLevel);
+  const experience = EXPERIENCE_LEVELS.find(e => e.value === experienceLevel);
 
   return (
     <View>
@@ -783,6 +800,11 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
         <View style={{ flex: 1 }}>
           <Text style={rv.heroTitle}>{title || 'Untitled Job'}</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+            {category && (
+              <View style={rv.badge}>
+                <Text style={rv.badgeTxt}>{category}</Text>
+              </View>
+            )}
             {jobType && (
               <View style={rv.badge}>
                 <Text style={rv.badgeTxt}>{JOB_TYPES.find(j => j.value === jobType)?.label}</Text>
@@ -798,12 +820,18 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
                 <Text style={[rv.badgeTxt, { color: urgency?.color }]}>{urgency?.label}</Text>
               </View>
             )}
+            {experienceLevel && (
+              <View style={rv.badge}>
+                <Text style={rv.badgeTxt}>{experience?.label}</Text>
+              </View>
+            )}
           </View>
         </View>
       </View>
 
       <SectionCard title="Job Details" icon="document-text-outline">
         <View style={{ gap: 12 }}>
+          <ReviewRow icon="grid-outline" label="Category" value={category} />
           <ReviewRow icon="document-text-outline" label="Description" value={description?.substring(0, 120) + (description?.length > 120 ? '...' : '')} />
           {requiredSkills?.length > 0 && (
             <View style={rv.row}>
@@ -821,7 +849,7 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
             </View>
           )}
           <ReviewRow icon="person-outline" label="Contact Preference" value={contactPreference} />
-          {experienceLevel && <ReviewRow icon="trophy-outline" label="Experience Level" value={experienceLevel} />}
+          {experienceLevel && <ReviewRow icon="trophy-outline" label="Experience Level" value={experience?.label} />}
         </View>
       </SectionCard>
 
@@ -922,7 +950,7 @@ const rv = StyleSheet.create({
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function PostJobScreen({ onNavigate }) {
   const dispatch = useDispatch();
-  const { isLoading } = useSelector((state) => state.jobs);
+  const { isLoading, error } = useSelector((state) => state.jobs);
   const { token } = useSelector((state) => state.auth);
 
   const [activeTab, setActiveTab] = useState('PostJob');
@@ -931,6 +959,7 @@ export default function PostJobScreen({ onNavigate }) {
   // Basic
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
   const [requiredSkills, setRequiredSkills] = useState([]);
   const [skillInput, setSkillInput] = useState('');
   const [jobType, setJobType] = useState('one_time');
@@ -978,6 +1007,16 @@ export default function PostJobScreen({ onNavigate }) {
     application_deadline: '', questions_for_applicants: [],
   });
 
+  // Handle Android hardware back button
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleBack();
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, [currentStep]);
+
   const handleTabPress = (key) => {
     setActiveTab(key);
     if (key === 'Home')          onNavigate('ClientDashboard');
@@ -989,6 +1028,7 @@ export default function PostJobScreen({ onNavigate }) {
 
   const validateStep1 = () => {
     if (!title.trim())       { Alert.alert('Missing Info', 'Please enter a job title'); return false; }
+    if (!category.trim())    { Alert.alert('Missing Info', 'Please enter a job category'); return false; }
     if (!description.trim()) { Alert.alert('Missing Info', 'Please enter a job description'); return false; }
     return true;
   };
@@ -1008,11 +1048,17 @@ export default function PostJobScreen({ onNavigate }) {
   };
 
   const handleBack = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    } else {
+      if (onNavigate) {
+        onNavigate('ClientDashboard');
+      }
+    }
   };
 
   const resetForm = () => {
-    setTitle(''); setDescription(''); setRequiredSkills([]); setBudgetAmount('');
+    setTitle(''); setDescription(''); setCategory(''); setRequiredSkills([]); setBudgetAmount('');
     setEstimatedDuration(''); setJobType('one_time'); setWorkSetup('remote');
     setUrgencyLevel('normal'); setExperienceLevel(''); setBudgetType('fixed');
     setContactPreference('chat'); setSkillInput('');
@@ -1025,11 +1071,16 @@ export default function PostJobScreen({ onNavigate }) {
   };
 
   const handlePost = async () => {
-    if (!token) { Alert.alert('Error', 'You must be logged in to post a job'); return; }
+    if (!token) { 
+      Alert.alert('Error', 'You must be logged in to post a job'); 
+      return; 
+    }
 
+    // Build the job data object matching the API schema
     const jobData = {
       title: title.trim(),
       description: description.trim(),
+      category: category.trim(),
       required_skills: requiredSkills,
       job_type: jobType,
       work_setup: workSetup,
@@ -1043,61 +1094,75 @@ export default function PostJobScreen({ onNavigate }) {
         salary_range: {
           min: payInformation.salary_range.min ? parseFloat(payInformation.salary_range.min) : null,
           max: payInformation.salary_range.max ? parseFloat(payInformation.salary_range.max) : null,
-          currency: payInformation.salary_range.currency,
+          currency: payInformation.salary_range.currency || 'PHP',
         },
-        payment_frequency: payInformation.payment_frequency,
-        benefits: payInformation.benefits,
-        negotiable: payInformation.negotiable,
-        display_pay: payInformation.display_pay,
+        payment_frequency: payInformation.payment_frequency || 'monthly',
+        benefits: payInformation.benefits || [],
+        negotiable: payInformation.negotiable || false,
+        display_pay: payInformation.display_pay !== undefined ? payInformation.display_pay : true,
       },
       location: {
         address: location.address || null,
         city: location.city || null,
         state: location.state || null,
-        country: location.country,
+        country: location.country || 'Philippines',
         zip_code: location.zip_code || null,
         specific_area: location.specific_area || null,
         landmark: location.landmark || null,
         work_address: location.work_address || null,
       },
       education_requirements: {
-        minimum_degree: educationRequirements.minimum_degree,
+        minimum_degree: educationRequirements.minimum_degree || 'none',
         preferred_field: educationRequirements.preferred_field || null,
-        required_certifications: educationRequirements.required_certifications,
+        required_certifications: educationRequirements.required_certifications || [],
         years_of_experience: parseInt(educationRequirements.years_of_experience) || 0,
       },
       requirements: {
         min_years_experience: parseInt(requirements.min_years_experience) || 0,
-        preferred_tools: requirements.preferred_tools,
-        languages_required: requirements.languages_required,
+        preferred_tools: requirements.preferred_tools || [],
+        languages_required: requirements.languages_required || [],
         additional_requirements: requirements.additional_requirements || null,
       },
       application_settings: {
-        auto_accept: applicationSettings.auto_accept,
+        auto_accept: applicationSettings.auto_accept || false,
         max_applicants: parseInt(applicationSettings.max_applicants) || 100,
         application_deadline: applicationSettings.application_deadline || null,
-        questions_for_applicants: [],
+        questions_for_applicants: applicationSettings.questions_for_applicants || [],
       },
     };
 
     try {
-      await dispatch(createJob(jobData)).unwrap();
-      Alert.alert('Posted!', 'Your job is now live.', [
-        { text: 'View My Postings', onPress: () => { resetForm(); onNavigate('Mypostings'); } },
-        { text: 'Post Another',     onPress: () => resetForm() },
-        { text: 'Dashboard',        onPress: () => { resetForm(); onNavigate('ClientDashboard'); } },
-      ]);
+      const result = await dispatch(createJob(jobData)).unwrap();
+      
+      if (result && result.job) {
+        Alert.alert('Posted!', 'Your job is now live.', [
+          { text: 'View My Postings', onPress: () => { resetForm(); onNavigate('Mypostings'); } },
+          { text: 'Post Another',     onPress: () => resetForm() },
+          { text: 'Dashboard',        onPress: () => { resetForm(); onNavigate('ClientDashboard'); } },
+        ]);
+      } else {
+        Alert.alert('Success', 'Your job has been posted successfully!');
+        resetForm();
+        onNavigate('ClientDashboard');
+      }
     } catch (error) {
+      console.error('Post job error:', error);
       Alert.alert('Error', error?.message || 'Failed to post job. Please try again.');
     }
   };
 
   const stepProps = {
-    title, setTitle, description, setDescription,
-    requiredSkills, setRequiredSkills, skillInput, setSkillInput,
-    jobType, setJobType, workSetup, setWorkSetup,
-    urgencyLevel, setUrgencyLevel, experienceLevel, setExperienceLevel,
-    budgetType, setBudgetType, budgetAmount, setBudgetAmount,
+    title, setTitle,
+    description, setDescription,
+    category, setCategory,
+    requiredSkills, setRequiredSkills,
+    skillInput, setSkillInput,
+    jobType, setJobType,
+    workSetup, setWorkSetup,
+    urgencyLevel, setUrgencyLevel,
+    experienceLevel, setExperienceLevel,
+    budgetType, setBudgetType,
+    budgetAmount, setBudgetAmount,
     estimatedDuration, setEstimatedDuration,
     contactPreference, setContactPreference,
     payInformation, setPayInformation,
@@ -1117,7 +1182,7 @@ export default function PostJobScreen({ onNavigate }) {
         {/* TOP BAR */}
         <View style={s.topbar}>
           <View style={s.topbarLeft}>
-            <TouchableOpacity onPress={() => currentStep > 1 ? handleBack() : onNavigate('ClientDashboard')} style={s.backBtn}>
+            <TouchableOpacity onPress={handleBack} style={s.backBtn}>
               <Ionicons name="arrow-back" size={22} color={WHITE} />
             </TouchableOpacity>
             <View style={s.logoBox}>
@@ -1191,6 +1256,14 @@ export default function PostJobScreen({ onNavigate }) {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* Show error if any */}
+          {error && (
+            <View style={s.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={18} color="#EF4444" />
+              <Text style={s.errorText}>{typeof error === 'string' ? error : error.message || 'An error occurred'}</Text>
+            </View>
+          )}
         </ScrollView>
 
         {/* BOTTOM TAB BAR */}
@@ -1291,6 +1364,13 @@ const s = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 12, elevation: 4,
   },
   postBtnTxt: { fontSize: 15, fontWeight: '700', color: WHITE },
+
+  errorContainer: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FEF2F2', padding: 12, borderRadius: 10,
+    marginTop: 12, borderWidth: 1, borderColor: '#FECACA',
+  },
+  errorText: { flex: 1, fontSize: 13, color: '#991B1B', lineHeight: 18 },
 
   tabSafe: { backgroundColor: WHITE },
   tabBar: {

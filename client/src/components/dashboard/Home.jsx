@@ -5,72 +5,177 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
+  Svg,
+  Path,
+  Circle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg2, { Path as SvgPath, Circle as SvgCircle } from 'react-native-svg';
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
-const TEAL         = '#00B4C6';
-const TEAL_DARK    = '#0099A8';
-const ELECTRIC     = '#0059FF';
-const ELECTRIC_DIM = '#3378FF';
-const ELECTRIC_BG  = '#EBF0FF';
-const GOLD         = '#C89A0A';
-const NAVY_SOFT    = '#E8EDF3';
-const WHITE        = '#FFFFFF';
-const TEXT_MAIN    = '#0B1929';
-const TEXT_BODY    = '#3D4F63';
-const TEXT_MUTED   = '#6B7A8D';
+const ELECTRIC      = '#2375e0';   // sky blue — main color
+const ELECTRIC_MID  = '#2375e0';   // lighter sky blue
+const SIDEBAR_DARK  = '#0A2A3A';   // dark teal-navy sidebar
+const WHITE         = '#FFFFFF';
+const TEXT_MAIN     = '#0B1929';
+const TEXT_BODY     = '#3D4F63';
+const TEXT_MUTED    = '#6B7A8D';
+const CARD_LINE     = '#E8EDF3';
+const BLUE_ICON_BG  = '#E0F7FA';
+const GREEN_ICON_BG = '#E6F7EE';
+const GOLD_ICON_BG  = '#FEF3DD';
+const GREEN         = '#22A55B';
+const GOLD          = '#E29E0A';
+const PILL_GREEN_BG = '#E6F7EE';
+const PILL_GREEN_TX = '#1A7A4B';
+const PILL_BLUE_BG  = '#E0F7FA';
+const PILL_BLUE_TX  = '#00B4C6';
+const PILL_GOLD_BG  = '#FEF3DD';
+const PILL_GOLD_TX  = '#9A6A00';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SplashScreen({ onNavigate }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor={TEAL_DARK} />
+      <StatusBar barStyle="light-content" backgroundColor={ELECTRIC} />
 
-      {/* ── Illustration Area ─────────────────────────────────────── */}
-      <View style={styles.illustrationArea}>
-        <View style={styles.bgCircle1} />
-        <View style={styles.bgCircle2} />
+      {/* ── Hero / Illustration Area ──────────────────────────────── */}
+      <View style={styles.heroArea}>
+        {/* Large translucent circle behind everything */}
+        <View style={styles.bgCircle} />
 
-        <View style={styles.illustrationWrapper}>
-          {/* Stacked cards behind */}
-          <View style={[styles.stackCard, styles.stackCard1]} />
-          <View style={[styles.stackCard, styles.stackCard2]} />
+        {/* ── Sidebar + Main dashboard card group ─────────────────── */}
+        <View style={styles.dashGroup}>
 
-          {/* Main document card */}
+          {/* Dark sidebar */}
+          <View style={styles.sidebar}>
+            {/* Grid icon */}
+            <View style={styles.sidebarIconActive}>
+              <View style={styles.grid2x2}>
+                <View style={styles.gridDot} />
+                <View style={styles.gridDot} />
+                <View style={styles.gridDot} />
+                <View style={styles.gridDot} />
+              </View>
+            </View>
+            <View style={styles.sidebarIcon}><View style={styles.sidebarLine} /></View>
+            <View style={styles.sidebarIcon}><View style={[styles.sidebarLine, { width: 18 }]} /></View>
+            <View style={styles.sidebarIcon}><View style={styles.sidebarCircle} /></View>
+          </View>
+
+          {/* Main white dashboard card */}
           <View style={styles.mainCard}>
-            <View style={styles.cardLine} />
-            <View style={[styles.cardLine, { width: 60, marginTop: 8 }]} />
-            <View style={styles.cardContentBlock}>
-              <View style={[styles.cardMiniLine, { opacity: 0.7 }]} />
-              <View style={[styles.cardMiniLine, { width: 70, opacity: 0.45, marginTop: 6 }]} />
-              <View style={[styles.cardMiniLine, { width: 50, opacity: 0.3, marginTop: 6 }]} />
+            {/* Card top bar */}
+            <View style={styles.cardTopBar}>
+              <View style={styles.cardBarBlue} />
+              <View style={styles.cardTopRight}>
+                <View style={styles.cardDotGray} />
+                <View style={styles.cardAvatar}>
+                  <View style={styles.cardAvatarCircle} />
+                </View>
+              </View>
             </View>
-            <View style={[styles.cardLine, { marginTop: 10 }]} />
-            <View style={[styles.cardLine, { width: 70, marginTop: 8 }]} />
-          </View>
 
-          {/* Gold checkmark badge — top right */}
-          <View style={styles.goldBadge}>
-            <View style={styles.goldBadgeInner}>
-              {/* checkmark using lines instead of emoji */}
-              <View style={styles.checkShort} />
-              <View style={styles.checkLong} />
+            {/* Stats row: 24 Projects | 12 In Progress | 5 Pending */}
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <View style={[styles.statIconBg, { backgroundColor: BLUE_ICON_BG }]}>
+                  <View style={styles.folderIcon}>
+                    <View style={styles.folderTab} />
+                    <View style={styles.folderBody} />
+                  </View>
+                </View>
+                <Text style={styles.statNum}>24</Text>
+                <Text style={styles.statLbl}>Projects</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <View style={[styles.statIconBg, { backgroundColor: GREEN_ICON_BG }]}>
+                  {/* Green checkmark circle */}
+                  <View style={[styles.checkCircle, { backgroundColor: GREEN }]}>
+                    <View style={styles.ckShort} />
+                    <View style={styles.ckLong} />
+                  </View>
+                </View>
+                <Text style={styles.statNum}>12</Text>
+                <Text style={styles.statLbl}>In Progress</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <View style={[styles.statIconBg, { backgroundColor: GOLD_ICON_BG }]}>
+                  {/* Gold clock circle */}
+                  <View style={[styles.checkCircle, { backgroundColor: GOLD }]}>
+                    <View style={styles.clockDot} />
+                    <View style={styles.clockHand} />
+                  </View>
+                </View>
+                <Text style={styles.statNum}>5</Text>
+                <Text style={styles.statLbl}>Pending</Text>
+              </View>
             </View>
-          </View>
 
-          {/* Task approved pill — bottom left */}
-          <View style={styles.taskPill}>
-            <View style={styles.taskPillDot} />
-            <Text style={styles.taskPillText}>Task approved</Text>
-          </View>
+            {/* Divider */}
+            <View style={styles.cardDivider} />
 
-          {/* Mini floating card — bottom right */}
-          <View style={styles.miniCard}>
-            <View style={[styles.miniCardLine, { width: 55 }]} />
-            <View style={[styles.miniCardLine, { width: 40, marginTop: 6 }]} />
-            <View style={styles.miniCardBtn} />
+            {/* Recent Applications label */}
+            <Text style={styles.recentLabel}>Recent Applications</Text>
+
+            {/* App rows */}
+            {[
+              { label: 'A1', bg: ELECTRIC,  status: 'Approved', pillBg: PILL_GREEN_BG, pillTx: PILL_GREEN_TX, w1: '72%', w2: '50%' },
+              { label: 'A2', bg: GREEN,     status: 'In Review', pillBg: PILL_BLUE_BG,  pillTx: PILL_BLUE_TX,  w1: '65%', w2: '45%' },
+              { label: 'A3', bg: GOLD,      status: 'Pending',  pillBg: PILL_GOLD_BG,  pillTx: PILL_GOLD_TX,  w1: '60%', w2: '40%' },
+            ].map((item) => (
+              <View key={item.label} style={styles.appRow}>
+                <View style={[styles.appAvatar, { backgroundColor: item.bg }]}>
+                  <Text style={styles.appAvatarText}>{item.label}</Text>
+                </View>
+                <View style={styles.appLines}>
+                  <View style={[styles.appLine, { width: item.w1 }]} />
+                  <View style={[styles.appLine, { width: item.w2, marginTop: 5 }]} />
+                </View>
+                <View style={[styles.statusPill, { backgroundColor: item.pillBg }]}>
+                  <Text style={[styles.statusPillText, { color: item.pillTx }]}>{item.status}</Text>
+                </View>
+              </View>
+            ))}
           </View>
+        </View>
+
+        {/* ── Blue checkmark badge — top right ─────────────────────── */}
+        <View style={styles.checkBadge}>
+          <View style={styles.ckShort2} />
+          <View style={styles.ckLong2} />
+        </View>
+
+        {/* ── "System Ready" pill — bottom left ────────────────────── */}
+        <View style={styles.systemPill}>
+          <View style={styles.systemDot} />
+          <Text style={styles.systemText}>System Ready</Text>
+        </View>
+
+        {/* ── Progress Overview card — bottom right ─────────────────── */}
+        <View style={styles.progressCard}>
+          <Text style={styles.progressTitle}>Progress Overview</Text>
+          {/* Simple SVG line chart */}
+          <Svg2 width="120" height="52" viewBox="0 0 120 52">
+            {/* Light area fill */}
+            <SvgPath
+              d="M4 46 C18 40 30 34 44 28 C58 22 70 24 84 16 C98 8 108 6 116 4 L116 52 L4 52 Z"
+              fill={BLUE_ICON_BG}
+            />
+            {/* Line */}
+            <SvgPath
+              d="M4 46 C18 40 30 34 44 28 C58 22 70 24 84 16 C98 8 108 6 116 4"
+              stroke={ELECTRIC}
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+            {/* End dot */}
+            <SvgCircle cx="116" cy="4" r="4" fill={ELECTRIC} />
+          </Svg2>
+          <View style={styles.progressLine} />
         </View>
       </View>
 
@@ -81,18 +186,19 @@ export default function SplashScreen({ onNavigate }) {
           <View style={[styles.dot, styles.dotActive]} />
           <View style={styles.dot} />
           <View style={styles.dot} />
+          <View style={styles.dot} />
         </View>
 
-        <Text style={styles.eyebrow}>FILIPINO FREELANCE NETWORK</Text>
+        <Text style={styles.eyebrow}>APPLICATIONS SYSTEM</Text>
         <Text style={styles.headline}>
-          {"Let's Get You Set Up\n"}
-          <Text style={styles.headlineGold}>for Success.</Text>
+          {'Manage. Track. Approve.\n'}
+          <Text style={styles.headlineBlue}>All in One Place.</Text>
         </Text>
         <Text style={styles.subtext}>
-          Find work you love, manage your gigs, and get paid on time — built for Filipino professionals.
+          Streamline your workflow, monitor applications in real-time, and make smarter decisions.
         </Text>
 
-        {/* Get Started → Login */}
+        {/* Get Started button */}
         <TouchableOpacity
           style={styles.btnPrimary}
           onPress={() => onNavigate('Login')}
@@ -101,13 +207,10 @@ export default function SplashScreen({ onNavigate }) {
           <Text style={styles.btnPrimaryText}>Get Started</Text>
         </TouchableOpacity>
 
-        {/* Sign in → Login */}
+        {/* Sign in row */}
         <View style={styles.loginRow}>
           <Text style={styles.loginText}>Already have an account? </Text>
-          <TouchableOpacity
-            onPress={() => onNavigate('Login')}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity onPress={() => onNavigate('Login')} activeOpacity={0.7}>
             <Text style={styles.loginLink}>Sign in</Text>
           </TouchableOpacity>
         </View>
@@ -119,214 +222,396 @@ export default function SplashScreen({ onNavigate }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: TEAL,
+    backgroundColor: ELECTRIC,
   },
 
-  // ── Illustration ──────────────────────────────────────────────
-  illustrationArea: {
+  // ── Hero Area ─────────────────────────────────────────────────
+  heroArea: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    paddingTop: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+
+  // Large translucent circle
+  bgCircle: {
+    position: 'absolute',
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    top: 10,
+    alignSelf: 'center',
+  },
+
+  // Sidebar + main card group
+  dashGroup: {
+    flexDirection: 'row',
+    marginTop: 20,
+    marginLeft: 8,
+    zIndex: 2,
+  },
+
+  // ── Sidebar ───────────────────────────────────────────────────
+  sidebar: {
+    width: 44,
+    backgroundColor: SIDEBAR_DARK,
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    gap: 18,
+  },
+  sidebarIconActive: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sidebarIcon: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  grid2x2: {
+    width: 14,
+    height: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 3,
+  },
+  gridDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 1.5,
+    backgroundColor: WHITE,
+  },
+  sidebarLine: {
+    width: 22,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  sidebarCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+
+  // ── Main dashboard card ───────────────────────────────────────
+  mainCard: {
+    flex: 1,
+    backgroundColor: WHITE,
+    borderTopRightRadius: 14,
+    borderBottomRightRadius: 14,
+    padding: 14,
+  },
+  cardTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  cardBarBlue: {
+    height: 4,
+    width: 56,
+    borderRadius: 2,
+    backgroundColor: ELECTRIC,
+  },
+  cardTopRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cardDotGray: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: CARD_LINE,
+  },
+  cardAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: CARD_LINE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardAvatarCircle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#BCC5D0',
+  },
+
+  // Stats
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statBox: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    paddingTop: 40,
-    paddingBottom: 20,
   },
-  bgCircle1: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    top: 20,
-    alignSelf: 'center',
+  statDivider: {
+    width: 0.5,
+    height: 40,
+    backgroundColor: CARD_LINE,
   },
-  bgCircle2: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    top: 60,
-    alignSelf: 'center',
-  },
-  illustrationWrapper: {
-    width: 280,
-    height: 280,
-    position: 'relative',
-  },
-
-  // Stacked cards
-  stackCard: {
-    position: 'absolute',
-    width: 160,
-    height: 200,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  stackCard1: {
-    top: 15,
-    left: 50,
-    transform: [{ rotate: '8deg' }],
-  },
-  stackCard2: {
-    top: 10,
-    left: 45,
-    transform: [{ rotate: '-4deg' }],
-    backgroundColor: 'rgba(0,89,255,0.22)',
-  },
-
-  // Main card
-  mainCard: {
-    position: 'absolute',
-    width: 160,
-    height: 200,
-    backgroundColor: WHITE,
-    borderRadius: 16,
-    padding: 20,
-    top: 5,
-    left: 40,
-    zIndex: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  cardLine: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: NAVY_SOFT,
-    width: '100%',
-  },
-  cardContentBlock: {
-    backgroundColor: ELECTRIC_BG,
+  statIconBg: {
+    width: 30,
+    height: 30,
     borderRadius: 8,
-    padding: 12,
-    marginVertical: 14,
-  },
-  cardMiniLine: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: ELECTRIC_DIM,
-    width: '100%',
-  },
-
-  // Gold checkmark badge
-  goldBadge: {
-    position: 'absolute',
-    top: 0,
-    right: 18,
-    zIndex: 4,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: 'rgba(200,154,10,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 4,
   },
-  goldBadgeInner: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: GOLD,
-    alignItems: 'center',
-    justifyContent: 'center',
+  // Folder icon
+  folderIcon: { alignItems: 'center' },
+  folderTab: {
+    width: 10,
+    height: 4,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+    backgroundColor: ELECTRIC,
+    alignSelf: 'flex-start',
+    marginLeft: 2,
   },
-  // checkmark drawn with two rotated views
-  checkShort: {
-    position: 'absolute',
-    width: 7,
-    height: 2.5,
-    backgroundColor: WHITE,
+  folderBody: {
+    width: 16,
+    height: 11,
     borderRadius: 2,
-    bottom: 14,
-    left: 8,
+    backgroundColor: ELECTRIC,
+  },
+  // Check/clock circle
+  checkCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ckShort: {
+    position: 'absolute',
+    width: 5,
+    height: 2,
+    backgroundColor: WHITE,
+    borderRadius: 1,
+    bottom: 6,
+    left: 4,
     transform: [{ rotate: '45deg' }],
   },
-  checkLong: {
+  ckLong: {
     position: 'absolute',
-    width: 13,
+    width: 9,
+    height: 2,
+    backgroundColor: WHITE,
+    borderRadius: 1,
+    bottom: 5,
+    left: 7,
+    transform: [{ rotate: '-50deg' }],
+  },
+  clockDot: {
+    position: 'absolute',
+    width: 2,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: WHITE,
+    top: 8,
+    left: 8,
+  },
+  clockHand: {
+    position: 'absolute',
+    width: 1.5,
+    height: 6,
+    borderRadius: 1,
+    backgroundColor: WHITE,
+    bottom: 8,
+    left: 8,
+    transform: [{ rotate: '30deg' }],
+  },
+  statNum: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  statLbl: {
+    fontSize: 8,
+    color: TEXT_MUTED,
+    marginTop: 1,
+  },
+
+  cardDivider: {
+    height: 0.5,
+    backgroundColor: CARD_LINE,
+    marginBottom: 8,
+  },
+  recentLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    marginBottom: 8,
+  },
+
+  // App rows
+  appRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 7,
+  },
+  appAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appAvatarText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: WHITE,
+  },
+  appLines: {
+    flex: 1,
+    marginHorizontal: 8,
+  },
+  appLine: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: CARD_LINE,
+  },
+  statusPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  statusPillText: {
+    fontSize: 7.5,
+    fontWeight: '700',
+  },
+
+  // ── Check badge (top right floating) ─────────────────────────
+  checkBadge: {
+    position: 'absolute',
+    top: 30,
+    right: 22,
+    zIndex: 5,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: ELECTRIC,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  ckShort2: {
+    position: 'absolute',
+    width: 8,
     height: 2.5,
     backgroundColor: WHITE,
     borderRadius: 2,
-    bottom: 13,
-    left: 12,
+    bottom: 18,
+    left: 11,
+    transform: [{ rotate: '45deg' }],
+  },
+  ckLong2: {
+    position: 'absolute',
+    width: 14,
+    height: 2.5,
+    backgroundColor: WHITE,
+    borderRadius: 2,
+    bottom: 17,
+    left: 17,
     transform: [{ rotate: '-50deg' }],
   },
 
-  // Task pill
-  taskPill: {
+  // ── System Ready pill ────────────────────────────────────────
+  systemPill: {
     position: 'absolute',
     bottom: 28,
-    left: 0,
-    zIndex: 4,
+    left: 16,
+    zIndex: 5,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: WHITE,
     borderRadius: 999,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 6,
   },
-  taskPillDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  systemDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
     backgroundColor: ELECTRIC,
   },
-  taskPillText: {
+  systemText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: TEXT_MAIN,
   },
 
-  // Mini card
-  miniCard: {
+  // ── Progress Overview card ────────────────────────────────────
+  progressCard: {
     position: 'absolute',
-    bottom: 48,
-    right: 8,
-    zIndex: 4,
+    bottom: 16,
+    right: 12,
+    zIndex: 5,
     backgroundColor: WHITE,
-    borderRadius: 12,
-    padding: 14,
-    width: 105,
+    borderRadius: 14,
+    padding: 12,
+    width: 150,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 6,
   },
-  miniCardLine: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: NAVY_SOFT,
-    width: '100%',
+  progressTitle: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    marginBottom: 8,
   },
-  miniCardBtn: {
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: GOLD,
-    marginTop: 10,
+  progressLine: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: CARD_LINE,
+    marginTop: 8,
+    width: '70%',
   },
 
   // ── Bottom Sheet ──────────────────────────────────────────────
   bottomSheet: {
     backgroundColor: WHITE,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
     paddingHorizontal: 28,
-    paddingTop: 28,
-    paddingBottom: 32,
+    paddingTop: 26,
+    paddingBottom: 36,
   },
   dotsRow: {
     flexDirection: 'row',
     gap: 6,
-    marginBottom: 20,
+    marginBottom: 18,
+    alignItems: 'center',
   },
   dot: {
     width: 6,
@@ -335,36 +620,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#D0D8E4',
   },
   dotActive: {
-    width: 20,
-    backgroundColor: GOLD,
+    width: 22,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: ELECTRIC,
   },
   eyebrow: {
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 2.5,
-    color: GOLD,
-    marginBottom: 12,
+    letterSpacing: 2.2,
+    color: ELECTRIC,
+    marginBottom: 10,
   },
   headline: {
-    fontSize: 28,
-    fontWeight: '300',
+    fontSize: 27,
+    fontWeight: '400',
     color: TEXT_MAIN,
     lineHeight: 36,
-    letterSpacing: -0.5,
     marginBottom: 12,
   },
-  headlineGold: {
-    color: GOLD,
+  headlineBlue: {
+    color: ELECTRIC,
     fontWeight: '800',
   },
   subtext: {
     fontSize: 14,
     color: TEXT_BODY,
     lineHeight: 22,
-    marginBottom: 28,
+    marginBottom: 26,
   },
   btnPrimary: {
-    backgroundColor: GOLD,
+    backgroundColor: ELECTRIC,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',

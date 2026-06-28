@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,19 @@ import {
   Platform,
   ScrollView,
   Modal,
+  BackHandler,        // ← NEW: handles Android hardware back button
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { registerFreelancer, clearError } from '../../Redux/slices/authSlice';
+import { 
+  registerFreelancer, 
+  verifyEmail,
+  resendVerification,
+  clearError 
+} from '../../Redux/slices/authSlice';
 
-// ── Vantara Design tokens (matching ClientRegistration and other screens) ──────────────────────────────────
+// ── Vantara Design tokens ──────────────────────────────────────────────────
 const NAVY       = '#071A3E';
 const NAVY2      = '#0D2151';
 const BLUE       = '#0055A5';
@@ -43,15 +49,19 @@ const GREEN_DARK = '#059669';
 const ERROR      = '#EF4444';
 const ERROR_BG   = 'rgba(239,68,68,0.08)';
 const ERROR_BORDER = 'rgba(239,68,68,0.3)';
-// ─────────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function FreelancerRegistration({ onNavigate }) {
   const dispatch = useDispatch();
-  const { isLoading, error } = useSelector((state) => state.auth);
+  const { isLoading, error, requiresVerification, verificationEmail } = useSelector((state) => state.auth);
   
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [verificationCode, setVerificationCode] = useState(['', '', '', '', '', '']);
+  const [countdown, setCountdown] = useState(0);
+  const [canResend, setCanResend] = useState(true);
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -79,16 +89,75 @@ export default function FreelancerRegistration({ onNavigate }) {
   const [serverError, setServerError] = useState(null);
   
   const scrollViewRef = useRef();
+  const inputRefs = useRef([]);
+
+  // ── FIX 1: Hardware Back Button Handler (Android) ────────────────────────
+  // Without this, pressing the Android back button either exits the app or
+  // goes to an unexpected screen. This intercepts it and routes correctly.
+  useEffect(() => {
+    const backAction = () => {
+      if (showVerificationModal) {
+        Alert.alert(
+          'Cancel Verification?',
+          'You will need to verify your email to access your account.',
+          [
+            { text: 'Stay', style: 'cancel' },
+            {
+              text: 'Cancel',
+              style: 'destructive',
+              onPress: () => {
+                setShowVerificationModal(false);
+                resetForm();
+              },
+            },
+          ]
+        );
+        return true; // block default OS back
+      }
+
+      if (showTermsModal) {
+        setShowTermsModal(false);
+        return true; // block default OS back
+      }
+
+      // Go back to role selection screen
+      onNavigate('RoleSelection');
+      return true; // block default OS back
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove(); // cleanup on unmount
+  }, [showVerificationModal, showTermsModal]);
+
+  // ── Countdown timer for resend ───────────────────────────────────────────
+  useEffect(() => {
+    let timer;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    } else if (countdown === 0) {
+      setCanResend(true);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  // ── Auto-show verification modal when registration requires verification ──
+  useEffect(() => {
+    if (requiresVerification && verificationEmail) {
+      setShowVerificationModal(true);
+      startCountdown();
+    }
+  }, [requiresVerification, verificationEmail]);
+
+  const startCountdown = () => {
+    setCountdown(60);
+    setCanResend(false);
+  };
 
   const validateForm = () => {
     const newErrors = {};
     
-    if (!formData.first_name?.trim()) {
-      newErrors.first_name = 'First name is required';
-    }
-    if (!formData.last_name?.trim()) {
-      newErrors.last_name = 'Last name is required';
-    }
+    if (!formData.first_name?.trim()) newErrors.first_name = 'First name is required';
+    if (!formData.last_name?.trim())  newErrors.last_name  = 'Last name is required';
     if (!formData.username?.trim()) {
       newErrors.username = 'Username is required';
     } else if (formData.username.length < 3) {
@@ -111,9 +180,7 @@ export default function FreelancerRegistration({ onNavigate }) {
     } else if (formData.password !== formData.confirm_password) {
       newErrors.confirm_password = 'Passwords do not match';
     }
-    if (!formData.terms_accepted) {
-      newErrors.terms_accepted = 'You must accept the terms and conditions';
-    }
+    if (!formData.terms_accepted) newErrors.terms_accepted = 'You must accept the terms and conditions';
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -123,9 +190,7 @@ export default function FreelancerRegistration({ onNavigate }) {
     setServerError(null);
     
     if (!validateForm()) {
-      if (scrollViewRef.current) {
-        scrollViewRef.current.scrollTo({ y: 0, animated: true });
-      }
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       Alert.alert('Check your details', 'Please fix the highlighted fields before continuing.', [{ text: 'OK' }]);
       return;
     }
@@ -156,21 +221,26 @@ export default function FreelancerRegistration({ onNavigate }) {
     const result = await dispatch(registerFreelancer(userData));
     
     if (registerFreelancer.fulfilled.match(result)) {
-      Alert.alert(
-        'Account Created!',
-        result.payload.message || 'Your freelancer account is ready.',
-        [
-          { text: 'Stay Here', style: 'cancel' },
-          { text: 'Sign In', onPress: () => { resetForm(); onNavigate('Login'); } },
-        ]
-      );
+      if (result.payload?.requires_verification) {
+        Alert.alert(
+          'Verification Required',
+          'Please check your email for the verification code.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Account Created!',
+          result.payload.message || 'Your freelancer account is ready.',
+          [
+            { text: 'Stay Here', style: 'cancel' },
+            { text: 'Sign In', onPress: () => { resetForm(); onNavigate('Login'); } },
+          ]
+        );
+      }
     } else if (registerFreelancer.rejected.match(result)) {
       const errorMessage = result.payload?.message || 'Something went wrong. Please try again.';
       setServerError(errorMessage);
-      
-      if (scrollViewRef.current) {
-        scrollViewRef.current.scrollTo({ y: 0, animated: true });
-      }
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       
       if (errorMessage.toLowerCase().includes('email already exists')) {
         setErrors(prev => ({ ...prev, email_address: 'This email is already registered' }));
@@ -179,34 +249,73 @@ export default function FreelancerRegistration({ onNavigate }) {
       } else if (errorMessage.toLowerCase().includes('confirm password') || errorMessage.toLowerCase().includes('passwords do not match')) {
         setErrors(prev => ({ ...prev, confirm_password: 'Passwords do not match' }));
       }
+      
+      Alert.alert('Registration Failed', errorMessage, [{ text: 'OK' }]);
+    }
+  };
+
+  // ── Verification Handlers ─────────────────────────────────────────────────
+  const handleVerifyEmail = async () => {
+    const code = verificationCode.join('');
+    if (code.length < 6) {
+      Alert.alert('Incomplete Code', 'Please enter all 6 digits of the verification code.');
+      return;
+    }
+
+    const result = await dispatch(verifyEmail({ email: verificationEmail, code }));
+
+    if (verifyEmail.fulfilled.match(result)) {
+      setShowVerificationModal(false);
+      setVerificationCode(['', '', '', '', '', '']);
+      Alert.alert(
+        'Email Verified! 🎉',
+        'Your account has been verified. You can now sign in.',
+        [{ text: 'Sign In', onPress: () => { resetForm(); onNavigate('Login'); } }]
+      );
+    } else if (verifyEmail.rejected.match(result)) {
+      const msg = result.payload?.message || 'Invalid verification code. Please try again.';
+      Alert.alert('Verification Failed', msg);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!canResend) return;
+    const result = await dispatch(resendVerification(verificationEmail));
+    if (resendVerification.fulfilled.match(result)) {
+      startCountdown();
+      Alert.alert('Code Sent', 'A new verification code has been sent to your email.');
+    } else if (resendVerification.rejected.match(result)) {
+      const msg = result.payload?.message || 'Failed to resend code. Please try again.';
+      Alert.alert('Error', msg);
+    }
+  };
+
+  const handleVerificationCodeChange = (text, index) => {
+    const newCode = [...verificationCode];
+    newCode[index] = text;
+    setVerificationCode(newCode);
+    if (text && index < 5) inputRefs.current[index + 1]?.focus();
+  };
+
+  const handleVerificationKeyPress = (e, index) => {
+    if (e.nativeEvent.key === 'Backspace' && !verificationCode[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
     }
   };
 
   const resetForm = () => {
     setFormData({
-      first_name: '',
-      last_name: '',
-      username: '',
-      email_address: '',
-      phone_number: '',
-      password: '',
-      confirm_password: '',
-      country: '',
-      city: '',
-      address: '',
-      skills: '',
-      experience_level: '',
-      years_of_experience: '',
-      portfolio_link: '',
-      hourly_rate: '',
-      fixed_rate: '',
-      bio_about_me: '',
-      languages: '',
-      certifications: '',
+      first_name: '', last_name: '', username: '', email_address: '',
+      phone_number: '', password: '', confirm_password: '', country: '',
+      city: '', address: '', skills: '', experience_level: '',
+      years_of_experience: '', portfolio_link: '', hourly_rate: '',
+      fixed_rate: '', bio_about_me: '', languages: '', certifications: '',
       terms_accepted: false,
     });
     setErrors({});
     setServerError(null);
+    setVerificationCode(['', '', '', '', '', '']);
+    setShowVerificationModal(false);
   };
 
   const handleAcceptTerms = () => {
@@ -214,11 +323,7 @@ export default function FreelancerRegistration({ onNavigate }) {
     setShowTermsModal(false);
   };
 
-  React.useEffect(() => {
-    return () => {
-      dispatch(clearError());
-    };
-  }, []);
+  React.useEffect(() => () => { dispatch(clearError()); }, []);
 
   const updateField = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -230,7 +335,88 @@ export default function FreelancerRegistration({ onNavigate }) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
-      {/* Terms and Conditions Modal */}
+      {/* ── Verification Modal ── */}
+      <Modal
+        visible={showVerificationModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          // Intentionally empty — BackHandler above handles this to avoid double-trigger
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.verificationModalContainer}>
+            <View style={styles.verificationHeader}>
+              <View style={styles.verificationIconContainer}>
+                <Ionicons name="mail-outline" size={40} color={BLUE} />
+              </View>
+              <Text style={styles.verificationTitle}>Verify Your Email</Text>
+              <Text style={styles.verificationSubtitle}>
+                We've sent a 6-digit verification code to{'\n'}
+                <Text style={styles.verificationEmail}>{verificationEmail}</Text>
+              </Text>
+            </View>
+
+            <View style={styles.verificationCodeContainer}>
+              {verificationCode.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={ref => (inputRefs.current[index] = ref)}
+                  style={styles.verificationInput}
+                  maxLength={1}
+                  keyboardType="number-pad"
+                  value={digit}
+                  onChangeText={(text) => handleVerificationCodeChange(text, index)}
+                  onKeyPress={(e) => handleVerificationKeyPress(e, index)}
+                  autoFocus={index === 0}
+                />
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.verifyButton}
+              onPress={handleVerifyEmail}
+              disabled={isLoading}
+            >
+              {isLoading
+                ? <ActivityIndicator color={WHITE} />
+                : <Text style={styles.verifyButtonText}>Verify Email</Text>
+              }
+            </TouchableOpacity>
+
+            <View style={styles.resendContainer}>
+              <Text style={styles.resendText}>Didn't receive the code? </Text>
+              <TouchableOpacity onPress={handleResendCode} disabled={!canResend || isLoading}>
+                <Text style={[styles.resendLink, !canResend && styles.resendLinkDisabled]}>
+                  {canResend ? 'Resend Code' : `Resend in ${countdown}s`}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.verificationClose}
+              onPress={() => {
+                Alert.alert(
+                  'Cancel Verification?',
+                  'You will need to verify your email to access your account.',
+                  [
+                    { text: 'Stay', style: 'cancel' },
+                    {
+                      text: 'Cancel',
+                      style: 'destructive',
+                      onPress: () => { setShowVerificationModal(false); resetForm(); }
+                    }
+                  ]
+                );
+              }}
+            >
+              <Text style={styles.verificationCloseText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Terms Modal ── */}
       <Modal
         visible={showTermsModal}
         animationType="slide"
@@ -241,10 +427,7 @@ export default function FreelancerRegistration({ onNavigate }) {
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Terms and Conditions</Text>
-              <TouchableOpacity 
-                onPress={() => setShowTermsModal(false)}
-                style={styles.modalClose}
-              >
+              <TouchableOpacity onPress={() => setShowTermsModal(false)} style={styles.modalClose}>
                 <Ionicons name="close" size={24} color={TEXT_MUTED} />
               </TouchableOpacity>
             </View>
@@ -255,27 +438,27 @@ export default function FreelancerRegistration({ onNavigate }) {
                 By registering as a Freelancer on Taskra, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our platform.
 
                 {'\n\n'}<Text style={styles.termsHeading}>2. Freelancer Responsibilities{'\n\n'}</Text>
-                • You agree to provide accurate and complete information when creating your account.
-                • You are responsible for maintaining the confidentiality of your account credentials.
-                • You agree to deliver quality work within agreed timelines.
+                • You agree to provide accurate and complete information when creating your account.{'\n'}
+                • You are responsible for maintaining the confidentiality of your account credentials.{'\n'}
+                • You agree to deliver quality work within agreed timelines.{'\n'}
                 • You will not submit false or misleading proposals.
 
                 {'\n\n'}<Text style={styles.termsHeading}>3. Payment Terms{'\n\n'}</Text>
-                • Taskra facilitates secure payments between clients and freelancers.
-                • A service fee may be deducted from each completed transaction.
-                • You must submit accurate invoices for work completed.
+                • Taskra facilitates secure payments between clients and freelancers.{'\n'}
+                • A service fee may be deducted from each completed transaction.{'\n'}
+                • You must submit accurate invoices for work completed.{'\n'}
                 • Disputes will be reviewed by our team and resolved fairly.
 
                 {'\n\n'}<Text style={styles.termsHeading}>4. Work Guidelines{'\n\n'}</Text>
-                • All work must be original and not plagiarized.
-                • Deliverables must meet the agreed specifications.
-                • Communicate clearly and professionally with clients.
+                • All work must be original and not plagiarized.{'\n'}
+                • Deliverables must meet the agreed specifications.{'\n'}
+                • Communicate clearly and professionally with clients.{'\n'}
                 • Respect intellectual property rights and confidentiality.
 
                 {'\n\n'}<Text style={styles.termsHeading}>5. Code of Conduct{'\n\n'}</Text>
-                • Treat clients with respect and professionalism.
-                • Provide accurate time estimates and updates.
-                • Do not share client confidential information.
+                • Treat clients with respect and professionalism.{'\n'}
+                • Provide accurate time estimates and updates.{'\n'}
+                • Do not share client confidential information.{'\n'}
                 • Report any violations or suspicious activities.
 
                 {'\n\n'}<Text style={styles.termsHeading}>6. Account Termination{'\n\n'}</Text>
@@ -298,16 +481,10 @@ export default function FreelancerRegistration({ onNavigate }) {
             </ScrollView>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity 
-                style={styles.modalButtonCancel}
-                onPress={() => setShowTermsModal(false)}
-              >
+              <TouchableOpacity style={styles.modalButtonCancel} onPress={() => setShowTermsModal(false)}>
                 <Text style={styles.modalButtonCancelText}>Close</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.modalButtonAccept}
-                onPress={handleAcceptTerms}
-              >
+              <TouchableOpacity style={styles.modalButtonAccept} onPress={handleAcceptTerms}>
                 <Text style={styles.modalButtonAcceptText}>Accept Terms</Text>
               </TouchableOpacity>
             </View>
@@ -315,14 +492,24 @@ export default function FreelancerRegistration({ onNavigate }) {
         </View>
       </Modal>
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+      {/*
+        ── FIX 2: KeyboardAvoidingView ──────────────────────────────────────
+        On Android, behavior="height" collapses the layout when the keyboard
+        opens, causing a re-render that can accidentally fire navigation.
+        Setting behavior={undefined} on Android lets the ScrollView handle
+        it naturally. keyboardShouldPersistTaps="handled" prevents accidental
+        taps outside inputs from dismissing focus and triggering back.
+      */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
         <ScrollView 
           ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
           <View style={styles.container}>
             {/* Back Button */}
@@ -605,11 +792,7 @@ export default function FreelancerRegistration({ onNavigate }) {
                       onChangeText={(text) => updateField('password', text)}
                     />
                     <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
-                      <Ionicons
-                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={18}
-                        color={TEXT_LIGHT}
-                      />
+                      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={TEXT_LIGHT} />
                     </TouchableOpacity>
                   </View>
                   {errors.password && <Text style={styles.fieldErrorText}>{errors.password}</Text>}
@@ -627,11 +810,7 @@ export default function FreelancerRegistration({ onNavigate }) {
                       onChangeText={(text) => updateField('confirm_password', text)}
                     />
                     <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                      <Ionicons
-                        name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={18}
-                        color={TEXT_LIGHT}
-                      />
+                      <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={TEXT_LIGHT} />
                     </TouchableOpacity>
                   </View>
                   {errors.confirm_password && <Text style={styles.fieldErrorText}>{errors.confirm_password}</Text>}
@@ -645,16 +824,11 @@ export default function FreelancerRegistration({ onNavigate }) {
                 activeOpacity={0.7}
               >
                 <View style={[styles.checkbox, formData.terms_accepted && styles.checkboxChecked]}>
-                  {formData.terms_accepted && (
-                    <Ionicons name="checkmark" size={14} color={WHITE} />
-                  )}
+                  {formData.terms_accepted && <Ionicons name="checkmark" size={14} color={WHITE} />}
                 </View>
                 <Text style={styles.checkboxLabel}>
                   I accept the{' '}
-                  <Text 
-                    style={styles.checkboxLink}
-                    onPress={() => setShowTermsModal(true)}
-                  >
+                  <Text style={styles.checkboxLink} onPress={() => setShowTermsModal(true)}>
                     Terms and Conditions
                   </Text>
                   <Text style={styles.required}> *</Text>
@@ -813,104 +987,107 @@ const styles = StyleSheet.create({
   checkboxLabel: { fontSize: 14, color: TEXT_MUTED, flex: 1 },
   checkboxLink: { color: BLUE, fontWeight: '700' },
 
-  // Modal Styles
+  // ── Verification Modal Styles ──
+  verificationHeader: { alignItems: 'center', marginBottom: 4 },
+  verificationModalContainer: {
+    backgroundColor: CARD,
+    borderRadius: 24,
+    width: '90%',
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  verificationIconContainer: {
+    width: 72, height: 72,
+    borderRadius: 36,
+    backgroundColor: `${BLUE}15`,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
+  },
+  verificationTitle: { fontSize: 22, fontWeight: '700', color: TEXT_MAIN, marginBottom: 8 },
+  verificationSubtitle: {
+    fontSize: 14, color: TEXT_MUTED, textAlign: 'center',
+    marginBottom: 24, lineHeight: 20,
+  },
+  verificationEmail: { color: BLUE, fontWeight: '600' },
+  verificationCodeContainer: {
+    flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 28,
+  },
+  verificationInput: {
+    width: 44, height: 56,
+    backgroundColor: BG,
+    borderWidth: 2, borderColor: BORDER,
+    borderRadius: 12,
+    textAlign: 'center',
+    fontSize: 22, fontWeight: '600', color: TEXT_MAIN,
+  },
+  verifyButton: {
+    backgroundColor: BLUE,
+    borderRadius: 14, paddingVertical: 14,
+    width: '100%', alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: BLUE, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 3,
+  },
+  verifyButtonText: { fontSize: 16, fontWeight: '700', color: WHITE },
+  resendContainer: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+  },
+  resendText: { fontSize: 13, color: TEXT_MUTED },
+  resendLink: { fontSize: 13, color: BLUE, fontWeight: '600' },
+  resendLinkDisabled: { color: TEXT_LIGHT },
+  verificationClose: { paddingVertical: 8 },
+  verificationCloseText: { fontSize: 14, color: TEXT_MUTED, fontWeight: '500' },
+
+  // ── Terms Modal Styles ──
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(7,26,62,0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
   },
   modalContainer: {
-    backgroundColor: CARD,
-    borderRadius: 20,
-    width: '90%',
-    maxHeight: '85%',
+    backgroundColor: CARD, borderRadius: 20,
+    width: '90%', maxHeight: '85%',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25, shadowRadius: 8, elevation: 5,
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    backgroundColor: CARD,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 20, borderBottomWidth: 1, borderBottomColor: BORDER, backgroundColor: CARD,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-  },
-  modalClose: {
-    padding: 4,
-  },
-  modalContent: {
-    padding: 20,
-    maxHeight: '70%',
-  },
-  termsText: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: TEXT_MUTED,
-  },
-  termsHeading: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-  },
-  termsEffective: {
-    fontSize: 12,
-    color: BLUE,
-    fontWeight: '600',
-    marginTop: 8,
-  },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: TEXT_MAIN },
+  modalClose: { padding: 4 },
+  modalContent: { padding: 20, maxHeight: '70%' },
+  termsText: { fontSize: 14, lineHeight: 22, color: TEXT_MUTED },
+  termsHeading: { fontSize: 16, fontWeight: '700', color: TEXT_MAIN },
+  termsEffective: { fontSize: 12, color: BLUE, fontWeight: '600', marginTop: 8 },
   modalFooter: {
-    flexDirection: 'row',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-    gap: 12,
+    flexDirection: 'row', padding: 20,
+    borderTopWidth: 1, borderTopColor: BORDER, gap: 12,
   },
   modalButtonCancel: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    alignItems: 'center',
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    borderWidth: 1.5, borderColor: BORDER, alignItems: 'center',
   },
-  modalButtonCancelText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: TEXT_MUTED,
-  },
+  modalButtonCancelText: { fontSize: 14, fontWeight: '600', color: TEXT_MUTED },
   modalButtonAccept: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: BLUE,
-    alignItems: 'center',
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: BLUE, alignItems: 'center',
   },
-  modalButtonAcceptText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: WHITE,
-  },
+  modalButtonAcceptText: { fontSize: 14, fontWeight: '700', color: WHITE },
 
   // Submit button
   submitBtn: {
-    flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     backgroundColor: BLUE,
     borderRadius: 14, paddingVertical: 16,
     marginTop: 8, marginBottom: 14,
-    shadowColor: BLUE,
-    shadowOffset: { width: 0, height: 6 },
+    shadowColor: BLUE, shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3, shadowRadius: 12, elevation: 4,
   },
   submitBtnDisabled: { opacity: 0.6 },

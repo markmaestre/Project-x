@@ -20,7 +20,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { getReceivedOffers, updateOfferStatus } from '../../Redux/slices/offerSlice';
 import { getFreelancerApplications } from '../../Redux/slices/applicationSlice';
 
 const { width } = Dimensions.get('window');

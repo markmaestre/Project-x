@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,31 +19,22 @@ import { useDispatch, useSelector } from 'react-redux';
 import { login, clearError } from '../../Redux/slices/authSlice';
 
 // ── Semiconductor-Inspired Palette ────────────────────────────────────────────
-// Primary Blue  →  Intel / AMD / Amkor brand blue family
 const BLUE        = '#0068B5';
 const BLUE_LIGHT  = '#3D9DD6';
 const BLUE_DARK   = '#004F8C';
 const BLUE_SOFT   = '#E2EAF4';
 const BLUE_MID    = '#A8C4DC';
-
-// Gold  →  excellence, achievement, premium
 const GOLD        = '#C9960C';
 const GOLD_LIGHT  = '#F0B429';
 const GOLD_SOFT   = '#FDF3D7';
 const GOLD_MID    = '#E6C56A';
-
-// Silver / Neutrals
 const WHITE       = '#FFFFFF';
 const OFF_WHITE   = '#F5F7FA';
 const SURFACE     = '#EBF0F6';
 const BORDER      = 'rgba(0,104,181,0.14)';
-
-// Text
 const TEXT_MAIN   = '#0D1B2A';
 const TEXT_MUTED  = '#4A5E72';
 const TEXT_LIGHT  = '#8B9AB0';
-
-// Status
 const RED_BG      = '#FEF2F2';
 const RED_BORDER  = '#FECACA';
 const RED_TEXT    = '#E53935';
@@ -60,6 +52,24 @@ export default function Login({ onNavigate }) {
   const [isLoading, setIsLoading]         = useState(false);
 
   const scrollViewRef = useRef();
+
+  // ── Handle Android Hardware Back Button ─────────────────────────────────
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Only navigate back if not loading
+      if (!isLoading) {
+        setCredentials({ email_address: '', password: '' });
+        setErrors({});
+        setServerError(null);
+        setIsLoading(false);
+        onNavigate('Home');
+        return true;
+      }
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, [onNavigate, isLoading]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -95,7 +105,9 @@ export default function Login({ onNavigate }) {
         const userRole = result.payload.user.role;
         const normalizedRole = userRole.toLowerCase();
 
+        // Only navigate on success
         setTimeout(() => {
+          setIsLoading(false);
           if (normalizedRole === 'client') {
             onNavigate('Client');
           } else if (normalizedRole === 'freelancer') {
@@ -105,6 +117,7 @@ export default function Login({ onNavigate }) {
           }
         }, 100);
       } else if (login.rejected.match(result)) {
+        // On error - DO NOT NAVIGATE, just show error
         const errorMessage = result.payload?.message || 'Login failed. Please try again.';
         scrollViewRef.current?.scrollTo({ y: 0, animated: true });
 
@@ -129,6 +142,7 @@ export default function Login({ onNavigate }) {
       console.error('Login error:', error);
       setServerError('An unexpected error occurred. Please try again.');
     } finally {
+      // IMPORTANT: Always set loading to false regardless of success or error
       setIsLoading(false);
     }
   };
@@ -152,6 +166,16 @@ export default function Login({ onNavigate }) {
         },
       },
     ]);
+  };
+
+  const handleGoBack = () => {
+    if (!isLoading) {
+      setCredentials({ email_address: '', password: '' });
+      setErrors({});
+      setServerError(null);
+      setIsLoading(false);
+      onNavigate('Home');
+    }
   };
 
   React.useEffect(() => {
@@ -186,13 +210,7 @@ export default function Login({ onNavigate }) {
             {/* ── Back Button ─────────────────────────────────────────── */}
             <TouchableOpacity
               style={styles.backButton}
-              onPress={() => {
-                setCredentials({ email_address: '', password: '' });
-                setErrors({});
-                setServerError(null);
-                setIsLoading(false);
-                onNavigate('Home');
-              }}
+              onPress={handleGoBack}
               disabled={isLoading}
             >
               <View style={styles.backIconWrap}>
@@ -202,7 +220,6 @@ export default function Login({ onNavigate }) {
 
             {/* ── Header ──────────────────────────────────────────────── */}
             <View style={styles.header}>
-              {/* Logo: blue box with gold shimmer top bar */}
               <View style={styles.logoBox}>
                 <View style={styles.logoGoldBar} />
                 <Text style={styles.logoLetter}>T</Text>
@@ -320,7 +337,6 @@ export default function Login({ onNavigate }) {
                 activeOpacity={0.85}
                 disabled={isLoading}
               >
-                {/* Gold shimmer bar at top of button */}
                 <View style={styles.loginButtonGoldBar} />
                 <View style={styles.loginButtonInner}>
                   {isLoading ? (
@@ -349,11 +365,13 @@ export default function Login({ onNavigate }) {
                 <Text style={styles.signupPromptText}>Don't have an account?</Text>
                 <TouchableOpacity
                   onPress={() => {
-                    setCredentials({ email_address: '', password: '' });
-                    setErrors({});
-                    setServerError(null);
-                    setIsLoading(false);
-                    onNavigate('RoleSelection');
+                    if (!isLoading) {
+                      setCredentials({ email_address: '', password: '' });
+                      setErrors({});
+                      setServerError(null);
+                      setIsLoading(false);
+                      onNavigate('RoleSelection');
+                    }
                   }}
                   disabled={isLoading}
                 >
@@ -375,7 +393,6 @@ const styles = StyleSheet.create({
   scrollContainer: { flexGrow: 1 },
   container:       { flex: 1, padding: 24, paddingBottom: 48 },
 
-  // ── Back ────────────────────────────────────────────────────────────────
   backButton:   { marginBottom: 20, alignSelf: 'flex-start' },
   backIconWrap: {
     width: 38, height: 38,
@@ -388,7 +405,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
   },
 
-  // ── Header ──────────────────────────────────────────────────────────────
   header: { alignItems: 'center', marginBottom: 36 },
   logoBox: {
     width: 76, height: 76,
@@ -397,19 +413,22 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 14,
     overflow: 'hidden',
-    // Blue glow shadow
     shadowColor: BLUE_DARK,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35, shadowRadius: 14, elevation: 8,
-    // Subtle inner border for dimension
     borderWidth: 1, borderColor: BLUE_LIGHT,
   },
-  // Gold accent bar at top of logo box
   logoGoldBar: {
     position: 'absolute',
     top: 0, left: 0, right: 0,
     height: 3,
     backgroundColor: GOLD_LIGHT,
+  },
+  logoLetter: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: WHITE,
+    letterSpacing: -1,
   },
   logoWordmark: {
     fontSize: 11, fontWeight: '800',
@@ -428,7 +447,6 @@ const styles = StyleSheet.create({
     textAlign: 'center', fontWeight: '400',
   },
 
-  // ── Error Banner ────────────────────────────────────────────────────────
   serverErrorContainer: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: RED_BG,
@@ -444,7 +462,6 @@ const styles = StyleSheet.create({
   },
   serverErrorText: { fontSize: 13, color: RED_TEXT, flex: 1, lineHeight: 18 },
 
-  // ── Form ────────────────────────────────────────────────────────────────
   form:       { gap: 18 },
   inputGroup: { gap: 7 },
   labelRow: {
@@ -455,7 +472,6 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '600', color: TEXT_MAIN },
   forgotPasswordText: { fontSize: 12, color: GOLD, fontWeight: '600' },
 
-  // ── Input ───────────────────────────────────────────────────────────────
   inputWrapper: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: WHITE,
@@ -482,11 +498,9 @@ const styles = StyleSheet.create({
   passwordInput: { paddingRight: 4 },
   eyeIcon:       { padding: 12 },
 
-  // ── Field Error ─────────────────────────────────────────────────────────
   fieldErrorRow:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
   fieldErrorText: { fontSize: 12, color: RED_TEXT },
 
-  // ── Sign In Button ───────────────────────────────────────────────────────
   loginButton: {
     backgroundColor: BLUE,
     borderRadius: 14,
@@ -494,18 +508,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
     overflow: 'hidden',
-    // Blue shadow
     shadowColor: BLUE_DARK,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.32, shadowRadius: 10, elevation: 5,
-    // Subtle inner border for dimension
     borderWidth: 1, borderColor: BLUE_LIGHT,
   },
   loginButtonDisabled: {
     opacity: 0.65,
     shadowOpacity: 0.08,
   },
-  // Gold shimmer bar at the top edge of the Sign In button
   loginButtonGoldBar: {
     position: 'absolute',
     top: 0, left: 0, right: 0,
@@ -521,7 +532,6 @@ const styles = StyleSheet.create({
     color: WHITE, letterSpacing: 0.4,
   },
 
-  // ── Divider ─────────────────────────────────────────────────────────────
   divider:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dividerLine: {
     flex: 1, height: StyleSheet.hairlineWidth,
@@ -529,7 +539,6 @@ const styles = StyleSheet.create({
   },
   dividerText: { fontSize: 12, color: TEXT_LIGHT, fontWeight: '500' },
 
-  // ── Sign Up Prompt ───────────────────────────────────────────────────────
   signupPrompt:     { flexDirection: 'row', justifyContent: 'center' },
   signupPromptText: { fontSize: 14, color: TEXT_MUTED },
   signupPromptLink: { fontSize: 14, color: BLUE, fontWeight: '700' },

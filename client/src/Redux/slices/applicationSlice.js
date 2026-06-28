@@ -2,6 +2,8 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../services/api';
 
+// ==================== FREELANCER ROUTES ====================
+
 // Apply for a job with comprehensive data (Freelancer)
 export const applyForJob = createAsyncThunk(
   'applications/applyForJob',
@@ -12,14 +14,12 @@ export const applyForJob = createAsyncThunk(
         return rejectWithValue({ message: 'No token found. Please login again.' });
       }
 
-      // Debug logging
       console.log('applyForJob called with formData type:', formData instanceof FormData ? 'FormData' : typeof formData);
       
       let response;
       
       // Check if formData is FormData (from file upload) or regular object
       if (formData instanceof FormData) {
-        // Log FormData contents for debugging
         console.log('=== FormData Contents ===');
         for (let pair of formData.entries()) {
           console.log(pair[0], ':', typeof pair[1] === 'object' ? (pair[1].name || pair[1].uri || 'Object') : pair[1]);
@@ -28,11 +28,9 @@ export const applyForJob = createAsyncThunk(
         response = await api.post('/applications/with-resume', formData, {
           headers: {
             Authorization: `Bearer ${token}`,
-            // Do NOT set Content-Type - let the browser/RN set it with boundary
           },
         });
       } else {
-        // Regular JSON request (no file)
         response = await api.post('/applications', formData, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -102,7 +100,134 @@ export const getApplicationById = createAsyncThunk(
   }
 );
 
-// Get job applications (Client)
+// Withdraw an application (Freelancer only)
+export const withdrawApplication = createAsyncThunk(
+  'applications/withdrawApplication',
+  async ({ applicationId, reason }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.patch(`/applications/${applicationId}/withdraw`, 
+        { reason },
+        {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('Withdraw application error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// ==================== SAVED JOBS ROUTES ====================
+
+// Save job for later
+export const saveJobForLater = createAsyncThunk(
+  'applications/saveJobForLater',
+  async ({ jobId, notes }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.post('/applications/save', 
+        { job_id: jobId, notes },
+        {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('Save job error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Unsave job
+export const unsaveJob = createAsyncThunk(
+  'applications/unsaveJob',
+  async (jobId, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.delete(`/applications/save/${jobId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      return { jobId, message: response.data.message };
+    } catch (error) {
+      console.error('Unsave job error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Get saved jobs
+export const getSavedJobs = createAsyncThunk(
+  'applications/getSavedJobs',
+  async ({ page = 1, limit = 20 } = {}, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.get('/applications/saved', {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page, limit }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Get saved jobs error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Check if job is saved
+export const checkJobSaved = createAsyncThunk(
+  'applications/checkJobSaved',
+  async (jobId, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.get(`/applications/saved/check/${jobId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      return { jobId, ...response.data };
+    } catch (error) {
+      console.error('Check job saved error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// ==================== CLIENT ROUTES ====================
+
+// Get applications for a specific job (Client only)
 export const getJobApplications = createAsyncThunk(
   'applications/getJobApplications',
   async ({ jobId, status, page = 1, limit = 20 }, { getState, rejectWithValue }) => {
@@ -131,7 +256,7 @@ export const getJobApplications = createAsyncThunk(
 // Get all applications for a client's jobs (Client)
 export const getClientApplications = createAsyncThunk(
   'applications/getClientApplications',
-  async ({ status, page = 1, limit = 20 } = {}, { getState, rejectWithValue }) => {
+  async ({ status, job_id, page = 1, limit = 20 } = {}, { getState, rejectWithValue }) => {
     try {
       const token = getState().auth.token;
       if (!token) {
@@ -140,6 +265,7 @@ export const getClientApplications = createAsyncThunk(
 
       const params = { page, limit };
       if (status && status !== 'All') params.status = status;
+      if (job_id) params.job_id = job_id;
 
       const response = await api.get('/client/applications', {
         headers: { Authorization: `Bearer ${token}` },
@@ -154,10 +280,10 @@ export const getClientApplications = createAsyncThunk(
   }
 );
 
-// Update application status (Client) - updated to accept interview data
+// Update application status (Client only) - supports interview data
 export const updateApplicationStatus = createAsyncThunk(
   'applications/updateApplicationStatus',
-  async ({ applicationId, status, interviewData }, { getState, rejectWithValue }) => {
+  async ({ applicationId, status, interview, offer }, { getState, rejectWithValue }) => {
     try {
       const token = getState().auth.token;
       if (!token) {
@@ -165,8 +291,11 @@ export const updateApplicationStatus = createAsyncThunk(
       }
 
       const payload = { status };
-      if (interviewData) {
-        payload.interviewData = interviewData;
+      if (interview) {
+        payload.interview = interview;
+      }
+      if (offer) {
+        payload.offer = offer;
       }
 
       const response = await api.patch(`/applications/${applicationId}/status`, 
@@ -187,7 +316,7 @@ export const updateApplicationStatus = createAsyncThunk(
   }
 );
 
-// Send offer to freelancer (Client)
+// Send offer to freelancer (Client only) - Using new schema
 export const sendOffer = createAsyncThunk(
   'applications/sendOffer',
   async ({ applicationId, amount, message }, { getState, rejectWithValue }) => {
@@ -237,78 +366,6 @@ export const downloadResume = createAsyncThunk(
   }
 );
 
-// Save job for later
-export const saveJobForLater = createAsyncThunk(
-  'applications/saveJobForLater',
-  async (jobId, { getState, rejectWithValue }) => {
-    try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
-      }
-
-      const response = await api.post('/applications/save', 
-        { job_id: jobId },
-        {
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      return response.data;
-    } catch (error) {
-      console.error('Save job error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
-
-// Unsave job
-export const unsaveJob = createAsyncThunk(
-  'applications/unsaveJob',
-  async (jobId, { getState, rejectWithValue }) => {
-    try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
-      }
-
-      const response = await api.delete(`/applications/save/${jobId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      return { jobId, message: response.data.message };
-    } catch (error) {
-      console.error('Unsave job error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
-
-// Get saved jobs
-export const getSavedJobs = createAsyncThunk(
-  'applications/getSavedJobs',
-  async (_, { getState, rejectWithValue }) => {
-    try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
-      }
-
-      const response = await api.get('/applications/saved', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      return response.data;
-    } catch (error) {
-      console.error('Get saved jobs error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
-
 // Mark job as completed (Client)
 export const completeJob = createAsyncThunk(
   'applications/completeJob',
@@ -337,27 +394,7 @@ export const completeJob = createAsyncThunk(
   }
 );
 
-// Get application statistics for client
-export const getApplicationStats = createAsyncThunk(
-  'applications/getApplicationStats',
-  async (_, { getState, rejectWithValue }) => {
-    try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
-      }
-
-      const response = await api.get('/client/application-stats', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      return response.data;
-    } catch (error) {
-      console.error('Get application stats error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
+// ==================== INITIAL STATE ====================
 
 const initialState = {
   applications: [],
@@ -372,17 +409,24 @@ const initialState = {
   applySuccess: false,
   updateSuccess: false,
   resumeUrl: null,
+  isSaved: false,
+  savedJobId: null,
   stats: {
     total: 0,
     pending: 0,
     reviewed: 0,
+    shortlisted: 0,
     interview: 0,
     offered: 0,
     hired: 0,
     completed: 0,
     rejected: 0,
+    withdrawn: 0,
   },
+  statusBreakdown: {},
 };
+
+// ==================== SLICE ====================
 
 const applicationSlice = createSlice({
   name: 'applications',
@@ -410,6 +454,10 @@ const applicationSlice = createSlice({
       state.totalPages = 1;
       state.currentPage = 1;
     },
+    clearSavedJobs: (state) => {
+      state.savedJobs = [];
+      state.savedJobIds = [];
+    },
     updateApplicationLocally: (state, action) => {
       const { applicationId, updates } = action.payload;
       const index = state.applications.findIndex(app => app._id === applicationId);
@@ -420,10 +468,17 @@ const applicationSlice = createSlice({
         state.selectedApplication = { ...state.selectedApplication, ...updates };
       }
     },
+    updateSavedJobNotes: (state, action) => {
+      const { jobId, notes } = action.payload;
+      const job = state.savedJobs.find(j => j._id === jobId);
+      if (job) {
+        job.notes = notes;
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
-      // Apply for Job
+      // ==================== APPLY FOR JOB ====================
       .addCase(applyForJob.pending, (state) => {
         state.isLoading = true;
         state.error = null;
@@ -442,10 +497,9 @@ const applicationSlice = createSlice({
         state.isLoading = false;
         state.error = action.payload;
         state.applySuccess = false;
-        console.error('Apply for job rejected:', action.payload);
       })
       
-      // Get Freelancer Applications
+      // ==================== GET FREELANCER APPLICATIONS ====================
       .addCase(getFreelancerApplications.pending, (state) => {
         state.isLoading = true;
         state.error = null;
@@ -462,7 +516,7 @@ const applicationSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Get Application By ID
+      // ==================== GET APPLICATION BY ID ====================
       .addCase(getApplicationById.pending, (state) => {
         state.isLoading = true;
         state.error = null;
@@ -476,7 +530,29 @@ const applicationSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Get Job Applications
+      // ==================== WITHDRAW APPLICATION ====================
+      .addCase(withdrawApplication.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(withdrawApplication.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.updateSuccess = true;
+        const updatedApp = action.payload.application;
+        const index = state.applications.findIndex(app => app._id === updatedApp._id);
+        if (index !== -1) {
+          state.applications[index] = updatedApp;
+        }
+        if (state.selectedApplication?._id === updatedApp._id) {
+          state.selectedApplication = updatedApp;
+        }
+      })
+      .addCase(withdrawApplication.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      
+      // ==================== GET JOB APPLICATIONS ====================
       .addCase(getJobApplications.pending, (state) => {
         state.isLoading = true;
         state.error = null;
@@ -493,7 +569,7 @@ const applicationSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Get Client Applications
+      // ==================== GET CLIENT APPLICATIONS ====================
       .addCase(getClientApplications.pending, (state) => {
         state.isLoading = true;
         state.error = null;
@@ -504,13 +580,14 @@ const applicationSlice = createSlice({
         state.totalCount = action.payload.totalApplications || 0;
         state.totalPages = action.payload.totalPages || 1;
         state.currentPage = action.payload.currentPage || 1;
+        state.statusBreakdown = action.payload.statusBreakdown || {};
       })
       .addCase(getClientApplications.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       })
       
-      // Update Application Status
+      // ==================== UPDATE APPLICATION STATUS ====================
       .addCase(updateApplicationStatus.pending, (state) => {
         state.isLoading = true;
         state.error = null;
@@ -536,7 +613,7 @@ const applicationSlice = createSlice({
         state.updateSuccess = false;
       })
       
-      // Send Offer
+      // ==================== SEND OFFER ====================
       .addCase(sendOffer.pending, (state) => {
         state.isLoading = true;
         state.error = null;
@@ -557,7 +634,7 @@ const applicationSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Download Resume
+      // ==================== DOWNLOAD RESUME ====================
       .addCase(downloadResume.pending, (state) => {
         state.isLoading = true;
         state.error = null;
@@ -571,40 +648,46 @@ const applicationSlice = createSlice({
         state.error = action.payload;
       })
       
-      // Save Job For Later
+      // ==================== SAVE JOB ====================
       .addCase(saveJobForLater.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
       .addCase(saveJobForLater.fulfilled, (state, action) => {
         state.isLoading = false;
-        if (action.payload.job) {
-          state.savedJobs.push(action.payload.job);
-          state.savedJobIds.push(action.payload.job._id);
+        if (action.payload.savedJob) {
+          const savedJob = action.payload.savedJob;
+          state.savedJobs.push(savedJob);
+          if (savedJob.job_id?._id) {
+            state.savedJobIds.push(savedJob.job_id._id);
+          }
         }
+        state.isSaved = true;
+        state.savedJobId = action.payload.savedJob?._id || null;
       })
       .addCase(saveJobForLater.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
-        console.error('Save job rejected:', action.payload);
       })
       
-      // Unsave Job
+      // ==================== UNSAVE JOB ====================
       .addCase(unsaveJob.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
       .addCase(unsaveJob.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.savedJobs = state.savedJobs.filter(job => job._id !== action.payload.jobId);
+        state.savedJobs = state.savedJobs.filter(job => job.job_id?._id !== action.payload.jobId);
         state.savedJobIds = state.savedJobIds.filter(id => id !== action.payload.jobId);
+        state.isSaved = false;
+        state.savedJobId = null;
       })
       .addCase(unsaveJob.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       })
       
-      // Get Saved Jobs
+      // ==================== GET SAVED JOBS ====================
       .addCase(getSavedJobs.pending, (state) => {
         state.isLoading = true;
         state.error = null;
@@ -612,22 +695,40 @@ const applicationSlice = createSlice({
       .addCase(getSavedJobs.fulfilled, (state, action) => {
         state.isLoading = false;
         state.savedJobs = action.payload.savedJobs || [];
-        state.savedJobIds = action.payload.savedJobs.map(job => job._id);
+        state.savedJobIds = action.payload.savedJobs
+          .map(job => job.job_id?._id)
+          .filter(id => id);
+        state.totalCount = action.payload.totalSaved || 0;
+        state.totalPages = action.payload.totalPages || 1;
+        state.currentPage = action.payload.currentPage || 1;
       })
       .addCase(getSavedJobs.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
-        console.error('Get saved jobs rejected:', action.payload);
       })
       
-      // Complete Job
+      // ==================== CHECK JOB SAVED ====================
+      .addCase(checkJobSaved.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(checkJobSaved.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isSaved = action.payload.isSaved || false;
+        state.savedJobId = action.payload.savedJobId || null;
+      })
+      .addCase(checkJobSaved.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      
+      // ==================== COMPLETE JOB ====================
       .addCase(completeJob.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
       .addCase(completeJob.fulfilled, (state, action) => {
         state.isLoading = false;
-        // Update any applications that were hired/offered to completed
         const jobId = action.payload.job._id;
         state.applications = state.applications.map(app => {
           if (app.job_id?._id === jobId && (app.status === 'hired' || app.status === 'offered')) {
@@ -642,23 +743,11 @@ const applicationSlice = createSlice({
       .addCase(completeJob.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
-      })
-      
-      // Get Application Stats
-      .addCase(getApplicationStats.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-      })
-      .addCase(getApplicationStats.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.stats = action.payload.stats || state.stats;
-      })
-      .addCase(getApplicationStats.rejected, (state, action) => {
-        state.isLoading = false;
-        state.error = action.payload;
       });
   },
 });
+
+// ==================== EXPORT ACTIONS ====================
 
 export const { 
   clearApplicationError, 
@@ -667,7 +756,28 @@ export const {
   clearSelectedApplication,
   clearResumeUrl,
   clearApplications,
-  updateApplicationLocally
+  clearSavedJobs,
+  updateApplicationLocally,
+  updateSavedJobNotes
 } = applicationSlice.actions;
+
+// ==================== SELECTORS ====================
+
+export const selectAllApplications = (state) => state.applications.applications;
+export const selectSelectedApplication = (state) => state.applications.selectedApplication;
+export const selectSavedJobs = (state) => state.applications.savedJobs;
+export const selectSavedJobIds = (state) => state.applications.savedJobIds;
+export const selectIsSaved = (state) => state.applications.isSaved;
+export const selectSavedJobId = (state) => state.applications.savedJobId;
+export const selectApplicationsLoading = (state) => state.applications.isLoading;
+export const selectApplicationsError = (state) => state.applications.error;
+export const selectApplicationsTotal = (state) => state.applications.totalCount;
+export const selectApplicationsTotalPages = (state) => state.applications.totalPages;
+export const selectApplicationsCurrentPage = (state) => state.applications.currentPage;
+export const selectApplySuccess = (state) => state.applications.applySuccess;
+export const selectUpdateSuccess = (state) => state.applications.updateSuccess;
+export const selectResumeUrl = (state) => state.applications.resumeUrl;
+export const selectApplicationStats = (state) => state.applications.stats;
+export const selectStatusBreakdown = (state) => state.applications.statusBreakdown;
 
 export default applicationSlice.reducer;

@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,14 +34,37 @@ const GREEN_MID  = '#86EFAC';
 const GREEN_DARK = '#059669';
 // ─────────────────────────────────────────────────────────────────────────────────
 
-export default function RoleSelection({ onNavigate }) {
+export default function RoleSelection({ onNavigate, navigation }) {
+  // Handle back navigation
+  const handleBack = () => {
+    // Navigate back to Login screen
+    if (onNavigate) {
+      onNavigate('Login');
+    } else if (navigation) {
+      navigation.goBack();
+    }
+  };
+
+  // Handle Android hardware back button
+  React.useEffect(() => {
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        handleBack();
+        return true; // Prevent default behavior
+      }
+    );
+
+    return () => backHandler.remove();
+  }, []);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
       <View style={styles.container}>
 
         {/* Back */}
-        <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('Login')}>
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <View style={styles.backIconWrap}>
             <Ionicons name="arrow-back" size={18} color={WHITE} />
           </View>

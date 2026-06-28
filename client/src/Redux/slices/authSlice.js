@@ -70,6 +70,66 @@ export const registerFreelancer = createAsyncThunk(
   }
 );
 
+// ==================== EMAIL VERIFICATION ====================
+// Verify Email
+export const verifyEmail = createAsyncThunk(
+  'auth/verifyEmail',
+  async ({ email, code }, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/auth/verify-email', { email, code });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Resend Verification Code
+export const resendVerification = createAsyncThunk(
+  'auth/resendVerification',
+  async (email, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/auth/resend-verification', { email });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// ==================== PASSWORD RESET ====================
+// Forgot Password - Request reset code
+export const forgotPassword = createAsyncThunk(
+  'auth/forgotPassword',
+  async (email, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/auth/forgot-password', { email });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Reset Password with code
+export const resetPassword = createAsyncThunk(
+  'auth/resetPassword',
+  async ({ email, code, new_password, confirm_password }, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/auth/reset-password', { 
+        email, 
+        code, 
+        new_password, 
+        confirm_password 
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// ==================== AUTHENTICATION ====================
 // Login
 export const login = createAsyncThunk(
   'auth/login',
@@ -136,6 +196,14 @@ export const updateProfile = createAsyncThunk(
           if (profileData[key] !== null && profileData[key] !== undefined && profileData[key] !== '') {
             if (key === 'skills' && Array.isArray(profileData[key])) {
               // Send skills as JSON string if array has items
+              if (profileData[key].length > 0) {
+                formData.append(key, JSON.stringify(profileData[key]));
+              }
+            } else if (key === 'languages' && Array.isArray(profileData[key])) {
+              if (profileData[key].length > 0) {
+                formData.append(key, JSON.stringify(profileData[key]));
+              }
+            } else if (key === 'certifications' && Array.isArray(profileData[key])) {
               if (profileData[key].length > 0) {
                 formData.append(key, JSON.stringify(profileData[key]));
               }
@@ -255,6 +323,8 @@ const initialState = {
   error: null,
   isInitialized: false,
   registrationSuccess: false,
+  requiresVerification: false,
+  verificationEmail: null,
   freelancers: {
     list: [],
     selectedFreelancer: null,
@@ -272,6 +342,7 @@ const authSlice = createSlice({
       state.error = null;
       state.freelancers.error = null;
       state.registrationSuccess = false;
+      state.requiresVerification = false;
     },
     updateUserLocally: (state, action) => {
       state.user = { ...state.user, ...action.payload };
@@ -286,12 +357,16 @@ const authSlice = createSlice({
     },
     clearRegistrationSuccess: (state) => {
       state.registrationSuccess = false;
+      state.requiresVerification = false;
+      state.verificationEmail = null;
     },
     setAuth: (state, action) => {
       state.user = action.payload.user;
       state.token = action.payload.token;
       state.isAuthenticated = !!action.payload.token;
       state.role = action.payload.user?.role || null;
+      state.requiresVerification = false;
+      state.verificationEmail = null;
     },
     clearAuth: (state) => {
       state.user = null;
@@ -300,6 +375,8 @@ const authSlice = createSlice({
       state.role = null;
       state.error = null;
       state.registrationSuccess = false;
+      state.requiresVerification = false;
+      state.verificationEmail = null;
       state.freelancers.list = [];
       state.freelancers.selectedFreelancer = null;
       state.freelancers.totalCount = 0;
@@ -329,16 +406,24 @@ const authSlice = createSlice({
         state.isLoading = true;
         state.error = null;
         state.registrationSuccess = false;
+        state.requiresVerification = false;
       })
-      .addCase(registerClient.fulfilled, (state) => {
+      .addCase(registerClient.fulfilled, (state, action) => {
         state.isLoading = false;
         state.error = null;
         state.registrationSuccess = true;
+        state.requiresVerification = action.payload?.requires_verification || false;
+        state.verificationEmail = action.payload?.user?.email_address || null;
+        // If user is returned and requires verification, set user data
+        if (action.payload?.user) {
+          state.user = action.payload.user;
+        }
       })
       .addCase(registerClient.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
         state.registrationSuccess = false;
+        state.requiresVerification = false;
       })
       
       // Register Freelancer
@@ -346,22 +431,93 @@ const authSlice = createSlice({
         state.isLoading = true;
         state.error = null;
         state.registrationSuccess = false;
+        state.requiresVerification = false;
       })
-      .addCase(registerFreelancer.fulfilled, (state) => {
+      .addCase(registerFreelancer.fulfilled, (state, action) => {
         state.isLoading = false;
         state.error = null;
         state.registrationSuccess = true;
+        state.requiresVerification = action.payload?.requires_verification || false;
+        state.verificationEmail = action.payload?.user?.email_address || null;
+        // If user is returned and requires verification, set user data
+        if (action.payload?.user) {
+          state.user = action.payload.user;
+        }
       })
       .addCase(registerFreelancer.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
         state.registrationSuccess = false;
+        state.requiresVerification = false;
+      })
+      
+      // Verify Email
+      .addCase(verifyEmail.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(verifyEmail.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isAuthenticated = true;
+        state.user = action.payload.user;
+        state.token = action.payload.token;
+        state.role = action.payload.user.role;
+        state.requiresVerification = false;
+        state.verificationEmail = null;
+        state.error = null;
+      })
+      .addCase(verifyEmail.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      
+      // Resend Verification
+      .addCase(resendVerification.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(resendVerification.fulfilled, (state) => {
+        state.isLoading = false;
+        state.error = null;
+      })
+      .addCase(resendVerification.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      
+      // Forgot Password
+      .addCase(forgotPassword.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(forgotPassword.fulfilled, (state) => {
+        state.isLoading = false;
+        state.error = null;
+      })
+      .addCase(forgotPassword.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      
+      // Reset Password
+      .addCase(resetPassword.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(resetPassword.fulfilled, (state) => {
+        state.isLoading = false;
+        state.error = null;
+      })
+      .addCase(resetPassword.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
       })
       
       // Login
       .addCase(login.pending, (state) => {
         state.isLoading = true;
         state.error = null;
+        state.requiresVerification = false;
       })
       .addCase(login.fulfilled, (state, action) => {
         state.isLoading = false;
@@ -370,6 +526,8 @@ const authSlice = createSlice({
         state.token = action.payload.token;
         state.role = action.payload.user.role;
         state.error = null;
+        state.requiresVerification = false;
+        state.verificationEmail = null;
       })
       .addCase(login.rejected, (state, action) => {
         state.isLoading = false;
@@ -377,6 +535,14 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         state.user = null;
         state.token = null;
+        // Check if this is a verification required error
+        if (action.payload?.requires_verification) {
+          state.requiresVerification = true;
+          state.verificationEmail = action.payload?.email || null;
+        } else {
+          state.requiresVerification = false;
+          state.verificationEmail = null;
+        }
       })
       
       // Get Profile
@@ -454,6 +620,8 @@ const authSlice = createSlice({
         state.role = null;
         state.error = null;
         state.registrationSuccess = false;
+        state.requiresVerification = false;
+        state.verificationEmail = null;
         state.freelancers.list = [];
         state.freelancers.selectedFreelancer = null;
         state.freelancers.totalCount = 0;

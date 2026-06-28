@@ -7,7 +7,6 @@
   import { SafeAreaView } from 'react-native-safe-area-context';
   import { Ionicons } from '@expo/vector-icons';
   import { useDispatch, useSelector } from 'react-redux';
-  import { getSentOffers, updateOfferStatus } from '../../Redux/slices/offerSlice';
   import { getClientJobs } from '../../Redux/slices/jobSlice';
   import { getClientApplications } from '../../Redux/slices/applicationSlice';
 

@@ -8,7 +8,6 @@ import Application from "../models/Application.js";
 import Job from "../models/Job.js";
 import Client from "../models/Client.js";
 import Freelancer from "../models/Freelancer.js";
-import Offer from "../models/Offer.js";
 import SavedJob from "../models/SavedJob.js";
 
 const router = express.Router();
@@ -68,7 +67,7 @@ router.post("/applications", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Cover letter is required" });
     }
 
-    const freelancer = await Freelancer.findById(req.user.id);
+    const freelancer = await Freelander.findById(req.user.id);
     if (!freelancer) {
       return res.status(404).json({ message: "Freelancer not found" });
     }
@@ -94,28 +93,50 @@ router.post("/applications", authMiddleware, async (req, res) => {
       job_id,
       freelancer_id: req.user.id,
       cover_letter: cover_letter.trim(),
-      proposed_rate: proposed_rate ? parseFloat(proposed_rate) : null,
+      proposed_rate: proposed_rate ? parseFloat(proposed_rate) : 0,
       status: "pending",
       viewed_by_client: false,
     };
 
+    // Handle education if provided
     if (education) {
-      newApplicationData.education = education;
+      if (typeof education === 'string') {
+        try {
+          newApplicationData.education = JSON.parse(education);
+        } catch (e) {
+          newApplicationData.education = education;
+        }
+      } else {
+        newApplicationData.education = education;
+      }
     }
 
-    if (experiences && Array.isArray(experiences)) {
-      newApplicationData.experiences = experiences;
+    // Handle experiences if provided
+    if (experiences) {
+      if (typeof experiences === 'string') {
+        try {
+          newApplicationData.experiences = JSON.parse(experiences);
+        } catch (e) {
+          // If parsing fails, treat as single experience
+          newApplicationData.experiences = [experiences];
+        }
+      } else if (Array.isArray(experiences)) {
+        newApplicationData.experiences = experiences;
+      } else {
+        newApplicationData.experiences = [experiences];
+      }
     }
 
     const application = new Application(newApplicationData);
     await application.save();
 
-    job.total_applicants += 1;
+    // Update job analytics
+    job.analytics.applications = (job.analytics.applications || 0) + 1;
     await job.save();
 
     const populatedApplication = await Application.findById(application._id)
-      .populate("job_id", "title budget_type budget_amount")
-      .populate("freelancer_id", "first_name last_name username profile_picture");
+      .populate("job_id", "title budget category job_type work_setup")
+      .populate("freelancer_id", "first_name last_name username profile_picture rating");
 
     res.status(201).json({
       message: "Application submitted successfully",
@@ -216,7 +237,7 @@ router.post("/applications/with-resume", authMiddleware, upload.single('resume')
       job_id,
       freelancer_id: req.user.id,
       cover_letter: cover_letter.trim(),
-      proposed_rate: proposed_rate ? parseFloat(proposed_rate) : null,
+      proposed_rate: proposed_rate ? parseFloat(proposed_rate) : 0,
       status: "pending",
       viewed_by_client: false,
       resume: resumeData,
@@ -226,19 +247,24 @@ router.post("/applications/with-resume", authMiddleware, upload.single('resume')
       newApplicationData.education = educationData;
     }
 
-    if (experiencesData && Array.isArray(experiencesData)) {
-      newApplicationData.experiences = experiencesData;
+    if (experiencesData) {
+      if (Array.isArray(experiencesData)) {
+        newApplicationData.experiences = experiencesData;
+      } else {
+        newApplicationData.experiences = [experiencesData];
+      }
     }
 
     const application = new Application(newApplicationData);
     await application.save();
 
-    job.total_applicants += 1;
+    // Update job analytics
+    job.analytics.applications = (job.analytics.applications || 0) + 1;
     await job.save();
 
     const populatedApplication = await Application.findById(application._id)
-      .populate("job_id", "title budget_type budget_amount")
-      .populate("freelancer_id", "first_name last_name username profile_picture");
+      .populate("job_id", "title budget category job_type work_setup")
+      .populate("freelancer_id", "first_name last_name username profile_picture rating");
 
     res.status(201).json({
       message: "Application submitted successfully",
@@ -268,7 +294,14 @@ router.get("/freelancer/applications", authMiddleware, async (req, res) => {
     if (status && status !== 'All') query.status = status;
 
     const applications = await Application.find(query)
-      .populate("job_id", "title description budget_type budget_amount required_skills work_setup")
+      .populate("job_id", "title description budget category required_skills work_setup job_type experience_level")
+      .populate({
+        path: "job_id",
+        populate: {
+          path: "client_id",
+          select: "first_name last_name company_name profile_picture rating"
+        }
+      })
       .sort({ applied_at: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -287,6 +320,55 @@ router.get("/freelancer/applications", authMiddleware, async (req, res) => {
   }
 });
 
+// Withdraw an application (Freelancer only)
+router.patch("/applications/:applicationId/withdraw", authMiddleware, async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+    const { reason } = req.body;
+
+    if (req.user.role !== "freelancer") {
+      return res.status(403).json({ message: "Only freelancers can withdraw applications" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(applicationId)) {
+      return res.status(400).json({ message: "Invalid application ID" });
+    }
+
+    const application = await Application.findById(applicationId);
+    if (!application) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
+    if (application.freelancer_id.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    if (application.status !== "pending" && application.status !== "reviewed") {
+      return res.status(400).json({ message: "Cannot withdraw application at this stage" });
+    }
+
+    application.status = "withdrawn";
+    application.withdrawn_at = new Date();
+    application.withdraw_reason = reason || null;
+    await application.save();
+
+    // Decrement job applications count
+    const job = await Job.findById(application.job_id);
+    if (job) {
+      job.analytics.applications = Math.max(0, (job.analytics.applications || 0) - 1);
+      await job.save();
+    }
+
+    res.json({
+      message: "Application withdrawn successfully",
+      application
+    });
+  } catch (error) {
+    console.error("Error withdrawing application:", error);
+    res.status(500).json({ message: "Error withdrawing application", error: error.message });
+  }
+});
+
 // ==================== SAVED JOBS ROUTES ====================
 
 // Save a job for later (Freelancer only)
@@ -296,7 +378,7 @@ router.post("/applications/save", authMiddleware, async (req, res) => {
       return res.status(403).json({ message: "Only freelancers can save jobs" });
     }
 
-    const { job_id } = req.body;
+    const { job_id, notes } = req.body;
 
     if (!job_id) {
       return res.status(400).json({ message: "Job ID is required" });
@@ -311,7 +393,7 @@ router.post("/applications/save", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "Freelancer not found" });
     }
 
-    const job = await Job.findById(job_id);
+    const job = await Job.findOne({ _id: job_id, is_deleted: false });
     if (!job) {
       return res.status(404).json({ message: "Job not found" });
     }
@@ -328,23 +410,28 @@ router.post("/applications/save", authMiddleware, async (req, res) => {
     const savedJob = new SavedJob({
       freelancer_id: req.user.id,
       job_id: job_id,
+      notes: notes || null,
     });
 
     await savedJob.save();
 
+    // Update job analytics
+    job.analytics.saves = (job.analytics.saves || 0) + 1;
+    await job.save();
+
     const populatedSavedJob = await SavedJob.findById(savedJob._id)
-      .populate("job_id", "title description budget_type budget_amount required_skills work_setup urgency_level experience_level job_type client_id created_at")
+      .populate("job_id", "title description budget category required_skills work_setup job_type experience_level")
       .populate({
         path: "job_id",
         populate: {
           path: "client_id",
-          select: "first_name last_name company_name profile_picture"
+          select: "first_name last_name company_name profile_picture rating"
         }
       });
 
     res.status(201).json({
       message: "Job saved successfully",
-      job: populatedSavedJob.job_id
+      savedJob: populatedSavedJob
     });
   } catch (error) {
     console.error("Error saving job:", error);
@@ -359,23 +446,28 @@ router.get("/applications/saved", authMiddleware, async (req, res) => {
       return res.status(403).json({ message: "Only freelancers can view saved jobs" });
     }
 
+    const { page = 1, limit = 20 } = req.query;
+
     const savedJobs = await SavedJob.find({ freelancer_id: req.user.id })
-      .populate("job_id", "title description budget_type budget_amount required_skills work_setup urgency_level experience_level job_type client_id created_at")
+      .populate("job_id", "title description budget category required_skills work_setup job_type experience_level")
       .populate({
         path: "job_id",
         populate: {
           path: "client_id",
-          select: "first_name last_name company_name profile_picture"
+          select: "first_name last_name company_name profile_picture rating"
         }
       })
-      .sort({ saved_at: -1 });
+      .sort({ saved_at: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
 
     const validSavedJobs = savedJobs.filter(item => item.job_id !== null);
-    const jobs = validSavedJobs.map(item => item.job_id);
     const total = await SavedJob.countDocuments({ freelancer_id: req.user.id });
 
     res.json({
-      savedJobs: jobs,
+      savedJobs: validSavedJobs,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
       totalSaved: total
     });
   } catch (error) {
@@ -406,6 +498,13 @@ router.delete("/applications/save/:jobId", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "Saved job not found" });
     }
 
+    // Update job analytics
+    const job = await Job.findById(jobId);
+    if (job) {
+      job.analytics.saves = Math.max(0, (job.analytics.saves || 0) - 1);
+      await job.save();
+    }
+
     res.json({
       message: "Job removed from saved list",
       jobId: jobId
@@ -413,6 +512,34 @@ router.delete("/applications/save/:jobId", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Error unsaving job:", error);
     res.status(500).json({ message: "Error unsaving job", error: error.message });
+  }
+});
+
+// Check if job is saved by freelancer
+router.get("/applications/saved/check/:jobId", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "freelancer") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const { jobId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      return res.status(400).json({ message: "Invalid job ID format" });
+    }
+
+    const saved = await SavedJob.findOne({
+      freelancer_id: req.user.id,
+      job_id: jobId
+    });
+
+    res.json({
+      isSaved: !!saved,
+      savedJobId: saved ? saved._id : null
+    });
+  } catch (error) {
+    console.error("Error checking saved job:", error);
+    res.status(500).json({ message: "Error checking saved job", error: error.message });
   }
 });
 
@@ -431,7 +558,7 @@ router.get("/jobs/:jobId/applications", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Invalid job ID" });
     }
 
-    const job = await Job.findById(jobId);
+    const job = await Job.findOne({ _id: jobId, is_deleted: false });
     if (!job) {
       return res.status(404).json({ message: "Job not found" });
     }
@@ -445,13 +572,14 @@ router.get("/jobs/:jobId/applications", authMiddleware, async (req, res) => {
     if (status && status !== 'All') query.status = status;
 
     const applications = await Application.find(query)
-      .populate("freelancer_id", "first_name last_name username email_address profile_picture skills experience_level hourly_rate bio_about_me resume resume_cv_url")
+      .populate("freelancer_id", "first_name last_name username email_address profile_picture skills experience_level years_of_experience hourly_rate bio_about_me rating")
       .sort({ applied_at: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
     const total = await Application.countDocuments(query);
 
+    // Mark applications as viewed
     await Application.updateMany(
       { job_id: jobId, viewed_by_client: false },
       { viewed_by_client: true }
@@ -473,7 +601,7 @@ router.get("/jobs/:jobId/applications", authMiddleware, async (req, res) => {
 router.patch("/applications/:applicationId/status", authMiddleware, async (req, res) => {
   try {
     const { applicationId } = req.params;
-    const { status, interviewData } = req.body;
+    const { status, interview } = req.body;
 
     if (req.user.role !== "client") {
       return res.status(403).json({ message: "Access denied. Clients only." });
@@ -483,8 +611,8 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
       return res.status(400).json({ message: "Invalid application ID" });
     }
 
-    // Updated valid statuses - replaced 'accepted' with 'completed'
-    const validStatuses = ["pending", "reviewed", "interview", "offered", "hired", "rejected", "completed"];
+    // Valid statuses from Application schema
+    const validStatuses = ["pending", "reviewed", "shortlisted", "interview", "offered", "hired", "rejected", "completed", "withdrawn"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
@@ -504,25 +632,35 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
     application.status = status;
     
     // If status is 'interview', save interview data
-    if (status === 'interview' && interviewData) {
-      application.interview_data = {
-        scheduled_date: interviewData.scheduledDate,
-        meeting_link: interviewData.meetingLink,
-        notes: interviewData.notes,
+    if (status === 'interview' && interview) {
+      application.interview = {
+        scheduled_date: interview.scheduled_date ? new Date(interview.scheduled_date) : null,
+        meeting_link: interview.meeting_link || null,
+        notes: interview.notes || null,
         sent_at: new Date(),
       };
     }
 
-    // If status is 'hired', update job status to 'in_progress'
+    // If status is 'offered', update offer data
+    if (status === 'offered' && req.body.offer) {
+      application.offer = {
+        amount: req.body.offer.amount || null,
+        message: req.body.offer.message || null,
+        sent_at: new Date(),
+      };
+    }
+
+    // If status is 'hired', update job status to 'in_progress' and assign freelancer
     if (status === 'hired') {
       const job = await Job.findById(application.job_id._id);
-      if (job && job.status === 'open') {
+      if (job) {
         job.status = 'in_progress';
+        job.assigned_freelancer_id = application.freelancer_id._id;
         await job.save();
       }
     }
 
-    // If status is 'completed', update job status to 'completed'
+    // If status is 'completed', update job status
     if (status === 'completed') {
       const job = await Job.findById(application.job_id._id);
       if (job) {
@@ -543,156 +681,42 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
   }
 });
 
-// Send offer to freelancer (Client only)
-router.post("/applications/:applicationId/offer", authMiddleware, async (req, res) => {
+// Get application details (Client or Freelancer)
+router.get("/applications/:applicationId", authMiddleware, async (req, res) => {
   try {
     const { applicationId } = req.params;
-    const { amount, message } = req.body;
-
-    if (req.user.role !== "client") {
-      return res.status(403).json({ message: "Access denied. Clients only." });
-    }
 
     if (!mongoose.Types.ObjectId.isValid(applicationId)) {
       return res.status(400).json({ message: "Invalid application ID" });
-    }
-
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ message: "Valid offer amount is required" });
     }
 
     const application = await Application.findById(applicationId)
-      .populate("job_id", "client_id title description")
-      .populate("freelancer_id", "_id first_name last_name email_address");
+      .populate("job_id", "title description budget category required_skills work_setup job_type experience_level")
+      .populate({
+        path: "job_id",
+        populate: {
+          path: "client_id",
+          select: "first_name last_name company_name profile_picture rating"
+        }
+      })
+      .populate("freelancer_id", "first_name last_name username email_address profile_picture skills experience_level years_of_experience hourly_rate bio_about_me rating portfolio");
 
     if (!application) {
       return res.status(404).json({ message: "Application not found" });
     }
 
-    if (application.job_id.client_id.toString() !== req.user.id) {
+    // Check authorization
+    const isClient = application.job_id.client_id._id.toString() === req.user.id;
+    const isFreelancer = application.freelancer_id._id.toString() === req.user.id;
+
+    if (!isClient && !isFreelancer && req.user.role !== 'admin') {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    const existingOffer = await Offer.findOne({
-      client_id: req.user.id,
-      freelancer_id: application.freelancer_id._id,
-      job_id: application.job_id._id,
-      status: { $in: ['pending', 'accepted'] }
-    });
-
-    if (existingOffer) {
-      return res.status(400).json({ message: "An offer already exists for this freelancer on this job" });
-    }
-
-    const offer = new Offer({
-      client_id: req.user.id,
-      freelancer_id: application.freelancer_id._id,
-      job_id: application.job_id._id,
-      amount: parseFloat(amount),
-      message: message || null,
-      status: "pending",
-      viewed_by_freelancer: false,
-      viewed_by_client: true,
-    });
-
-    await offer.save();
-
-    application.status = "offered";
-    application.offer_amount = parseFloat(amount);
-    application.offer_message = message;
-    application.offer_sent_at = new Date();
-    await application.save();
-
-    const populatedOffer = await Offer.findById(offer._id)
-      .populate("freelancer_id", "first_name last_name username profile_picture")
-      .populate("job_id", "title budget_type budget_amount");
-
-    res.status(201).json({
-      message: "Offer sent successfully",
-      offer: populatedOffer,
-      application
-    });
+    res.json({ application });
   } catch (error) {
-    console.error("Error sending offer:", error);
-    res.status(500).json({ message: "Error sending offer", error: error.message });
-  }
-});
-
-// Download resume from application (Client only)
-router.get("/applications/:applicationId/resume", authMiddleware, async (req, res) => {
-  try {
-    const { applicationId } = req.params;
-
-    if (req.user.role !== "client") {
-      return res.status(403).json({ message: "Access denied. Clients only." });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(applicationId)) {
-      return res.status(400).json({ message: "Invalid application ID" });
-    }
-
-    const application = await Application.findById(applicationId).populate("job_id", "client_id");
-    
-    if (!application) {
-      return res.status(404).json({ message: "Application not found" });
-    }
-
-    if (application.job_id.client_id.toString() !== req.user.id) {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
-    if (!application.resume || !application.resume.url) {
-      return res.status(404).json({ message: "No resume uploaded" });
-    }
-
-    res.json({ 
-      resume_url: application.resume.url,
-      resume_name: application.resume.name 
-    });
-  } catch (error) {
-    console.error("Error fetching resume:", error);
-    res.status(500).json({ message: "Error fetching resume", error: error.message });
-  }
-});
-
-// Mark job as completed (Client only)
-router.patch("/jobs/:jobId/complete", authMiddleware, async (req, res) => {
-  try {
-    const { jobId } = req.params;
-
-    if (req.user.role !== "client") {
-      return res.status(403).json({ message: "Access denied. Clients only." });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(jobId)) {
-      return res.status(400).json({ message: "Invalid job ID" });
-    }
-
-    const job = await Job.findById(jobId);
-    if (!job) {
-      return res.status(404).json({ message: "Job not found" });
-    }
-
-    if (job.client_id.toString() !== req.user.id) {
-      return res.status(403).json({ message: "Access denied. This job does not belong to you." });
-    }
-
-    job.status = "completed";
-    await job.save();
-
-    // Update all applications for this job to 'completed'
-    await Application.updateMany(
-      { job_id: jobId, status: { $in: ['hired', 'offered'] } },
-      { status: 'completed' }
-    );
-
-    res.json({
-      message: "Job marked as completed",
-      job
-    });
-  } catch (error) {
-    console.error("Error completing job:", error);
-    res.status(500).json({ message: "Error completing job", error: error.message });
+    console.error("Error fetching application:", error);
+    res.status(500).json({ message: "Error fetching application", error: error.message });
   }
 });
 
@@ -703,10 +727,14 @@ router.get("/client/applications", authMiddleware, async (req, res) => {
       return res.status(403).json({ message: "Access denied. Clients only." });
     }
 
-    const { status, page = 1, limit = 20 } = req.query;
+    const { status, page = 1, limit = 20, job_id } = req.query;
 
     // Get all jobs for this client
-    const jobs = await Job.find({ client_id: req.user.id }).select('_id');
+    const jobQuery = { client_id: req.user.id, is_deleted: false };
+    if (job_id) {
+      jobQuery._id = job_id;
+    }
+    const jobs = await Job.find(jobQuery).select('_id');
     const jobIds = jobs.map(job => job._id);
 
     if (jobIds.length === 0) {
@@ -722,19 +750,31 @@ router.get("/client/applications", authMiddleware, async (req, res) => {
     if (status && status !== 'All') query.status = status;
 
     const applications = await Application.find(query)
-      .populate("job_id", "title description budget_type budget_amount")
-      .populate("freelancer_id", "first_name last_name username email_address profile_picture skills experience_level")
+      .populate("job_id", "title description budget category job_type work_setup")
+      .populate("freelancer_id", "first_name last_name username email_address profile_picture skills experience_level years_of_experience rating")
       .sort({ applied_at: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
     const total = await Application.countDocuments(query);
 
+    // Get status breakdown
+    const statusBreakdown = await Application.aggregate([
+      { $match: { job_id: { $in: jobIds } } },
+      { $group: { _id: "$status", count: { $sum: 1 } } }
+    ]);
+
+    const breakdown = {};
+    statusBreakdown.forEach(item => {
+      breakdown[item._id] = item.count;
+    });
+
     res.json({
       applications,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
-      totalApplications: total
+      totalApplications: total,
+      statusBreakdown: breakdown
     });
   } catch (error) {
     console.error("Error fetching client applications:", error);

@@ -8,7 +8,6 @@ import Login from './components/dashboard/Login';
 import RoleSelection from './components/dashboard/RoleSelection';
 import ClientRegistration from './components/client/ClientRegistration';
 import FreelancerRegistration from './components/freelancer/FreelancerRegistration';
-import OnboardingScreen from './components/dashboard/OnboardingScreen';
 
 // ── Client Screens ──────────────────────────────────────
 import ClientScreen from './components/client/ClientScreen';
@@ -21,6 +20,7 @@ import ClientMessagesScreen from './components/client/Message';
 import ClientEditProfile from './components/client/ClientEditProfile';
 import RatingClient from './components/client/RatingClient';
 import Settings from './components/client/Settings';
+import Notif from './components/client/Notif';
 
 // ── Freelancer Screens ──────────────────────────────────
 import FreelancerScreen from './components/freelancer/FreelancerScreen';
@@ -33,41 +33,54 @@ import MyApplications from './components/freelancer/MyApplications';
 import EditProfile from './components/freelancer/EditProfile';
 import RatingFreelancer from './components/freelancer/RatingFreelancer';
 
-// ── Flag to track if onboarding has been shown ──────────
-let onboardingShownThisSession = false;
-
 export default function AppNavigator() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
-  const [route, setRoute] = useState('Home');
+  const [route, setRoute] = useState('Home'); // Start with Home
   const [isLoading, setIsLoading] = useState(true);
-  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (!isAuthenticated && !onboardingShownThisSession && !showOnboarding) {
-        console.log('Showing onboarding screen');
-        setShowOnboarding(true);
-        setRoute('Onboarding');
-        onboardingShownThisSession = true;
-      } else {
-        console.log('Skipping onboarding - isAuthenticated:', isAuthenticated, 'onboardingShown:', onboardingShownThisSession);
-      }
       setIsLoading(false);
     }, 500);
     
     return () => clearTimeout(timer);
-  }, [isAuthenticated, showOnboarding]);
+  }, []);
+
+  // Auto-redirect authenticated users to their dashboard
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && user) {
+      const role = user.role?.toLowerCase();
+      // If user is on Home or Login, redirect to their dashboard
+      if (route === 'Home' || route === 'Login') {
+        console.log('Auto-redirecting to dashboard');
+        if (role === 'client') {
+          setRoute('Client');
+        } else if (role === 'freelancer') {
+          setRoute('Freelancer');
+        }
+      }
+    }
+  }, [isLoading, isAuthenticated, user, route]);
 
   const handleNavigate = useCallback((screen, params) => {
     console.log('==> Navigating to:', screen, params);
+    
+    
+    if (isAuthenticated && user) {
+      const role = user.role?.toLowerCase();
+      if (screen === 'Home' || screen === 'Login') {
+        if (role === 'client') {
+          setRoute('Client');
+          return;
+        } else if (role === 'freelancer') {
+          setRoute('Freelancer');
+          return;
+        }
+      }
+    }
+    
     setRoute(screen);
-  }, []);
-
-  const handleOnboardingComplete = useCallback(() => {
-    console.log('Onboarding completed');
-    setShowOnboarding(false);
-    setRoute('Home');
-  }, []);
+  }, [isAuthenticated, user]);
 
   // ── Get current screen based on auth state ──────────────
   const getScreen = useCallback(() => {
@@ -75,22 +88,29 @@ export default function AppNavigator() {
       return 'Loading';
     }
 
-    if (showOnboarding) {
-      return 'Onboarding';
-    }
-
+    // If authenticated, redirect to dashboard if on Home or Login
     if (isAuthenticated && user) {
       const role = user.role?.toLowerCase();
       
-      // Home route - redirect to appropriate dashboard
       if (route === 'Home' || route === 'Login') {
         if (role === 'freelancer') return 'Freelancer';
         if (role === 'client') return 'Client';
       }
+      
+      // For any other route, just return it
+      return route;
     }
-    
-    return route;
-  }, [isLoading, showOnboarding, isAuthenticated, user, route]);
+
+    // If not authenticated, show Home or auth screens
+    if (route === 'Home') return 'Home';
+    if (route === 'Login') return 'Login';
+    if (route === 'RoleSelection') return 'RoleSelection';
+    if (route === 'ClientRegistration') return 'ClientRegistration';
+    if (route === 'FreelancerRegistration') return 'FreelancerRegistration';
+
+    // Default to Home for all other routes when not authenticated
+    return 'Home';
+  }, [isLoading, isAuthenticated, user, route]);
 
   const activeRoute = getScreen();
 
@@ -103,14 +123,11 @@ export default function AppNavigator() {
     );
   }
 
-  // ── Onboarding Screen ──────────────────────────────────
-  if (activeRoute === 'Onboarding') {
-    return <OnboardingScreen onComplete={handleOnboardingComplete} />;
-  }
-
   // ── Screen Router ──────────────────────────────────────
   switch (activeRoute) {
     // ── Auth & Public ──────────────────────────────────────
+    case 'Home':
+      return <Home onNavigate={handleNavigate} />;
     case 'Login':
       return <Login onNavigate={handleNavigate} />;
     case 'RoleSelection':
@@ -139,6 +156,8 @@ export default function AppNavigator() {
     case 'RatingClient':
       return <RatingClient onNavigate={handleNavigate} />;
     case 'Settings':
+      return <Settings onNavigate={handleNavigate} />;
+    case 'Notif':
       return <Settings onNavigate={handleNavigate} />;
 
     // ── Freelancer Screens ──────────────────────────────────
@@ -174,8 +193,7 @@ export default function AppNavigator() {
       }
       return <Messages onNavigate={handleNavigate} />;
 
-    // ── Home / Default ──────────────────────────────────────
-    case 'Home':
+    // ── Default ──────────────────────────────────────────────
     default:
       return <Home onNavigate={handleNavigate} />;
   }

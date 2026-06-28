@@ -1,18 +1,19 @@
-// server.js
+
 import "./src/config/env.js";
 import express from "express";
 import cors from "cors";
-// REMOVE: import multer from "multer";
+
 import authRoutes from "./src/routes/authRoutes.js";
 import jobRoutes from "./src/routes/jobRoutes.js";
-import offerRoutes from "./src/routes/offerRoutes.js";
 import applicationRoutes from "./src/routes/applicationRoutes.js";
 import messageRoutes from "./src/routes/messageRoutes.js";
 import connectDB from "./src/config/mongodb.js";
-import ratingRoutes from "./src/routes/ratingRoutes.js";
+import Contract from "./src/routes/contractRoutes.js";
+import ProjectUpdate from "./src/routes/projectUpdateRoutes.js";
+
 
 const app = express();
-// REMOVE: const upload = multer();
+
 
 connectDB();
 
@@ -20,15 +21,16 @@ connectDB();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// REMOVE: app.use(upload.none()); // This is causing the conflict!
 
-// Routes
 app.use("/api/auth", authRoutes);
 app.use("/api", jobRoutes);
-app.use("/api", offerRoutes);
 app.use("/api", applicationRoutes);
 app.use("/api", messageRoutes);
-app.use("/api", ratingRoutes);
+app.use("/api", ProjectUpdate);
+app.use("/api", Contract);
+
+
+
 
 app.use((err, req, res, next) => {
   console.error('=== GLOBAL ERROR HANDLER ===');
