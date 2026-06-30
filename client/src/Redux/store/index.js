@@ -5,23 +5,16 @@ import applicationReducer from '../slices/applicationSlice';
 import messageReducer from '../slices/messageSlice';
 import ratingReducer from '../slices/ratingSlice';
 import contractReducer from '../slices/contractSlice';
-import ProjectUpdateReducer, { getProjectUpdateStats } from '../slices/projectUpdateSlice';
-
-
-
-
+import projectUpdateReducer from '../slices/projectUpdateSlice'; // Renamed import
 
 export const store = configureStore({
   reducer: {
-    auth: authReducer, 
-    jobs: jobReducer, 
+    auth: authReducer,
+    jobs: jobReducer,
     applications: applicationReducer,
     messages: messageReducer,
     ratings: ratingReducer,
     contracts: contractReducer,
-    getProjectUpdates: ProjectUpdateReducer,
-   
-   
-    
+    projectUpdates: projectUpdateReducer, // ← Change this to match selectors
   },
 });

@@ -21,6 +21,7 @@ import {
   getSavedJobs,
   unsaveJob,
 } from '../../Redux/slices/applicationSlice';
+import { getContractById } from '../../Redux/slices/contractSlice';
 
 // ── Vantara Design tokens ──────────────────────────────────────────────────────────
 const NAVY       = '#071A3E';
@@ -62,8 +63,24 @@ const getStatus = (s) => STATUS[s] || { bg: `${BLUE}15`, border: BORDER, text: T
 
 const TABS = ['Applied', 'Saved'];
 
-// ── Status Timeline Component with Interview Details ──
-const StatusTimeline = ({ history, currentStatus, interviewDetails }) => {
+// ── Get Client Name Helper ──
+const getClientName = (job) => {
+  const client = job?.client_id || {};
+  const firstName = client.first_name || '';
+  const lastName = client.last_name || '';
+  const fullName = (firstName + ' ' + lastName).trim();
+  return fullName || client.company_name || client.username || 'Client';
+};
+
+const getClientInitials = (job) => {
+  const client = job?.client_id || {};
+  const firstName = client.first_name || '';
+  const lastName = client.last_name || '';
+  return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase() || '?';
+};
+
+
+const StatusTimeline = ({ history, currentStatus, interviewDetails, contractDetails }) => {
   const STATUS_ICONS = {
     pending: 'time-outline',
     reviewed: 'eye-outline',
@@ -114,6 +131,7 @@ const StatusTimeline = ({ history, currentStatus, interviewDetails }) => {
     }
   };
 
+  // If no history, show current status
   if (!history || history.length === 0) {
     const color = STATUS_COLORS[currentStatus] || '#0055A5';
     const label = STATUS_LABELS[currentStatus] || currentStatus || 'Pending';
@@ -134,84 +152,128 @@ const StatusTimeline = ({ history, currentStatus, interviewDetails }) => {
     );
   }
 
+  // Sort history by date (oldest first)
   const sortedHistory = [...history].sort((a, b) => 
-    new Date(a.changed_at) - new Date(b.changed_at)
+    new Date(a.changed_at || a.created_at || a.updated_at) - new Date(b.changed_at || b.created_at || b.updated_at)
   );
+
+  // Check if hired to mark interview as completed
+  const isHired = currentStatus === 'hired';
 
   return (
     <View style={tl.container}>
       {sortedHistory.map((item, index) => {
         const isLast = index === sortedHistory.length - 1;
-        const status = item.status;
+        const status = item.status || item.new_status || currentStatus;
         const color = STATUS_COLORS[status] || '#0055A5';
         const icon = STATUS_ICONS[status] || 'ellipse-outline';
-        const label = STATUS_LABELS[status] || status;
+        const label = STATUS_LABELS[status] || status || 'Status Update';
         
-        const isInterview = status === 'interview' && item.interview_details;
-        const isOffer = status === 'offered' && item.offer_details;
+        const isInterview = status === 'interview' && (item.interview_details || interviewDetails);
+        const isOffer = status === 'offered' && (item.offer_details || item.offer);
+        const isInterviewCompleted = isHired && status === 'interview';
+        
+        // Get the date from the history item
+        const itemDate = item.changed_at || item.created_at || item.updated_at || item.date || new Date().toISOString();
+        
+        // Use interview details from item or from props
+        const interviewData = item.interview_details || interviewDetails;
 
         return (
           <View key={index} style={tl.timelineItem}>
             {!isLast && <View style={[tl.timelineLine, { backgroundColor: color }]} />}
             
-            <View style={[tl.dot, { backgroundColor: color }]}>
-              <Ionicons name={icon} size={12} color="#fff" />
+            <View style={[tl.dot, { 
+              backgroundColor: isInterviewCompleted ? GREEN : color,
+            }]}>
+              {isInterviewCompleted ? (
+                <Ionicons name="checkmark" size={12} color="#fff" />
+              ) : (
+                <Ionicons name={icon} size={12} color="#fff" />
+              )}
             </View>
             
             <View style={tl.timelineContent}>
-              <Text style={tl.statusLabel}>{label}</Text>
-              <Text style={tl.statusDate}>{formatDate(item.changed_at)}</Text>
+              <Text style={[tl.statusLabel, { 
+                color: isInterviewCompleted ? GREEN : TEXT_MAIN 
+              }]}>
+                {isInterviewCompleted ? 'Interview Completed' : label}
+              </Text>
+              <Text style={tl.statusDate}>{formatDate(itemDate)}</Text>
               
-              {isInterview && item.interview_details && (
+              {/* Interview Details */}
+              {isInterview && interviewData && (
                 <View style={tl.detailBox}>
                   <View style={tl.detailRow}>
                     <Ionicons name="calendar-outline" size={12} color={STATUS_COLORS.interview} />
                     <Text style={tl.detailText}>
-                      📅 {formatDate(item.interview_details.scheduled_date)}
+                      Scheduled: {formatDate(interviewData.scheduled_date || interviewData.interview_date)}
                     </Text>
                   </View>
-                  {item.interview_details.meeting_link && (
+                  {interviewData.meeting_link && (
                     <TouchableOpacity 
                       style={tl.detailRow} 
-                      onPress={() => handleOpenLink(item.interview_details.meeting_link)}
+                      onPress={() => handleOpenLink(interviewData.meeting_link)}
                       activeOpacity={0.7}
                     >
                       <Ionicons name="link-outline" size={12} color={BLUE} />
                       <Text style={[tl.detailText, { color: BLUE, textDecorationLine: 'underline' }]} numberOfLines={1}>
-                        {item.interview_details.meeting_link}
+                        {interviewData.meeting_link}
                       </Text>
                     </TouchableOpacity>
                   )}
-                  {item.interview_details.notes && (
+                  {interviewData.notes && (
                     <View style={tl.detailRow}>
                       <Ionicons name="document-text-outline" size={12} color={STATUS_COLORS.interview} />
                       <Text style={tl.detailText} numberOfLines={3}>
-                        📝 {item.interview_details.notes}
+                        Notes: {interviewData.notes}
                       </Text>
                     </View>
                   )}
                 </View>
               )}
               
-              {isOffer && item.offer_details && (
+              {/* Interview Completed */}
+              {isInterviewCompleted && (
+                <View style={[tl.detailBox, { backgroundColor: GREEN_SOFT, borderColor: GREEN_MID }]}>
+                  <View style={tl.detailRow}>
+                    <Ionicons name="checkmark-circle" size={14} color={GREEN} />
+                    <Text style={[tl.detailText, { color: GREEN, fontWeight: '600' }]}>
+                      Interview completed successfully
+                    </Text>
+                  </View>
+                  {interviewData && (
+                    <View style={tl.detailRow}>
+                      <Ionicons name="calendar-outline" size={12} color={GREEN} />
+                      <Text style={[tl.detailText, { color: GREEN }]}>
+                        Held on: {formatDate(interviewData.scheduled_date || interviewData.interview_date)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              
+              {/* Offer Details */}
+              {isOffer && (item.offer_details || item.offer) && (
                 <View style={tl.detailBox}>
                   <View style={tl.detailRow}>
                     <Ionicons name="cash-outline" size={12} color={STATUS_COLORS.offered} />
                     <Text style={[tl.detailText, { fontWeight: 'bold', color: STATUS_COLORS.offered }]}>
-                      ₱{Number(item.offer_details.amount).toLocaleString()}
+                      ₱{Number((item.offer_details?.amount || item.offer?.amount || 0)).toLocaleString()}
                     </Text>
                   </View>
-                  {item.offer_details.message && (
+                  {(item.offer_details?.message || item.offer?.message) && (
                     <View style={tl.detailRow}>
                       <Ionicons name="chatbubble-outline" size={12} color={STATUS_COLORS.offered} />
                       <Text style={tl.detailText} numberOfLines={2}>
-                        {item.offer_details.message}
+                        {item.offer_details?.message || item.offer?.message}
                       </Text>
                     </View>
                   )}
                 </View>
               )}
               
+              {/* Additional notes */}
               {item.note && !isInterview && !isOffer && (
                 <Text style={tl.noteText}>{item.note}</Text>
               )}
@@ -298,7 +360,7 @@ const tl = StyleSheet.create({
 });
 
 // ── Bottom Tab Bar ─────────────────
-function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
+function BottomTabBar({ activeTab, onTabPress }) {
   const tabs = [
     { key: 'FreelancerDashboard', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
     { key: 'Messages', label: 'Messages', icon: 'chatbubble-outline', activeIcon: 'chatbubble' },
@@ -313,7 +375,6 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
         {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
           const isMyJobs = tab.key === 'MyJobs';
-          const hasBadge = tab.key === 'Messages' && pendingOffers > 0;
           
           return (
             <TouchableOpacity
@@ -341,7 +402,6 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
                       size={22}
                       color={isActive ? BLUE : TEXT_LIGHT}
                     />
-                    {hasBadge && <View style={styles.tabBadgeDot} />}
                   </View>
                   <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
                     {tab.label}
@@ -410,16 +470,26 @@ const pill = StyleSheet.create({
 
 const Divider = () => <View style={{ height: 1, backgroundColor: BORDER, marginVertical: 10 }} />;
 
-// Application Card - UPDATED with Interview Details
-const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onViewTimeline }) => {
+// Application Card - UPDATED with full status history
+const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onViewTimeline, onViewContract }) => {
   const job = application.job_id;
   const st  = getStatus(application.status);
   const isOffered = application.status === 'offered' || application.status === 'interview';
   const hasHistory = application.status_history && application.status_history.length > 0;
+  const isHired = application.status === 'hired';
+  const hasContract = !!application.contractId;
   
   // Get interview details from application
   const interviewDetails = application.interview_details || 
                           (application.status_history?.find(h => h.status === 'interview')?.interview_details);
+
+  // Check if there are interview details
+  const hasInterview = (application.status === 'interview' || isHired) && interviewDetails;
+  const isInterviewCompleted = isHired && hasInterview;
+
+  // Get client name
+  const clientName = getClientName(job);
+  const clientInitials = getClientInitials(job);
 
   return (
     <TouchableOpacity 
@@ -434,9 +504,7 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onVi
         <View style={ac.topMeta}>
           <Text style={ac.jobTitle} numberOfLines={2}>{job?.title || 'Unknown Job'}</Text>
           <TouchableOpacity style={ac.clientRow} onPress={() => onViewClient(job)} activeOpacity={0.7}>
-            <Text style={ac.clientName}>
-              {job?.client_id?.company_name || job?.client_id?.first_name || 'Client'}
-            </Text>
+            <Text style={ac.clientName}>{clientName}</Text>
             <Ionicons name="chevron-forward" size={11} color={BLUE} />
           </TouchableOpacity>
         </View>
@@ -452,32 +520,64 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onVi
         <Pill icon="calendar-outline" label={`Applied ${timeAgo(application.applied_at)}`} />
       </View>
 
-      {/* Show Interview Details if status is interview */}
-      {application.status === 'interview' && interviewDetails && (
-        <View style={ac.interviewBanner}>
-          <Ionicons name="calendar-outline" size={14} color={GOLD_DK} />
-          <View style={ac.interviewContent}>
-            <Text style={ac.interviewTitle}>Interview Scheduled</Text>
-            <Text style={ac.interviewDate}>
-              {formatDate(interviewDetails.scheduled_date || interviewDetails.interview_date)}
+      {/* Show Interview Details */}
+      {hasInterview && (
+        <View style={[ac.interviewBanner, isInterviewCompleted && ac.interviewCompleted]}>
+          <View style={ac.interviewHeader}>
+            <Ionicons name={isInterviewCompleted ? "checkmark-circle" : "calendar-outline"} 
+              size={20} color={isInterviewCompleted ? GREEN : GOLD_DK} />
+            <Text style={[ac.interviewTitle, isInterviewCompleted && { color: GREEN }]}>
+              {isInterviewCompleted ? '✓ Interview Completed' : '📅 Interview Scheduled'}
             </Text>
-            {interviewDetails.meeting_link && (
+          </View>
+          
+          <View style={ac.interviewDetails}>
+            <View style={ac.interviewDetailRow}>
+              <Ionicons name="time-outline" size={16} color={isInterviewCompleted ? GREEN : GOLD_DK} />
+              <Text style={ac.interviewDetailLabel}>Date & Time:</Text>
+              <Text style={ac.interviewDetailValue}>
+                {formatDate(interviewDetails.scheduled_date || interviewDetails.interview_date)}
+              </Text>
+            </View>
+            
+            {interviewDetails.meeting_link && !isInterviewCompleted && (
               <TouchableOpacity 
+                style={ac.interviewDetailRow}
                 onPress={() => Linking.openURL(interviewDetails.meeting_link)}
                 activeOpacity={0.7}
               >
-                <Text style={ac.interviewLink} numberOfLines={1}>
-                  🔗 {interviewDetails.meeting_link}
+                <Ionicons name="link-outline" size={16} color={BLUE} />
+                <Text style={ac.interviewDetailLabel}>Meeting Link:</Text>
+                <Text style={[ac.interviewDetailValue, ac.interviewLink]} numberOfLines={1}>
+                  {interviewDetails.meeting_link}
                 </Text>
               </TouchableOpacity>
             )}
+            
             {interviewDetails.notes && (
-              <Text style={ac.interviewNotes} numberOfLines={2}>
-                📝 {interviewDetails.notes}
-              </Text>
+              <View style={ac.interviewDetailRow}>
+                <Ionicons name="document-text-outline" size={16} color={TEXT_MUTED} />
+                <Text style={ac.interviewDetailLabel}>Notes:</Text>
+                <Text style={ac.interviewDetailValue} numberOfLines={2}>
+                  {interviewDetails.notes}
+                </Text>
+              </View>
             )}
           </View>
         </View>
+      )}
+
+      {/* Contract Button - Show when hired */}
+      {hasContract && (
+        <TouchableOpacity 
+          style={ac.contractBtn}
+          onPress={() => onViewContract(application)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="document-text-outline" size={14} color={GREEN} />
+          <Text style={ac.contractBtnText}>View Contract</Text>
+          <Ionicons name="chevron-forward" size={14} color={GREEN} />
+        </TouchableOpacity>
       )}
 
       {/* View History Button */}
@@ -488,7 +588,7 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onVi
       >
         <Ionicons name="time-outline" size={14} color={BLUE} />
         <Text style={ac.historyBtnText}>
-          {hasHistory ? `View Status History (${application.status_history.length} updates)` : 'View Status History'}
+          {hasHistory ? `View Full Status History (${application.status_history.length} updates)` : 'View Status History'}
         </Text>
         <Ionicons name="chevron-forward" size={14} color={BLUE} />
       </TouchableOpacity>
@@ -526,53 +626,162 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onVi
 };
 
 const ac = StyleSheet.create({
-  card:       { backgroundColor: CARD, borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: BORDER, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  topRow:     { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  logoBox:    { width: 42, height: 42, borderRadius: 10, backgroundColor: 'rgba(0,104,181,0.08)', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 0.5, borderColor: 'rgba(0,104,181,0.2)' },
-  topMeta:    { flex: 1, minWidth: 0 },
-  jobTitle:   { fontSize: 14, fontWeight: '700', color: TEXT_MAIN, lineHeight: 20, marginBottom: 2 },
-  clientRow:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  clientName: { fontSize: 12, color: TEXT_MUTED },
-  statusBadge:{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 0.75, flexShrink: 0 },
-  dot:        { width: 5, height: 5, borderRadius: 3 },
-  statusText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4 },
-  pillRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
-  interviewBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: 'rgba(200,149,32,0.08)',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(200,149,32,0.2)',
+  card: { 
+    backgroundColor: CARD, 
+    borderRadius: 14, 
+    padding: 14, 
+    borderWidth: 1.5, 
+    borderColor: BORDER, 
+    marginBottom: 10, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 8, 
+    elevation: 2 
   },
-  interviewContent: {
-    flex: 1,
+  topRow: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    gap: 10, 
+    marginBottom: 10 
+  },
+  logoBox: { 
+    width: 42, 
+    height: 42, 
+    borderRadius: 10, 
+    backgroundColor: 'rgba(0,104,181,0.08)', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    flexShrink: 0, 
+    borderWidth: 0.5, 
+    borderColor: 'rgba(0,104,181,0.2)' 
+  },
+  topMeta: { 
+    flex: 1, 
+    minWidth: 0 
+  },
+  jobTitle: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: TEXT_MAIN, 
+    lineHeight: 20, 
+    marginBottom: 2 
+  },
+  clientRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 3 
+  },
+  clientName: { 
+    fontSize: 12, 
+    color: TEXT_MUTED 
+  },
+  statusBadge: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    paddingHorizontal: 8, 
+    paddingVertical: 4, 
+    borderRadius: 8, 
+    borderWidth: 0.75, 
+    flexShrink: 0 
+  },
+  dot: { 
+    width: 5, 
+    height: 5, 
+    borderRadius: 3 
+  },
+  statusText: { 
+    fontSize: 9, 
+    fontWeight: '700', 
+    letterSpacing: 0.4 
+  },
+  pillRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 6, 
+    marginBottom: 10 
+  },
+  
+  // Interview Banner Styles
+  interviewBanner: {
+    backgroundColor: 'rgba(200,149,32,0.12)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: GOLD_DK,
+    shadowColor: GOLD_DK,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  interviewCompleted: {
+    backgroundColor: GREEN_SOFT,
+    borderColor: GREEN,
+    shadowColor: GREEN,
+  },
+  interviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(200,149,32,0.2)',
   },
   interviewTitle: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '700',
     color: GOLD_DK,
-    marginBottom: 2,
+    flex: 1,
   },
-  interviewDate: {
-    fontSize: 11,
+  interviewDetails: {
+    gap: 8,
+  },
+  interviewDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  interviewDetailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
     color: TEXT_MUTED,
-    marginBottom: 2,
+    minWidth: 70,
+  },
+  interviewDetailValue: {
+    fontSize: 12,
+    color: TEXT_MAIN,
+    flex: 1,
+    fontWeight: '500',
   },
   interviewLink: {
-    fontSize: 11,
     color: BLUE,
     textDecorationLine: 'underline',
-    marginBottom: 2,
   },
-  interviewNotes: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-    fontStyle: 'italic',
+  
+  contractBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: GREEN_MID,
+    marginBottom: 8,
   },
+  contractBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: GREEN,
+    flex: 1,
+  },
+  
   historyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -591,19 +800,70 @@ const ac = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
   },
-  offerBanner:{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(200,149,32,0.08)', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, marginBottom: 4, borderWidth: 0.75, borderColor: 'rgba(200,149,32,0.2)' },
-  offerText:  { fontSize: 11, color: GOLD_DK, flex: 1, fontWeight: '500' },
-  actions:    { flexDirection: 'row', gap: 8 },
-  btnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 9, backgroundColor: BG_GRAY, borderWidth: 0.75, borderColor: BORDER },
-  btnOutlineText: { fontSize: 12, fontWeight: '600', color: TEXT_MUTED },
-  btnBlue:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 9, backgroundColor: BLUE, shadowColor: BLUE, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.28, shadowRadius: 20, elevation: 2 },
-  btnBlueText:{ fontSize: 12, fontWeight: '700', color: WHITE },
+  offerBanner: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    backgroundColor: 'rgba(200,149,32,0.08)', 
+    paddingHorizontal: 10, 
+    paddingVertical: 8, 
+    borderRadius: 8, 
+    marginBottom: 4, 
+    borderWidth: 0.75, 
+    borderColor: 'rgba(200,149,32,0.2)' 
+  },
+  offerText: { 
+    fontSize: 11, 
+    color: GOLD_DK, 
+    flex: 1, 
+    fontWeight: '500' 
+  },
+  actions: { 
+    flexDirection: 'row', 
+    gap: 8 
+  },
+  btnOutline: { 
+    flex: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 5, 
+    paddingVertical: 9, 
+    borderRadius: 9, 
+    backgroundColor: BG_GRAY, 
+    borderWidth: 0.75, 
+    borderColor: BORDER 
+  },
+  btnOutlineText: { 
+    fontSize: 12, 
+    fontWeight: '600', 
+    color: TEXT_MUTED 
+  },
+  btnBlue: { 
+    flex: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 5, 
+    paddingVertical: 9, 
+    borderRadius: 9, 
+    backgroundColor: BLUE, 
+    shadowColor: BLUE, 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.28, 
+    shadowRadius: 20, 
+    elevation: 2 
+  },
+  btnBlueText: { 
+    fontSize: 12, 
+    fontWeight: '700', 
+    color: WHITE 
+  },
 });
 
-// Saved Job Card - FIXED
+// Saved Job Card
 const SavedJobCard = ({ job, onViewJob, onViewClient, onUnsave, onApply }) => {
-  const client = job?.client_id;
-  const clientName = client?.company_name || client?.first_name || 'Client';
+  const clientName = getClientName(job);
   
   return (
     <View style={sj.card}>
@@ -660,22 +920,122 @@ const SavedJobCard = ({ job, onViewJob, onViewClient, onUnsave, onApply }) => {
 };
 
 const sj = StyleSheet.create({
-  card:       { backgroundColor: CARD, borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: BORDER, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  topRow:     { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  logoBox:    { width: 42, height: 42, borderRadius: 10, backgroundColor: 'rgba(0,104,181,0.08)', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 0.5, borderColor: 'rgba(0,104,181,0.2)' },
-  topMeta:    { flex: 1, minWidth: 0 },
-  jobTitle:   { fontSize: 14, fontWeight: '700', color: TEXT_MAIN, lineHeight: 20, marginBottom: 2 },
-  clientRow:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  clientName: { fontSize: 12, color: TEXT_MUTED },
-  pillRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
-  skillsRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
-  skill:      { backgroundColor: 'rgba(0,104,181,0.08)', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 6, borderWidth: 0.5, borderColor: 'rgba(0,104,181,0.2)' },
-  skillText:  { fontSize: 10, color: BLUE, fontWeight: '500' },
-  actions:    { flexDirection: 'row', gap: 8 },
-  btnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 9, backgroundColor: BG_GRAY, borderWidth: 0.75, borderColor: BORDER },
-  btnOutlineText: { fontSize: 12, fontWeight: '600', color: TEXT_MUTED },
-  btnBlue:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 9, backgroundColor: BLUE, shadowColor: BLUE, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.28, shadowRadius: 20, elevation: 2 },
-  btnBlueText:{ fontSize: 12, fontWeight: '700', color: WHITE },
+  card: { 
+    backgroundColor: CARD, 
+    borderRadius: 14, 
+    padding: 14, 
+    borderWidth: 1.5, 
+    borderColor: BORDER, 
+    marginBottom: 10, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 8, 
+    elevation: 2 
+  },
+  topRow: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    gap: 10, 
+    marginBottom: 10 
+  },
+  logoBox: { 
+    width: 42, 
+    height: 42, 
+    borderRadius: 10, 
+    backgroundColor: 'rgba(0,104,181,0.08)', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    flexShrink: 0, 
+    borderWidth: 0.5, 
+    borderColor: 'rgba(0,104,181,0.2)' 
+  },
+  topMeta: { 
+    flex: 1, 
+    minWidth: 0 
+  },
+  jobTitle: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: TEXT_MAIN, 
+    lineHeight: 20, 
+    marginBottom: 2 
+  },
+  clientRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 3 
+  },
+  clientName: { 
+    fontSize: 12, 
+    color: TEXT_MUTED 
+  },
+  pillRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 6, 
+    marginBottom: 8 
+  },
+  skillsRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 6, 
+    marginBottom: 4 
+  },
+  skill: { 
+    backgroundColor: 'rgba(0,104,181,0.08)', 
+    paddingHorizontal: 9, 
+    paddingVertical: 3, 
+    borderRadius: 6, 
+    borderWidth: 0.5, 
+    borderColor: 'rgba(0,104,181,0.2)' 
+  },
+  skillText: { 
+    fontSize: 10, 
+    color: BLUE, 
+    fontWeight: '500' 
+  },
+  actions: { 
+    flexDirection: 'row', 
+    gap: 8 
+  },
+  btnOutline: { 
+    flex: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 5, 
+    paddingVertical: 9, 
+    borderRadius: 9, 
+    backgroundColor: BG_GRAY, 
+    borderWidth: 0.75, 
+    borderColor: BORDER 
+  },
+  btnOutlineText: { 
+    fontSize: 12, 
+    fontWeight: '600', 
+    color: TEXT_MUTED 
+  },
+  btnBlue: { 
+    flex: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 5, 
+    paddingVertical: 9, 
+    borderRadius: 9, 
+    backgroundColor: BLUE, 
+    shadowColor: BLUE, 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.28, 
+    shadowRadius: 20, 
+    elevation: 2 
+  },
+  btnBlueText: { 
+    fontSize: 12, 
+    fontWeight: '700', 
+    color: WHITE 
+  },
 });
 
 // Stat Card
@@ -692,14 +1052,274 @@ const StatCard = ({ label, count, color, icon, active, onPress }) => (
 );
 
 const sc = StyleSheet.create({
-  card:  { minWidth: 76, backgroundColor: CARD, borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1.5, gap: 3 },
-  count: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
-  label: { fontSize: 9, color: TEXT_LIGHT, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
+  card: { 
+    minWidth: 76, 
+    backgroundColor: CARD, 
+    borderRadius: 12, 
+    padding: 10, 
+    alignItems: 'center', 
+    borderWidth: 1.5, 
+    gap: 3 
+  },
+  count: { 
+    fontSize: 22, 
+    fontWeight: '800', 
+    letterSpacing: -0.5 
+  },
+  label: { 
+    fontSize: 9, 
+    color: TEXT_LIGHT, 
+    fontWeight: '600', 
+    letterSpacing: 0.5, 
+    textTransform: 'uppercase' 
+  },
 });
 
-// ── Timeline Modal ──
-const TimelineModal = ({ application, visible, onClose }) => {
+// ── Contract Modal ──
+const ContractModal = ({ contract, visible, onClose, onViewJob }) => {
+  if (!contract) return null;
+
+  const formatCurrency = (amount) => {
+    if (!amount) return '₱0.00';
+    return `₱${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={md.overlay}>
+        <View style={[md.sheet, { maxHeight: '85%' }]}>
+          <View style={md.handle} />
+          <View style={md.header}>
+            <Text style={md.title}>Contract Details</Text>
+            <TouchableOpacity style={md.closeBtn} onPress={onClose}>
+              <Ionicons name="close" size={18} color={TEXT_MUTED} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+            <View style={cnt.hero}>
+              <View style={cnt.heroIcon}>
+                <Ionicons name="document-text" size={32} color={WHITE} />
+              </View>
+              <Text style={cnt.heroTitle}>{contract.title || 'Contract'}</Text>
+              <View style={cnt.statusBadge}>
+                <View style={cnt.statusDot} />
+                <Text style={cnt.statusText}>Active</Text>
+              </View>
+            </View>
+
+            <View style={cnt.section}>
+              <Text style={cnt.sectionTitle}>Contract Information</Text>
+              <View style={cnt.infoCard}>
+                <View style={cnt.infoRow}>
+                  <View style={cnt.infoIconBox}>
+                    <Ionicons name="cash-outline" size={15} color={GOLD_DK} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cnt.infoLabel}>Budget</Text>
+                    <Text style={cnt.infoValue}>{formatCurrency(contract.agreed_budget?.amount)}</Text>
+                  </View>
+                </View>
+                <View style={cnt.infoRow}>
+                  <View style={cnt.infoIconBox}>
+                    <Ionicons name="pricetag-outline" size={15} color={BLUE} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cnt.infoLabel}>Budget Type</Text>
+                    <Text style={cnt.infoValue}>{contract.agreed_budget?.type || 'Fixed'}</Text>
+                  </View>
+                </View>
+                <View style={cnt.infoRow}>
+                  <View style={cnt.infoIconBox}>
+                    <Ionicons name="calendar-outline" size={15} color={BLUE} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cnt.infoLabel}>Start Date</Text>
+                    <Text style={cnt.infoValue}>{formatDate(contract.start_date)}</Text>
+                  </View>
+                </View>
+                <View style={cnt.infoRow}>
+                  <View style={cnt.infoIconBox}>
+                    <Ionicons name="calendar-outline" size={15} color={BLUE} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cnt.infoLabel}>End Date</Text>
+                    <Text style={cnt.infoValue}>{formatDate(contract.end_date)}</Text>
+                  </View>
+                </View>
+                <View style={cnt.infoRow}>
+                  <View style={cnt.infoIconBox}>
+                    <Ionicons name="trending-up-outline" size={15} color={BLUE} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cnt.infoLabel}>Progress</Text>
+                    <Text style={cnt.infoValue}>{contract.progress || 0}%</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {contract.description && (
+              <View style={cnt.section}>
+                <Text style={cnt.sectionTitle}>Description</Text>
+                <View style={cnt.infoCard}>
+                  <Text style={cnt.bodyText}>{contract.description}</Text>
+                </View>
+              </View>
+            )}
+
+            {contract.terms && (
+              <View style={cnt.section}>
+                <Text style={cnt.sectionTitle}>Terms & Conditions</Text>
+                <View style={cnt.infoCard}>
+                  <Text style={cnt.bodyText}>{contract.terms}</Text>
+                </View>
+              </View>
+            )}
+
+            {contract.job_id && (
+              <TouchableOpacity 
+                style={cnt.viewJobBtn}
+                onPress={() => {
+                  onClose();
+                  if (onViewJob) onViewJob(contract.job_id);
+                }}
+              >
+                <Ionicons name="briefcase-outline" size={16} color={BLUE} />
+                <Text style={cnt.viewJobText}>View Related Job</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const cnt = StyleSheet.create({
+  hero: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    backgroundColor: BG_GRAY,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    marginBottom: 16,
+  },
+  heroIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: BLUE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  heroTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    marginBottom: 8,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: GREEN_SOFT,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: GREEN_MID,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: GREEN,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: GREEN,
+  },
+  section: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    marginBottom: 8,
+  },
+  infoCard: {
+    backgroundColor: BG_GRAY,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    gap: 10,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  infoIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,104,181,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,104,181,0.2)',
+  },
+  infoLabel: {
+    fontSize: 10,
+    color: TEXT_LIGHT,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  infoValue: {
+    fontSize: 13,
+    color: TEXT_MAIN,
+    fontWeight: '500',
+  },
+  bodyText: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    lineHeight: 21,
+  },
+  viewJobBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0,104,181,0.08)',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 0.75,
+    borderColor: 'rgba(0,104,181,0.2)',
+    marginTop: 8,
+  },
+  viewJobText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: BLUE,
+  },
+});
+
+// ── Timeline Modal - UPDATED with full history and interview details ──
+const TimelineModal = ({ application, visible, onClose, onViewJob, onViewClient, onViewContract }) => {
   if (!application) return null;
+  
+  const job = application.job_id;
+  const clientName = getClientName(job);
+  const isHired = application.status === 'hired';
+  const hasContract = !!application.contractId;
   
   // Get interview details from application
   const interviewDetails = application.interview_details || 
@@ -711,38 +1331,104 @@ const TimelineModal = ({ application, visible, onClose }) => {
         <View style={[md.sheet, { maxHeight: '85%' }]}>
           <View style={md.handle} />
           <View style={md.header}>
-            <Text style={md.title}>Application Status History</Text>
+            <Text style={md.title}>Application Details</Text>
             <TouchableOpacity style={md.closeBtn} onPress={onClose}>
               <Ionicons name="close" size={18} color={TEXT_MUTED} />
             </TouchableOpacity>
           </View>
           
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
-            <View style={tm.jobInfo}>
-              <Text style={tm.jobTitle}>{application.job_id?.title || 'Unknown Job'}</Text>
-              <View style={tm.statusRow}>
-                <View style={[tm.statusBadge, { backgroundColor: getStatus(application.status).bg, borderColor: getStatus(application.status).border }]}>
-                  <View style={[tm.statusDot, { backgroundColor: getStatus(application.status).dot }]} />
-                  <Text style={[tm.statusText, { color: getStatus(application.status).text }]}>
-                    {getStatus(application.status).label}
-                  </Text>
+            {/* Job Information Section */}
+            <View style={tm.jobSection}>
+              <View style={tm.jobHeader}>
+                <View style={tm.jobLogoBox}>
+                  <Ionicons name={getCategoryIcon(job?.title)} size={24} color={BLUE} />
                 </View>
-                <Text style={tm.appliedDate}>Applied {timeAgo(application.applied_at)}</Text>
+                <View style={tm.jobHeaderContent}>
+                  <Text style={tm.jobTitle}>{job?.title || 'Unknown Job'}</Text>
+                  <TouchableOpacity 
+                    style={tm.clientRow} 
+                    onPress={() => onViewClient?.(job)} 
+                    activeOpacity={0.7}
+                  >
+                    <Text style={tm.clientName}>{clientName}</Text>
+                    <Ionicons name="chevron-forward" size={11} color={BLUE} />
+                  </TouchableOpacity>
+                </View>
               </View>
+
+              <View style={tm.jobMetaRow}>
+                <Pill icon="cash-outline" label={budget(job)} color={GOLD_DK} />
+                <Pill icon="location-outline" label={job?.work_setup || 'Remote'} />
+                <Pill icon="briefcase-outline" label={job?.job_type || 'Contract'} />
+              </View>
+
+              {/* Job Description */}
+              {job?.description && (
+                <View style={tm.descSection}>
+                  <Text style={tm.sectionLabel}>Job Description</Text>
+                  <Text style={tm.descText}>{job.description}</Text>
+                </View>
+              )}
+
+              {/* Required Skills */}
+              {job?.required_skills?.length > 0 && (
+                <View style={tm.skillsSection}>
+                  <Text style={tm.sectionLabel}>Required Skills</Text>
+                  <View style={tm.skillsRow}>
+                    {job.required_skills.map((skill, i) => (
+                      <View key={i} style={tm.skillBadge}>
+                        <Text style={tm.skillText}>{skill}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Status Badge */}
+              <View style={tm.statusSection}>
+                <Text style={tm.sectionLabel}>Current Status</Text>
+                <View style={tm.statusRow}>
+                  <View style={[tm.statusBadge, { backgroundColor: getStatus(application.status).bg, borderColor: getStatus(application.status).border }]}>
+                    <View style={[tm.statusDot, { backgroundColor: getStatus(application.status).dot }]} />
+                    <Text style={[tm.statusText, { color: getStatus(application.status).text }]}>
+                      {getStatus(application.status).label}
+                    </Text>
+                  </View>
+                  <Text style={tm.appliedDate}>Applied {timeAgo(application.applied_at)}</Text>
+                </View>
+              </View>
+
+              {/* Contract Button */}
+              {hasContract && (
+                <TouchableOpacity 
+                  style={tm.contractBtn}
+                  onPress={() => {
+                    onClose();
+                    onViewContract(application);
+                  }}
+                >
+                  <Ionicons name="document-text-outline" size={16} color={GREEN} />
+                  <Text style={tm.contractBtnText}>View Contract</Text>
+                  <Ionicons name="chevron-forward" size={14} color={GREEN} />
+                </TouchableOpacity>
+              )}
             </View>
             
-            {/* Show Interview Details at the top if status is interview */}
-            {application.status === 'interview' && interviewDetails && (
+            {/* Show Interview Details */}
+            {interviewDetails && (
               <View style={tm.interviewSection}>
-                <Text style={tm.sectionTitle}>📅 Interview Details</Text>
-                <View style={tm.interviewCard}>
+                <Text style={tm.sectionTitle}>
+                  {isHired ? '✅ Interview Completed' : '📅 Interview Details'}
+                </Text>
+                <View style={[tm.interviewCard, isHired && tm.interviewCompleted]}>
                   <View style={tm.detailRow}>
-                    <Ionicons name="calendar-outline" size={16} color={GOLD_DK} />
-                    <Text style={tm.detailText}>
+                    <Ionicons name="calendar-outline" size={16} color={isHired ? GREEN : GOLD_DK} />
+                    <Text style={[tm.detailText, isHired && { color: GREEN, fontWeight: '600' }]}>
                       {formatDate(interviewDetails.scheduled_date || interviewDetails.interview_date)}
                     </Text>
                   </View>
-                  {interviewDetails.meeting_link && (
+                  {interviewDetails.meeting_link && !isHired && (
                     <TouchableOpacity 
                       style={tm.detailRow} 
                       onPress={() => Linking.openURL(interviewDetails.meeting_link)}
@@ -760,15 +1446,53 @@ const TimelineModal = ({ application, visible, onClose }) => {
                       <Text style={tm.detailText}>{interviewDetails.notes}</Text>
                     </View>
                   )}
+                  {isHired && (
+                    <View style={tm.completedRow}>
+                      <Ionicons name="checkmark-circle" size={16} color={GREEN} />
+                      <Text style={tm.completedText}>Interview completed successfully</Text>
+                    </View>
+                  )}
                 </View>
               </View>
             )}
             
-            <StatusTimeline 
-              history={application.status_history} 
-              currentStatus={application.status}
-              interviewDetails={interviewDetails}
-            />
+            {/* Full Status History */}
+            <View style={tm.timelineSection}>
+              <Text style={tm.sectionTitle}>Full Status History</Text>
+              <StatusTimeline 
+                history={application.status_history} 
+                currentStatus={application.status}
+                interviewDetails={interviewDetails}
+                contractDetails={application.contractDetails}
+              />
+            </View>
+
+            {/* Action Buttons */}
+            <View style={tm.actionButtons}>
+              <TouchableOpacity 
+                style={tm.viewJobBtn} 
+                onPress={() => {
+                  onClose();
+                  onViewJob?.(job);
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="eye-outline" size={16} color={BLUE} />
+                <Text style={tm.viewJobText}>View Full Job Details</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={tm.viewClientBtn} 
+                onPress={() => {
+                  onClose();
+                  onViewClient?.(job);
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="person-outline" size={16} color={WHITE} />
+                <Text style={tm.viewClientText}>View Client Profile</Text>
+              </TouchableOpacity>
+            </View>
           </ScrollView>
         </View>
       </View>
@@ -777,17 +1501,88 @@ const TimelineModal = ({ application, visible, onClose }) => {
 };
 
 const tm = StyleSheet.create({
-  jobInfo: {
+  jobSection: {
     marginBottom: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
+  jobHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  jobLogoBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,104,181,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,104,181,0.2)',
+  },
+  jobHeaderContent: {
+    flex: 1,
+  },
   jobTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: TEXT_MAIN,
-    marginBottom: 8,
+    marginBottom: 2,
+  },
+  clientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  clientName: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+  },
+  jobMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
+  descSection: {
+    marginBottom: 12,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    marginBottom: 6,
+  },
+  descText: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    lineHeight: 20,
+  },
+  skillsSection: {
+    marginBottom: 12,
+  },
+  skillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  skillBadge: {
+    backgroundColor: BG_GRAY,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: BORDER,
+  },
+  skillText: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+  statusSection: {
+    marginBottom: 4,
   },
   statusRow: {
     flexDirection: 'row',
@@ -816,6 +1611,24 @@ const tm = StyleSheet.create({
     fontSize: 12,
     color: TEXT_LIGHT,
   },
+  contractBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: GREEN_SOFT,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: GREEN_MID,
+    marginTop: 10,
+  },
+  contractBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: GREEN,
+    flex: 1,
+  },
   interviewSection: {
     marginBottom: 16,
   },
@@ -832,6 +1645,10 @@ const tm = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(200,149,32,0.2)',
   },
+  interviewCompleted: {
+    backgroundColor: GREEN_SOFT,
+    borderColor: GREEN,
+  },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -843,6 +1660,65 @@ const tm = StyleSheet.create({
     color: TEXT_MUTED,
     flex: 1,
   },
+  completedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(5,150,105,0.2)',
+  },
+  completedText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: GREEN,
+  },
+  timelineSection: {
+    marginBottom: 16,
+  },
+  actionButtons: {
+    gap: 10,
+    marginTop: 8,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  viewJobBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0,104,181,0.08)',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 0.75,
+    borderColor: 'rgba(0,104,181,0.2)',
+  },
+  viewJobText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: BLUE,
+  },
+  viewClientBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: BLUE,
+    paddingVertical: 12,
+    borderRadius: 10,
+    shadowColor: BLUE,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.28,
+    shadowRadius: 20,
+    elevation: 2,
+  },
+  viewClientText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: WHITE,
+  },
 });
 
 // Job Details Modal
@@ -850,6 +1726,7 @@ const JobModal = ({ job, visible, onClose, onViewClient }) => {
   if (!job) return null;
   
   const client = job.client_id;
+  const clientName = getClientName(job);
   
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -868,9 +1745,7 @@ const JobModal = ({ job, visible, onClose, onViewClient }) => {
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={md.title}>{job.title}</Text>
                 <TouchableOpacity style={md.clientRow} onPress={() => onViewClient(job)} activeOpacity={0.7}>
-                  <Text style={md.clientName}>
-                    {client?.company_name || client?.first_name || 'View Client'}
-                  </Text>
+                  <Text style={md.clientName}>{clientName}</Text>
                   <Ionicons name="person-circle-outline" size={14} color={BLUE} />
                 </TouchableOpacity>
               </View>
@@ -921,11 +1796,12 @@ const JobModal = ({ job, visible, onClose, onViewClient }) => {
   );
 };
 
-// Client Profile Modal
+// Client Profile Modal - FIXED to show client data
 const ClientModal = ({ job, visible, onClose, onMessage }) => {
   if (!job) return null;
   
   const client = job.client_id;
+  const clientName = getClientName(job);
   
   if (!client) {
     return (
@@ -965,7 +1841,7 @@ const ClientModal = ({ job, visible, onClose, onMessage }) => {
                   ? <Image source={{ uri: client.profile_picture }} style={cm.avatarImg} />
                   : <Ionicons name="person-outline" size={40} color={BLUE} />}
               </View>
-              <Text style={cm.name}>{client.first_name || ''} {client.last_name || ''}</Text>
+              <Text style={cm.name}>{clientName}</Text>
               <View style={cm.rolePill}>
                 <Ionicons name="business-outline" size={10} color={BLUE} />
                 <Text style={cm.roleText}>Client</Text>
@@ -1030,21 +1906,29 @@ const ClientModal = ({ job, visible, onClose, onMessage }) => {
                   </View>
                 </View>
               )}
+              {client.bio_about_me && (
+                <View style={cm.infoRow}>
+                  <View style={cm.infoIconBox}>
+                    <Ionicons name="document-text-outline" size={15} color={BLUE} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cm.infoLabel}>About</Text>
+                    <Text style={cm.infoValue}>{client.bio_about_me}</Text>
+                  </View>
+                </View>
+              )}
+              {client.bio_about && (
+                <View style={cm.infoRow}>
+                  <View style={cm.infoIconBox}>
+                    <Ionicons name="document-text-outline" size={15} color={BLUE} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={cm.infoLabel}>About</Text>
+                    <Text style={cm.infoValue}>{client.bio_about}</Text>
+                  </View>
+                </View>
+              )}
             </View>
-
-            {client.bio_about_me && (
-              <>
-                <Text style={md.sectionLabel}>About</Text>
-                <Text style={cm.bio}>{client.bio_about_me}</Text>
-              </>
-            )}
-
-            {client.bio_about && (
-              <>
-                <Text style={md.sectionLabel}>About</Text>
-                <Text style={cm.bio}>{client.bio_about}</Text>
-              </>
-            )}
 
             <TouchableOpacity style={cm.msgBtn} onPress={() => onMessage(client)} activeOpacity={0.85}>
               <Ionicons name="chatbubble-outline" size={16} color={WHITE} />
@@ -1058,50 +1942,269 @@ const ClientModal = ({ job, visible, onClose, onMessage }) => {
 };
 
 const md = StyleSheet.create({
-  overlay:       { flex: 1, backgroundColor: 'rgba(7,26,62,0.55)', justifyContent: 'flex-end' },
-  sheet:         { backgroundColor: WHITE, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, maxHeight: '90%', borderTopWidth: 1.5, borderColor: BORDER },
-  handle:        { width: 36, height: 4, borderRadius: 2, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 16 },
-  closeBtn:      { position: 'absolute', top: 14, right: 14, width: 30, height: 30, borderRadius: 15, backgroundColor: BG, alignItems: 'center', justifyContent: 'center', zIndex: 10, borderWidth: 0.5, borderColor: BORDER },
-  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
-  title:         { fontSize: 17, fontWeight: '700', color: TEXT_MAIN },
-  logoBox:       { width: 52, height: 52, borderRadius: 12, backgroundColor: 'rgba(0,104,181,0.08)', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 0.5, borderColor: 'rgba(0,104,181,0.2)' },
-  clientRow:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  clientName:    { fontSize: 12, color: TEXT_MUTED },
-  salary:        { fontSize: 22, fontWeight: '800', color: GOLD_DK, marginBottom: 10, letterSpacing: -0.5 },
-  metaRow:       { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
-  metaItem:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText:      { fontSize: 12, color: TEXT_MUTED },
-  divider:       { height: 1.5, backgroundColor: BORDER, marginVertical: 14 },
-  sectionLabel:  { fontSize: 13, fontWeight: '700', color: TEXT_MAIN, marginBottom: 8, marginTop: 4 },
-  desc:          { fontSize: 13, color: TEXT_MUTED, lineHeight: 21, marginBottom: 8 },
-  skills:        { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 18 },
-  skillBadge:    { backgroundColor: BG_GRAY, paddingHorizontal: 11, paddingVertical: 5, borderRadius: 8, borderWidth: 1.5, borderColor: BORDER },
-  skillText:     { fontSize: 12, color: TEXT_MUTED },
-  viewClientBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(0,104,181,0.08)', paddingVertical: 13, borderRadius: 12, marginTop: 4, marginBottom: 24, borderWidth: 0.75, borderColor: 'rgba(0,104,181,0.2)' },
-  viewClientText:{ fontSize: 13, fontWeight: '700', color: BLUE },
+  overlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(7,26,62,0.55)', 
+    justifyContent: 'flex-end' 
+  },
+  sheet: { 
+    backgroundColor: WHITE, 
+    borderTopLeftRadius: 22, 
+    borderTopRightRadius: 22, 
+    padding: 18, 
+    maxHeight: '90%', 
+    borderTopWidth: 1.5, 
+    borderColor: BORDER 
+  },
+  handle: { 
+    width: 36, 
+    height: 4, 
+    borderRadius: 2, 
+    backgroundColor: BORDER, 
+    alignSelf: 'center', 
+    marginBottom: 16 
+  },
+  closeBtn: { 
+    position: 'absolute', 
+    top: 14, 
+    right: 14, 
+    width: 30, 
+    height: 30, 
+    borderRadius: 15, 
+    backgroundColor: BG, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    zIndex: 10, 
+    borderWidth: 0.5, 
+    borderColor: BORDER 
+  },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingBottom: 12, 
+    borderBottomWidth: 1, 
+    borderBottomColor: BORDER 
+  },
+  title: { 
+    fontSize: 17, 
+    fontWeight: '700', 
+    color: TEXT_MAIN 
+  },
+  logoBox: { 
+    width: 52, 
+    height: 52, 
+    borderRadius: 12, 
+    backgroundColor: 'rgba(0,104,181,0.08)', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    flexShrink: 0, 
+    borderWidth: 0.5, 
+    borderColor: 'rgba(0,104,181,0.2)' 
+  },
+  clientRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4 
+  },
+  clientName: { 
+    fontSize: 12, 
+    color: TEXT_MUTED 
+  },
+  salary: { 
+    fontSize: 22, 
+    fontWeight: '800', 
+    color: GOLD_DK, 
+    marginBottom: 10, 
+    letterSpacing: -0.5 
+  },
+  metaRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 10, 
+    marginBottom: 12 
+  },
+  metaItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4 
+  },
+  metaText: { 
+    fontSize: 12, 
+    color: TEXT_MUTED 
+  },
+  divider: { 
+    height: 1.5, 
+    backgroundColor: BORDER, 
+    marginVertical: 14 
+  },
+  sectionLabel: { 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: TEXT_MAIN, 
+    marginBottom: 8, 
+    marginTop: 4 
+  },
+  desc: { 
+    fontSize: 13, 
+    color: TEXT_MUTED, 
+    lineHeight: 21, 
+    marginBottom: 8 
+  },
+  skills: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 7, 
+    marginBottom: 18 
+  },
+  skillBadge: { 
+    backgroundColor: BG_GRAY, 
+    paddingHorizontal: 11, 
+    paddingVertical: 5, 
+    borderRadius: 8, 
+    borderWidth: 1.5, 
+    borderColor: BORDER 
+  },
+  skillText: { 
+    fontSize: 12, 
+    color: TEXT_MUTED 
+  },
+  viewClientBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 8, 
+    backgroundColor: 'rgba(0,104,181,0.08)', 
+    paddingVertical: 13, 
+    borderRadius: 12, 
+    marginTop: 4, 
+    marginBottom: 24, 
+    borderWidth: 0.75, 
+    borderColor: 'rgba(0,104,181,0.2)' 
+  },
+  viewClientText: { 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: BLUE 
+  },
 });
 
 const cm = StyleSheet.create({
-  avatarWrap:    { alignItems: 'center', marginBottom: 20, marginTop: 4 },
-  avatar:        { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(0,104,181,0.08)', alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 2, borderColor: 'rgba(0,104,181,0.2)' },
-  avatarImg:     { width: 80, height: 80, borderRadius: 40 },
-  name:          { fontSize: 20, fontWeight: '700', color: TEXT_MAIN, marginBottom: 6 },
-  rolePill:      { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,104,181,0.08)', paddingHorizontal: 12, paddingVertical: 3, borderRadius: 20, borderWidth: 0.75, borderColor: 'rgba(0,104,181,0.2)' },
-  roleText:      { fontSize: 11, color: BLUE, fontWeight: '600' },
-  infoCard:      { backgroundColor: BG_GRAY, borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1.5, borderColor: BORDER, gap: 12 },
-  infoRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  infoIconBox:   { width: 30, height: 30, borderRadius: 8, backgroundColor: 'rgba(0,104,181,0.08)', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 0.5, borderColor: 'rgba(0,104,181,0.2)' },
-  infoLabel:     { fontSize: 10, color: TEXT_LIGHT, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
-  infoValue:     { fontSize: 13, color: TEXT_MAIN, fontWeight: '500' },
-  bio:           { fontSize: 13, color: TEXT_MUTED, lineHeight: 21, marginBottom: 20 },
-  msgBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: BLUE, paddingVertical: 14, borderRadius: 12, marginBottom: 24, shadowColor: BLUE, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 20, elevation: 3 },
-  msgBtnText:    { fontSize: 14, fontWeight: '700', color: WHITE },
+  avatarWrap: { 
+    alignItems: 'center', 
+    marginBottom: 20, 
+    marginTop: 4 
+  },
+  avatar: { 
+    width: 80, 
+    height: 80, 
+    borderRadius: 40, 
+    backgroundColor: 'rgba(0,104,181,0.08)', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginBottom: 10, 
+    borderWidth: 2, 
+    borderColor: 'rgba(0,104,181,0.2)' 
+  },
+  avatarImg: { 
+    width: 80, 
+    height: 80, 
+    borderRadius: 40 
+  },
+  name: { 
+    fontSize: 20, 
+    fontWeight: '700', 
+    color: TEXT_MAIN, 
+    marginBottom: 6 
+  },
+  rolePill: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 6, 
+    backgroundColor: 'rgba(0,104,181,0.08)', 
+    paddingHorizontal: 12, 
+    paddingVertical: 3, 
+    borderRadius: 20, 
+    borderWidth: 0.75, 
+    borderColor: 'rgba(0,104,181,0.2)' 
+  },
+  roleText: { 
+    fontSize: 11, 
+    color: BLUE, 
+    fontWeight: '600' 
+  },
+  infoCard: { 
+    backgroundColor: BG_GRAY, 
+    borderRadius: 14, 
+    padding: 14, 
+    marginBottom: 16, 
+    borderWidth: 1.5, 
+    borderColor: BORDER, 
+    gap: 8 
+  },
+  infoRow: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    gap: 10, 
+    paddingVertical: 4,
+  },
+  infoIconBox: { 
+    width: 30, 
+    height: 30, 
+    borderRadius: 8, 
+    backgroundColor: 'rgba(0,104,181,0.08)', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    flexShrink: 0, 
+    borderWidth: 0.5, 
+    borderColor: 'rgba(0,104,181,0.2)' 
+  },
+  infoLabel: { 
+    fontSize: 10, 
+    color: TEXT_LIGHT, 
+    fontWeight: '600', 
+    textTransform: 'uppercase', 
+    letterSpacing: 0.4, 
+    marginBottom: 2 
+  },
+  infoValue: { 
+    fontSize: 13, 
+    color: TEXT_MAIN, 
+    fontWeight: '500' 
+  },
+  bio: { 
+    fontSize: 13, 
+    color: TEXT_MUTED, 
+    lineHeight: 21, 
+    marginBottom: 20 
+  },
+  msgBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 8, 
+    backgroundColor: BLUE, 
+    paddingVertical: 14, 
+    borderRadius: 12, 
+    marginBottom: 24, 
+    shadowColor: BLUE, 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.28, 
+    shadowRadius: 20, 
+    elevation: 3 
+  },
+  msgBtnText: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: WHITE 
+  },
 });
 
 // Main Screen
 export default function MyApplications({ onNavigate, route }) {
   const dispatch = useDispatch();
   const { applications, savedJobs, isLoading } = useSelector((s) => s.applications);
+  const { selectedContract } = useSelector((s) => s.contracts.contracts);
 
   const [activeTab,      setActiveTab]      = useState('Applied');
   const [refreshing,     setRefreshing]     = useState(false);
@@ -1109,8 +2212,10 @@ export default function MyApplications({ onNavigate, route }) {
   const [showJobModal,   setShowJobModal]   = useState(false);
   const [showClientModal,setShowClientModal]= useState(false);
   const [showTimelineModal, setShowTimelineModal] = useState(false);
+  const [showContractModal, setShowContractModal] = useState(false);
   const [selectedJob,    setSelectedJob]    = useState(null);
   const [selectedApplication, setSelectedApplication] = useState(null);
+  const [contractLoading, setContractLoading] = useState(false);
   const [stats,          setStats]          = useState({ total: 0, pending: 0, reviewed: 0, interview: 0, offered: 0, accepted: 0, hired: 0, rejected: 0 });
 
   useEffect(() => {
@@ -1169,6 +2274,24 @@ export default function MyApplications({ onNavigate, route }) {
     ]);
   };
 
+  const handleViewContract = async (application) => {
+    if (!application.contractId) {
+      Alert.alert('No Contract', 'No contract has been created for this application yet.');
+      return;
+    }
+
+    setContractLoading(true);
+    try {
+      await dispatch(getContractById(application.contractId)).unwrap();
+      setSelectedApplication(application);
+      setShowContractModal(true);
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Failed to load contract details');
+    } finally {
+      setContractLoading(false);
+    }
+  };
+
   const openJobModal = (job) => { 
     setSelectedJob(job); 
     setShowJobModal(true); 
@@ -1224,8 +2347,6 @@ export default function MyApplications({ onNavigate, route }) {
     { key: 'rejected', label: 'Rejected',  count: stats.rejected, color: '#f87171',   icon: 'close-circle-outline' },
   ];
 
-  const pendingOffers = stats.interview + stats.offered;
-
   if (isLoading && !refreshing) {
     return (
       <SafeAreaView style={s.safe} edges={['top']}>
@@ -1247,8 +2368,7 @@ export default function MyApplications({ onNavigate, route }) {
         </View>
         <BottomTabBar 
           activeTab="MyApplications" 
-          onTabPress={handleTabBarPress} 
-          pendingOffers={pendingOffers}
+          onTabPress={handleTabBarPress}
         />
       </SafeAreaView>
     );
@@ -1266,16 +2386,7 @@ export default function MyApplications({ onNavigate, route }) {
             </View>
           </TouchableOpacity>
           <Text style={s.headerTitle}>My <Text style={s.blue}>Applications</Text></Text>
-          <TouchableOpacity style={s.receivedOffersBtn} onPress={() => onNavigate('ReceivedOffers', { returnState: { activeTab } })} activeOpacity={0.7}>
-            <View style={s.receivedOffersIconWrap}>
-              <Ionicons name="archive-outline" size={18} color={GOLD_LT} />
-              {pendingOffers > 0 && (
-                <View style={s.receivedOffersBadge}>
-                  <Text style={s.receivedOffersBadgeText}>{pendingOffers}</Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
+          <View style={{ width: 36 }} />
         </View>
 
         <View style={s.statsBorder}>
@@ -1356,11 +2467,12 @@ export default function MyApplications({ onNavigate, route }) {
                 onViewClient={(job) => openClientModal(job)}
                 onMessage={(job) => onNavigate('Messages', { 
                   userId: job?.client_id?._id,
-                  userName: `${job?.client_id?.first_name || ''} ${job?.client_id?.last_name || ''}`,
+                  userName: getClientName(job),
                   userRole: 'client',
                   returnState: { activeTab }
                 })}
                 onViewTimeline={(app) => openTimelineModal(app)}
+                onViewContract={(app) => handleViewContract(app)}
               />
             ))
           ) : (
@@ -1391,8 +2503,7 @@ export default function MyApplications({ onNavigate, route }) {
 
       <BottomTabBar 
         activeTab="MyApplications" 
-        onTabPress={handleTabBarPress} 
-        pendingOffers={pendingOffers}
+        onTabPress={handleTabBarPress}
       />
 
       <JobModal
@@ -1424,6 +2535,33 @@ export default function MyApplications({ onNavigate, route }) {
         application={selectedApplication}
         visible={showTimelineModal}
         onClose={closeTimelineModal}
+        onViewJob={(job) => {
+          closeTimelineModal();
+          openJobModal(job);
+        }}
+        onViewClient={(job) => {
+          closeTimelineModal();
+          openClientModal(job);
+        }}
+        onViewContract={(app) => {
+          closeTimelineModal();
+          handleViewContract(app);
+        }}
+      />
+
+      <ContractModal
+        contract={selectedContract}
+        visible={showContractModal}
+        onClose={() => {
+          setShowContractModal(false);
+          setSelectedApplication(null);
+        }}
+        onViewJob={(jobId) => {
+          setShowContractModal(false);
+          const job = applications.find(a => a.job_id?._id === jobId)?.job_id ||
+                     savedJobs.find(j => j._id === jobId);
+          if (job) openJobModal(job);
+        }}
       />
     </SafeAreaView>
   );
@@ -1436,10 +2574,6 @@ const s = StyleSheet.create({
   header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: NAVY },
   iconBtn:      { alignSelf: 'flex-start' },
   iconWrap:     { width: 36, height: 36, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
-  receivedOffersBtn: { alignSelf: 'flex-start' },
-  receivedOffersIconWrap: { width: 36, height: 36, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  receivedOffersBadge: { position: 'absolute', top: -6, right: -6, backgroundColor: GOLD, borderRadius: 12, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, borderWidth: 2, borderColor: NAVY },
-  receivedOffersBadgeText: { fontSize: 10, fontWeight: '800', color: WHITE },
   headerTitle:  { fontSize: 16, fontWeight: '600', color: WHITE, letterSpacing: 0.2 },
   blue:        { color: GOLD_LT, fontStyle: 'italic', fontWeight: '700' },
   statsBorder:  { backgroundColor: CARD, borderBottomWidth: 1.5, borderBottomColor: BORDER },

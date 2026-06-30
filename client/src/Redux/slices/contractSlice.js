@@ -1,4 +1,3 @@
-// Redux/slices/contractSlice.js
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../services/api';
 
@@ -36,7 +35,24 @@ export const createContract = createAsyncThunk(
         return rejectWithValue({ message: 'No token found' });
       }
 
-      const response = await api.post('/contracts', contractData, {
+      // Map frontend field names to backend expected field names
+      const payload = {
+        job_id: contractData.jobId || contractData.job_id,
+        application_id: contractData.applicationId || contractData.application_id,
+        freelancer_id: contractData.freelancerId || contractData.freelancer_id,
+        agreed_budget: contractData.budget || {
+          amount: parseFloat(contractData.budgetAmount) || 0,
+          type: contractData.budgetType || 'fixed',
+          currency: 'PHP'
+        },
+        start_date: contractData.startDate || contractData.start_date,
+        end_date: contractData.endDate || contractData.end_date,
+        terms: contractData.terms || contractData.termsAndConditions
+      };
+
+      console.log('Sending contract payload to backend:', payload);
+
+      const response = await api.post('/contracts', payload, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'

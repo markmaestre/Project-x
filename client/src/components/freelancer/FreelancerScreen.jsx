@@ -50,6 +50,7 @@ const ORANGE     = '#F97316';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
+// ── CONSTANTS (MUST BE DEFINED BEFORE COMPONENTS THAT USE THEM) ──────────────
 const PHILIPPINE_LOCATIONS = [
   'Manila', 'Quezon City', 'Makati', 'Taguig', 'Pasig', 'Mandaluyong', 'Parañaque',
   'Las Piñas', 'Muntinlupa', 'Marikina', 'Pasay', 'Caloocan', 'Malabon', 'Navotas',
@@ -86,333 +87,7 @@ const EDUCATION_LEVELS = [
   'Other'
 ];
 
-// ── Bottom Tab Bar ─────────────────────────────────────────────────────────────────
-function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
-  const tabs = [
-    { key: 'Home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
-    { key: 'Messages', label: 'Messages', icon: 'chatbubble-outline', activeIcon: 'chatbubble' },
-    { key: 'MyJobs', label: 'My Jobs', icon: 'briefcase-outline', activeIcon: 'briefcase' },
-    { key: 'MyApplications', label: 'Applications', icon: 'checkmark-circle-outline', activeIcon: 'checkmark-circle' },
-    { key: 'Profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
-  ];
-
-  return (
-    <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
-      <View style={styles.tabBar}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.key;
-          const isMyJobs = tab.key === 'MyJobs';
-          const hasBadge = tab.key === 'Messages' && pendingOffers > 0;
-          
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={[
-                styles.tabItem,
-                isMyJobs && styles.tabItemCenter,
-              ]}
-              onPress={() => onTabPress(tab.key)}
-              activeOpacity={0.7}
-            >
-              {isMyJobs ? (
-                <View style={[styles.centerButton, isActive && styles.centerButtonActive]}>
-                  <Ionicons
-                    name={isActive ? tab.activeIcon : tab.icon}
-                    size={26}
-                    color={isActive ? WHITE : BLUE}
-                  />
-                </View>
-              ) : (
-                <>
-                  <View style={styles.tabIconWrap}>
-                    <Ionicons
-                      name={isActive ? tab.activeIcon : tab.icon}
-                      size={22}
-                      color={isActive ? BLUE : TEXT_LIGHT}
-                    />
-                    {hasBadge && <View style={styles.tabBadgeDot} />}
-                  </View>
-                  <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-                    {tab.label}
-                  </Text>
-                  {isActive && <View style={styles.tabIndicator} />}
-                </>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </SafeAreaView>
-  );
-}
-
-// ── Modals ──────────────────────────────────────────────────────────────────────────
-function ApplicationStatusModal({ visible, jobTitle, onClose }) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={statusStyles.overlay}>
-        <View style={statusStyles.container}>
-          <View style={statusStyles.iconContainer}>
-            <Ionicons name="checkmark-circle" size={64} color={GREEN} />
-          </View>
-          <Text style={statusStyles.title}>Application Submitted!</Text>
-          <Text style={statusStyles.message}>
-            Your application for "{jobTitle}" has been sent successfully.
-          </Text>
-          <View style={statusStyles.infoBox}>
-            <Ionicons name="information-circle-outline" size={20} color={BLUE} />
-            <Text style={statusStyles.infoText}>
-              The client will review your application and contact you if shortlisted.
-            </Text>
-          </View>
-          <TouchableOpacity style={statusStyles.button} onPress={onClose}>
-            <Text style={statusStyles.buttonText}>Done</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-function AlreadyAppliedModal({ visible, jobTitle, onClose }) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={statusStyles.overlay}>
-        <View style={statusStyles.container}>
-          <View style={[statusStyles.iconContainer, { backgroundColor: `${ORANGE}15` }]}>
-            <Ionicons name="alert-circle" size={64} color={ORANGE} />
-          </View>
-          <Text style={[statusStyles.title, { color: ORANGE }]}>Already Applied</Text>
-          <Text style={statusStyles.message}>
-            You have already submitted an application for "{jobTitle}".
-          </Text>
-          <View style={statusStyles.infoBox}>
-            <Ionicons name="time-outline" size={20} color={ORANGE} />
-            <Text style={[statusStyles.infoText, { color: ORANGE }]}>
-              Please wait for the client's response. You will be notified when there's an update.
-            </Text>
-          </View>
-          <TouchableOpacity style={[statusStyles.button, { backgroundColor: ORANGE }]} onPress={onClose}>
-            <Text style={statusStyles.buttonText}>Got it</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-// ── Client Profile Modal ───────────────────────────────────────────────────────────
-function ClientProfileModal({ visible, client, onClose }) {
-  if (!client) return null;
-  
-  // Check if client has information
-  const hasDescription = client.description && client.description.length > 0;
-  const hasEmail = client.email && client.email.length > 0;
-  const hasPhone = client.phone && client.phone.length > 0;
-  const hasLocation = client.location && client.location.length > 0;
-  const hasCompany = client.company_name && client.company_name.length > 0;
-  const hasBusinessType = client.business_type && client.business_type.length > 0;
-  const hasIndustry = client.industry && client.industry.length > 0;
-  const hasWebsite = client.website && client.website.length > 0;
-  const hasBudgetRange = client.budget_range && client.budget_range.length > 0;
-  
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={clientProfileStyles.overlay}>
-        <TouchableOpacity style={clientProfileStyles.backdrop} activeOpacity={1} onPress={onClose} />
-        <View style={clientProfileStyles.container}>
-          <View style={clientProfileStyles.handle} />
-          
-          <View style={clientProfileStyles.header}>
-            <Text style={clientProfileStyles.headerTitle}>Client Profile</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={TEXT_MUTED} />
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView style={clientProfileStyles.body} showsVerticalScrollIndicator={false}>
-            {/* Profile Header */}
-            <View style={clientProfileStyles.profileHeader}>
-              {client.profile_picture ? (
-                <Image source={{ uri: client.profile_picture }} style={clientProfileStyles.profileAvatar} />
-              ) : (
-                <View style={clientProfileStyles.profileAvatarPlaceholder}>
-                  <Ionicons name="person" size={40} color={NAVY} />
-                </View>
-              )}
-              <View style={clientProfileStyles.profileInfo}>
-                <Text style={clientProfileStyles.profileName}>
-                  {client.first_name || ''} {client.last_name || ''}
-                </Text>
-                {hasCompany && (
-                  <Text style={clientProfileStyles.profileCompany}>
-                    <Ionicons name="business-outline" size={14} color={TEXT_MUTED} />
-                    {' '}{client.company_name}
-                  </Text>
-                )}
-                <View style={clientProfileStyles.verifiedBadge}>
-                  <Ionicons name="checkmark-circle" size={14} color={GREEN} />
-                  <Text style={clientProfileStyles.verifiedText}>Verified Client</Text>
-                </View>
-              </View>
-            </View>
-            
-            {/* About/Description */}
-            <View style={clientProfileStyles.section}>
-              <Text style={clientProfileStyles.sectionLabel}>
-                <Ionicons name="information-circle-outline" size={14} color={BLUE} />
-                {' '}About
-              </Text>
-              {hasDescription ? (
-                <Text style={clientProfileStyles.description}>{client.description}</Text>
-              ) : (
-                <Text style={clientProfileStyles.noInfoText}>No description provided</Text>
-              )}
-            </View>
-            
-            {/* Company Information */}
-            <View style={clientProfileStyles.section}>
-              <Text style={clientProfileStyles.sectionLabel}>
-                <Ionicons name="business-outline" size={14} color={BLUE} />
-                {' '}Company Information
-              </Text>
-              {hasCompany ? (
-                <View style={clientProfileStyles.infoItem}>
-                  <Ionicons name="business-outline" size={18} color={TEXT_MUTED} />
-                  <Text style={clientProfileStyles.infoText}>{client.company_name}</Text>
-                </View>
-              ) : (
-                <View style={clientProfileStyles.infoItem}>
-                  <Ionicons name="business-outline" size={18} color={TEXT_LIGHT} />
-                  <Text style={clientProfileStyles.noInfoText}>No company name provided</Text>
-                </View>
-              )}
-              {hasBusinessType ? (
-                <View style={clientProfileStyles.infoItem}>
-                  <Ionicons name="layers-outline" size={18} color={TEXT_MUTED} />
-                  <Text style={clientProfileStyles.infoText}>{client.business_type}</Text>
-                </View>
-              ) : (
-                <View style={clientProfileStyles.infoItem}>
-                  <Ionicons name="layers-outline" size={18} color={TEXT_LIGHT} />
-                  <Text style={clientProfileStyles.noInfoText}>No business type provided</Text>
-                </View>
-              )}
-              {hasIndustry ? (
-                <View style={clientProfileStyles.infoItem}>
-                  <Ionicons name="construct-outline" size={18} color={TEXT_MUTED} />
-                  <Text style={clientProfileStyles.infoText}>{client.industry}</Text>
-                </View>
-              ) : (
-                <View style={clientProfileStyles.infoItem}>
-                  <Ionicons name="construct-outline" size={18} color={TEXT_LIGHT} />
-                  <Text style={clientProfileStyles.noInfoText}>No industry provided</Text>
-                </View>
-              )}
-              {hasWebsite ? (
-                <View style={clientProfileStyles.infoItem}>
-                  <Ionicons name="globe-outline" size={18} color={TEXT_MUTED} />
-                  <Text style={clientProfileStyles.infoText}>{client.website}</Text>
-                </View>
-              ) : (
-                <View style={clientProfileStyles.infoItem}>
-                  <Ionicons name="globe-outline" size={18} color={TEXT_LIGHT} />
-                  <Text style={clientProfileStyles.noInfoText}>No website provided</Text>
-                </View>
-              )}
-              {hasBudgetRange ? (
-                <View style={clientProfileStyles.infoItem}>
-                  <Ionicons name="cash-outline" size={18} color={TEXT_MUTED} />
-                  <Text style={clientProfileStyles.infoText}>{client.budget_range}</Text>
-                </View>
-              ) : (
-                <View style={clientProfileStyles.infoItem}>
-                  <Ionicons name="cash-outline" size={18} color={TEXT_LIGHT} />
-                  <Text style={clientProfileStyles.noInfoText}>No budget range provided</Text>
-                </View>
-              )}
-            </View>
-            
-            {/* Contact Information */}
-            <View style={clientProfileStyles.section}>
-              <Text style={clientProfileStyles.sectionLabel}>
-                <Ionicons name="contact-outline" size={14} color={BLUE} />
-                {' '}Contact Information
-              </Text>
-              {hasEmail ? (
-                <View style={clientProfileStyles.contactItem}>
-                  <Ionicons name="mail-outline" size={18} color={TEXT_MUTED} />
-                  <Text style={clientProfileStyles.contactText}>{client.email}</Text>
-                </View>
-              ) : (
-                <View style={clientProfileStyles.contactItem}>
-                  <Ionicons name="mail-outline" size={18} color={TEXT_LIGHT} />
-                  <Text style={clientProfileStyles.noInfoText}>No email provided</Text>
-                </View>
-              )}
-              {hasPhone ? (
-                <View style={clientProfileStyles.contactItem}>
-                  <Ionicons name="call-outline" size={18} color={TEXT_MUTED} />
-                  <Text style={clientProfileStyles.contactText}>{client.phone}</Text>
-                </View>
-              ) : (
-                <View style={clientProfileStyles.contactItem}>
-                  <Ionicons name="call-outline" size={18} color={TEXT_LIGHT} />
-                  <Text style={clientProfileStyles.noInfoText}>No phone provided</Text>
-                </View>
-              )}
-              {hasLocation ? (
-                <View style={clientProfileStyles.contactItem}>
-                  <Ionicons name="location-outline" size={18} color={TEXT_MUTED} />
-                  <Text style={clientProfileStyles.contactText}>{client.location}</Text>
-                </View>
-              ) : (
-                <View style={clientProfileStyles.contactItem}>
-                  <Ionicons name="location-outline" size={18} color={TEXT_LIGHT} />
-                  <Text style={clientProfileStyles.noInfoText}>No location provided</Text>
-                </View>
-              )}
-            </View>
-            
-            {/* Statistics - Updated to show rate instead of total spent and hire rate */}
-            <View style={clientProfileStyles.section}>
-              <Text style={clientProfileStyles.sectionLabel}>
-                <Ionicons name="stats-chart-outline" size={14} color={BLUE} />
-                {' '}Statistics
-              </Text>
-              <View style={clientProfileStyles.statsGrid}>
-                {client.jobs_posted !== undefined && (
-                  <View style={clientProfileStyles.statCard}>
-                    <Text style={clientProfileStyles.statValue}>{client.jobs_posted || 0}</Text>
-                    <Text style={clientProfileStyles.statLabel}>Jobs Posted</Text>
-                  </View>
-                )}
-                {client.rate !== undefined && (
-                  <View style={clientProfileStyles.statCard}>
-                    <Text style={clientProfileStyles.statValue}>
-                      {client.rate ? `₱${client.rate.toLocaleString()}` : 'N/A'}
-                    </Text>
-                    <Text style={clientProfileStyles.statLabel}>Rate</Text>
-                  </View>
-                )}
-                {client.member_since && (
-                  <View style={clientProfileStyles.statCard}>
-                    <Text style={clientProfileStyles.statValue}>
-                      {new Date(client.member_since).getFullYear()}
-                    </Text>
-                    <Text style={clientProfileStyles.statLabel}>Member Since</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-// Format functions
+// ── Format Functions ───────────────────────────────────────────────────────────
 const formatLocation = (location) => {
   if (!location) return null;
   if (typeof location === 'string') return location;
@@ -470,6 +145,297 @@ function SkeletonCard() {
         <View style={[styles.skeletonLine, { width: 56, height: 28, borderRadius: 999 }]} />
       </View>
     </View>
+  );
+}
+
+// ── Client Profile Modal ──────────────────────────────────────────────────────────
+function ClientProfileModal({ visible, client, onClose }) {
+  if (!client) return null;
+
+  const getInitials = () => {
+    const first = client.first_name?.[0] || '';
+    const last = client.last_name?.[0] || '';
+    return `${first}${last}`.toUpperCase() || 'C';
+  };
+
+  const getFullName = () => {
+    const first = client.first_name || '';
+    const last = client.last_name || '';
+    return `${first} ${last}`.trim() || client.company_name || client.name || 'Client';
+  };
+
+  const getCompanyName = () => {
+    return client.company_name || client.business_name || client.name || 'Independent Client';
+  };
+
+  // Safe rating display - check if rating exists and is a number
+  const renderRating = () => {
+    const rating = client.rating;
+    if (!rating || typeof rating !== 'number') return null;
+    
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+    const stars = [];
+    
+    for (let i = 0; i < fullStars; i++) {
+      stars.push(<Ionicons key={`star-${i}`} name="star" size={16} color={GOLD} />);
+    }
+    if (hasHalfStar) {
+      stars.push(<Ionicons key="half-star" name="star-half" size={16} color={GOLD} />);
+    }
+    // Fill remaining stars
+    const remaining = 5 - Math.ceil(rating);
+    for (let i = 0; i < remaining; i++) {
+      stars.push(<Ionicons key={`star-empty-${i}`} name="star-outline" size={16} color={GOLD} />);
+    }
+    
+    return (
+      <View style={clientProfileStyles.ratingRow}>
+        {stars}
+        <Text style={clientProfileStyles.ratingText}>{rating.toFixed(1)}</Text>
+      </View>
+    );
+  };
+
+  // Check if we have any client details to show
+  const hasDetails = client.email_address || client.phone_number || client.location || client.industry || client.jobs_posted !== undefined || client.bio_about_me || (client.skills && client.skills.length > 0);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={clientProfileStyles.overlay}>
+        <TouchableOpacity style={clientProfileStyles.backdrop} activeOpacity={1} onPress={onClose} />
+        <View style={clientProfileStyles.container}>
+          <View style={clientProfileStyles.handle} />
+          
+          <View style={clientProfileStyles.header}>
+            <View style={clientProfileStyles.avatarLarge}>
+              {client.profile_picture ? (
+                <Image source={{ uri: client.profile_picture }} style={clientProfileStyles.avatarImage} />
+              ) : (
+                <Text style={clientProfileStyles.avatarInitials}>{getInitials()}</Text>
+              )}
+            </View>
+            <Text style={clientProfileStyles.clientName}>{getFullName()}</Text>
+            <Text style={clientProfileStyles.companyName}>{getCompanyName()}</Text>
+            {renderRating()}
+            <TouchableOpacity style={clientProfileStyles.closeBtn} onPress={onClose}>
+              <Ionicons name="close" size={20} color={TEXT_MUTED} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={clientProfileStyles.body} showsVerticalScrollIndicator={false}>
+            {client.bio_about_me && (
+              <View style={clientProfileStyles.section}>
+                <Text style={clientProfileStyles.sectionLabel}>About</Text>
+                <Text style={clientProfileStyles.bioText}>{client.bio_about_me}</Text>
+              </View>
+            )}
+
+            <View style={clientProfileStyles.section}>
+              <Text style={clientProfileStyles.sectionLabel}>Contact & Details</Text>
+              <View style={clientProfileStyles.detailGrid}>
+                {client.email_address && (
+                  <View style={clientProfileStyles.detailItem}>
+                    <Ionicons name="mail-outline" size={16} color={BLUE} />
+                    <View>
+                      <Text style={clientProfileStyles.detailLabel}>Email</Text>
+                      <Text style={clientProfileStyles.detailValue}>{client.email_address}</Text>
+                    </View>
+                  </View>
+                )}
+                {client.phone_number && (
+                  <View style={clientProfileStyles.detailItem}>
+                    <Ionicons name="call-outline" size={16} color={BLUE} />
+                    <View>
+                      <Text style={clientProfileStyles.detailLabel}>Phone</Text>
+                      <Text style={clientProfileStyles.detailValue}>{client.phone_number}</Text>
+                    </View>
+                  </View>
+                )}
+                {client.location && (
+                  <View style={clientProfileStyles.detailItem}>
+                    <Ionicons name="location-outline" size={16} color={BLUE} />
+                    <View>
+                      <Text style={clientProfileStyles.detailLabel}>Location</Text>
+                      <Text style={clientProfileStyles.detailValue}>
+                        {typeof client.location === 'string' 
+                          ? client.location 
+                          : client.location?.city || 'Not specified'}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                {client.industry && (
+                  <View style={clientProfileStyles.detailItem}>
+                    <Ionicons name="business-outline" size={16} color={BLUE} />
+                    <View>
+                      <Text style={clientProfileStyles.detailLabel}>Industry</Text>
+                      <Text style={clientProfileStyles.detailValue}>{client.industry}</Text>
+                    </View>
+                  </View>
+                )}
+                {client.jobs_posted !== undefined && (
+                  <View style={clientProfileStyles.detailItem}>
+                    <Ionicons name="briefcase-outline" size={16} color={BLUE} />
+                    <View>
+                      <Text style={clientProfileStyles.detailLabel}>Jobs Posted</Text>
+                      <Text style={clientProfileStyles.detailValue}>{client.jobs_posted || 0}</Text>
+                    </View>
+                  </View>
+                )}
+                {client.member_since && (
+                  <View style={clientProfileStyles.detailItem}>
+                    <Ionicons name="calendar-outline" size={16} color={BLUE} />
+                    <View>
+                      <Text style={clientProfileStyles.detailLabel}>Member Since</Text>
+                      <Text style={clientProfileStyles.detailValue}>
+                        {new Date(client.member_since).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' })}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {client.skills && client.skills.length > 0 && (
+              <View style={clientProfileStyles.section}>
+                <Text style={clientProfileStyles.sectionLabel}>Skills & Expertise</Text>
+                <View style={clientProfileStyles.skillRow}>
+                  {client.skills.map((skill, index) => (
+                    <View key={index} style={clientProfileStyles.skillTag}>
+                      <Text style={clientProfileStyles.skillTagText}>{skill}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {!hasDetails && (
+              <View style={clientProfileStyles.emptyState}>
+                <Ionicons name="person-outline" size={48} color={TEXT_LIGHT} />
+                <Text style={clientProfileStyles.emptyStateTitle}>No Profile Details</Text>
+                <Text style={clientProfileStyles.emptyStateText}>
+                  This client hasn't added any additional profile information yet.
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ── Bottom Tab Bar ─────────────────────────────────────────────────────────────────
+function BottomTabBar({ activeTab, onTabPress }) {
+  const tabs = [
+    { key: 'Home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
+    { key: 'Messages', label: 'Messages', icon: 'chatbubble-outline', activeIcon: 'chatbubble' },
+    { key: 'MyJobs', label: 'My Jobs', icon: 'briefcase-outline', activeIcon: 'briefcase' },
+    { key: 'MyApplications', label: 'Applications', icon: 'checkmark-circle-outline', activeIcon: 'checkmark-circle' },
+    { key: 'Profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
+  ];
+
+  return (
+    <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
+      <View style={styles.tabBar}>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.key;
+          const isMyJobs = tab.key === 'MyJobs';
+          
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.tabItem,
+                isMyJobs && styles.tabItemCenter,
+              ]}
+              onPress={() => onTabPress(tab.key)}
+              activeOpacity={0.7}
+            >
+              {isMyJobs ? (
+                <View style={[styles.centerButton, isActive && styles.centerButtonActive]}>
+                  <Ionicons
+                    name={isActive ? tab.activeIcon : tab.icon}
+                    size={26}
+                    color={isActive ? WHITE : BLUE}
+                  />
+                </View>
+              ) : (
+                <>
+                  <View style={styles.tabIconWrap}>
+                    <Ionicons
+                      name={isActive ? tab.activeIcon : tab.icon}
+                      size={22}
+                      color={isActive ? BLUE : TEXT_LIGHT}
+                    />
+                  </View>
+                  <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+                    {tab.label}
+                  </Text>
+                  {isActive && <View style={styles.tabIndicator} />}
+                </>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ── Status Modals ─────────────────────────────────────────────────────────────────
+function ApplicationStatusModal({ visible, jobTitle, onClose }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={statusStyles.overlay}>
+        <View style={statusStyles.container}>
+          <View style={statusStyles.iconContainer}>
+            <Ionicons name="checkmark-circle" size={64} color={GREEN} />
+          </View>
+          <Text style={statusStyles.title}>Application Submitted!</Text>
+          <Text style={statusStyles.message}>
+            Your application for "{jobTitle}" has been sent successfully.
+          </Text>
+          <View style={statusStyles.infoBox}>
+            <Ionicons name="information-circle-outline" size={20} color={BLUE} />
+            <Text style={statusStyles.infoText}>
+              The client will review your application and contact you if shortlisted.
+            </Text>
+          </View>
+          <TouchableOpacity style={statusStyles.button} onPress={onClose}>
+            <Text style={statusStyles.buttonText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function AlreadyAppliedModal({ visible, jobTitle, onClose }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={statusStyles.overlay}>
+        <View style={statusStyles.container}>
+          <View style={[statusStyles.iconContainer, { backgroundColor: `${ORANGE}15` }]}>
+            <Ionicons name="alert-circle" size={64} color={ORANGE} />
+          </View>
+          <Text style={[statusStyles.title, { color: ORANGE }]}>Already Applied</Text>
+          <Text style={statusStyles.message}>
+            You have already submitted an application for "{jobTitle}".
+          </Text>
+          <View style={statusStyles.infoBox}>
+            <Ionicons name="time-outline" size={20} color={ORANGE} />
+            <Text style={[statusStyles.infoText, { color: ORANGE }]}>
+              Please wait for the client's response. You will be notified when there's an update.
+            </Text>
+          </View>
+          <TouchableOpacity style={[statusStyles.button, { backgroundColor: ORANGE }]} onPress={onClose}>
+            <Text style={statusStyles.buttonText}>Got it</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -665,41 +631,51 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
     if (proposedRate) {
       formData.append('proposed_rate', parseFloat(proposedRate).toString());
     }
+    
+    // Handle resume upload properly for database storage
     if (useExistingCV && existingCVInfo) {
       const fileExt = existingCVInfo.name.split('.').pop().toLowerCase();
       let mimeType = 'application/pdf';
       if (fileExt === 'doc') mimeType = 'application/msword';
       if (fileExt === 'docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      
       formData.append('resume', {
         uri: existingCVInfo.uri,
         name: existingCVInfo.name,
         type: mimeType,
+        size: existingCVInfo.size,
       });
     } else if (resumeFile) {
       formData.append('resume', {
         uri: resumeFile.uri,
         name: resumeFile.name,
         type: resumeFile.mimeType || 'application/pdf',
+        size: resumeFile.size,
       });
     }
+    
+    // Add education data
     const educationData = {
       level: educationLevel,
-      field_of_study: fieldOfStudy,
+      field: fieldOfStudy,
       institution: institutionName,
       graduation_year: graduationYear || null,
     };
     formData.append('education', JSON.stringify(educationData));
+    
+    // Add experiences data
     const experiencesData = experiences.map(exp => ({
       job_title: exp.jobTitle,
-      company_name: exp.companyName,
-      start_date: exp.startDate,
-      end_date: exp.currentlyWorking ? null : exp.endDate,
+      company: exp.companyName,
+      start_date: exp.startDate || null,
+      end_date: exp.currentlyWorking ? null : exp.endDate || null,
       currently_working: exp.currentlyWorking,
       description: exp.description,
     }));
     if (experiencesData.length > 0) {
       formData.append('experiences', JSON.stringify(experiencesData));
     }
+    
     onSubmit(formData);
   };
 
@@ -774,11 +750,13 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
                         <TouchableOpacity style={applyStyles.uploadBtn} onPress={pickResume}>
                           <Ionicons name="cloud-upload-outline" size={24} color={BLUE} />
                           <Text style={applyStyles.uploadBtnText}>Upload your resume (PDF, DOC, DOCX)</Text>
+                          <Text style={applyStyles.uploadBtnSubtext}>Max 5MB</Text>
                         </TouchableOpacity>
                       ) : (
                         <View style={applyStyles.fileInfo}>
                           <Ionicons name="document-text-outline" size={20} color={BLUE} />
                           <Text style={applyStyles.fileName}>{resumeFile.name}</Text>
+                          <Text style={applyStyles.fileSize}>{formatFileSize(resumeFile.size)}</Text>
                           <TouchableOpacity onPress={removeResume}>
                             <Ionicons name="close-circle" size={20} color={RED} />
                           </TouchableOpacity>
@@ -788,7 +766,7 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
                   )}
 
                   <Text style={applyStyles.applyLabel}>Highest Level of Education Completed *</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={applyStyles.educationScroll}>
                     {EDUCATION_LEVELS.map((level) => (
                       <TouchableOpacity
                         key={level}
@@ -847,6 +825,9 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
                         <Text style={applyStyles.experienceDate}>
                           {exp.startDate || 'Start date'} - {exp.currentlyWorking ? 'Present' : (exp.endDate || 'End date')}
                         </Text>
+                        {exp.description && (
+                          <Text style={applyStyles.experienceDescription}>{exp.description}</Text>
+                        )}
                       </View>
                     ))
                   )}
@@ -901,6 +882,12 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
                     <Text style={applyStyles.reviewValue}>{educationLevel} in {fieldOfStudy}</Text>
                     <Text style={applyStyles.reviewLabel}>Institution:</Text>
                     <Text style={applyStyles.reviewValue}>{institutionName}</Text>
+                    {experiences.length > 0 && (
+                      <>
+                        <Text style={applyStyles.reviewLabel}>Experience:</Text>
+                        <Text style={applyStyles.reviewValue}>{experiences.length} position(s) added</Text>
+                      </>
+                    )}
                   </View>
 
                   <Text style={applyStyles.reviewSubTitle}>Cover Letter & Rate</Text>
@@ -998,24 +985,13 @@ function LocationSearchInput({ value, onChangeText, onSelectLocation, placeholde
 }
 
 // ── Job Detail Bottom Sheet ────────────────────────────────────────────────────
-function JobDetailSheet({ job, visible, onClose, onApply, hasApplied, onViewClientProfile }) {
+function JobDetailSheet({ job, visible, onClose, onApply, hasApplied, onViewClient }) {
   if (!job) return null;
 
   const locationText = formatLocation(job.location);
   const payText = formatPayInformation(job.pay_information, job.budget_amount);
   const skills = job.required_skills || job.skills || [];
   const client = job.client_id || {};
-
-  // Check if client has information
-  const hasEmail = client.email && client.email.length > 0;
-  const hasPhone = client.phone && client.phone.length > 0;
-  const hasLocation = client.location && client.location.length > 0;
-  const hasCompany = client.company_name && client.company_name.length > 0;
-  const hasBusinessType = client.business_type && client.business_type.length > 0;
-  const hasIndustry = client.industry && client.industry.length > 0;
-  const hasWebsite = client.website && client.website.length > 0;
-  const hasBudgetRange = client.budget_range && client.budget_range.length > 0;
-  const hasDescription = client.description && client.description.length > 0;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -1029,12 +1005,45 @@ function JobDetailSheet({ job, visible, onClose, onApply, hasApplied, onViewClie
             </View>
             <View style={sheet.headerInfo}>
               <Text style={sheet.jobTitle} numberOfLines={2}>{job.title || 'Job Title'}</Text>
-              <Text style={sheet.jobCompany}>{job.client_id?.company_name || job.company_name || 'Company'}</Text>
+              <TouchableOpacity 
+                style={sheet.clientInfoRow} 
+                onPress={() => onViewClient && onViewClient(client)}
+                activeOpacity={0.7}
+              >
+                <Text style={sheet.jobCompany}>{client.company_name || client.name || 'Company'}</Text>
+                <Ionicons name="chevron-forward" size={14} color={BLUE} />
+              </TouchableOpacity>
             </View>
             <TouchableOpacity style={sheet.closeBtn} onPress={onClose}>
               <Ionicons name="close" size={20} color={TEXT_MUTED} />
             </TouchableOpacity>
           </View>
+
+          {/* Client Quick Info */}
+          {client && Object.keys(client).length > 0 && (
+            <TouchableOpacity 
+              style={sheet.clientQuickInfo}
+              onPress={() => onViewClient && onViewClient(client)}
+              activeOpacity={0.7}
+            >
+              <View style={sheet.clientQuickAvatar}>
+                {client.profile_picture ? (
+                  <Image source={{ uri: client.profile_picture }} style={sheet.clientQuickAvatarImg} />
+                ) : (
+                  <Text style={sheet.clientQuickInitials}>
+                    {client.first_name?.[0] || ''}{client.last_name?.[0] || ''}
+                  </Text>
+                )}
+              </View>
+              <View style={sheet.clientQuickInfoText}>
+                <Text style={sheet.clientQuickName}>
+                  {client.first_name || 'Client'} {client.last_name || ''}
+                </Text>
+                <Text style={sheet.clientQuickCompany}>{client.company_name || 'Independent Client'}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={TEXT_LIGHT} />
+            </TouchableOpacity>
+          )}
 
           <View style={sheet.metaRow}>
             {locationText && (
@@ -1066,155 +1075,6 @@ function JobDetailSheet({ job, visible, onClose, onApply, hasApplied, onViewClie
           <View style={sheet.divider} />
 
           <ScrollView style={sheet.body} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-            {/* CLIENT PROFILE SECTION - Clickable to view full profile */}
-            {client && Object.keys(client).length > 0 && (
-              <View style={sheet.section}>
-                <View style={sheet.clientSectionHeader}>
-                  <Ionicons name="person-circle-outline" size={18} color={BLUE} />
-                  <Text style={sheet.sectionLabel}>About the Client</Text>
-                </View>
-                
-                <TouchableOpacity 
-                  style={sheet.clientCard}
-                  onPress={() => onViewClientProfile(client)}
-                  activeOpacity={0.7}
-                >
-                  <View style={sheet.clientHeader}>
-                    {client.profile_picture ? (
-                      <Image source={{ uri: client.profile_picture }} style={sheet.clientAvatar} />
-                    ) : (
-                      <View style={sheet.clientAvatarPlaceholder}>
-                        <Ionicons name="person-outline" size={24} color={NAVY} />
-                      </View>
-                    )}
-                    <View style={sheet.clientInfo}>
-                      <Text style={sheet.clientName}>
-                        {client.first_name || ''} {client.last_name || ''}
-                      </Text>
-                      {hasCompany && (
-                        <Text style={sheet.clientCompany}>
-                          <Ionicons name="business-outline" size={12} color={TEXT_MUTED} />
-                          {' '}{client.company_name}
-                        </Text>
-                      )}
-                      <View style={sheet.clientBadge}>
-                        <Ionicons name="checkmark-circle" size={12} color={GREEN} />
-                        <Text style={sheet.clientBadgeText}>Verified Client</Text>
-                      </View>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={TEXT_LIGHT} />
-                  </View>
-                  
-                  {/* Client Description */}
-                  {hasDescription && (
-                    <View style={sheet.clientDescriptionContainer}>
-                      <Text style={sheet.clientDescriptionLabel}>
-                        <Ionicons name="information-circle-outline" size={12} color={TEXT_MUTED} />
-                        {' '}About
-                      </Text>
-                      <Text style={sheet.clientDescription} numberOfLines={3}>
-                        {client.description}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Company Information */}
-                  {(hasCompany || hasBusinessType || hasIndustry || hasWebsite || hasBudgetRange) && (
-                    <View style={sheet.clientCompanyContainer}>
-                      <Text style={sheet.clientDescriptionLabel}>
-                        <Ionicons name="business-outline" size={12} color={TEXT_MUTED} />
-                        {' '}Company Details
-                      </Text>
-                      {hasCompany && (
-                        <View style={sheet.clientDetail}>
-                          <Ionicons name="business-outline" size={14} color={TEXT_MUTED} />
-                          <Text style={sheet.clientDetailText}>{client.company_name}</Text>
-                        </View>
-                      )}
-                      {hasBusinessType && (
-                        <View style={sheet.clientDetail}>
-                          <Ionicons name="layers-outline" size={14} color={TEXT_MUTED} />
-                          <Text style={sheet.clientDetailText}>{client.business_type}</Text>
-                        </View>
-                      )}
-                      {hasIndustry && (
-                        <View style={sheet.clientDetail}>
-                          <Ionicons name="construct-outline" size={14} color={TEXT_MUTED} />
-                          <Text style={sheet.clientDetailText}>{client.industry}</Text>
-                        </View>
-                      )}
-                      {hasWebsite && (
-                        <View style={sheet.clientDetail}>
-                          <Ionicons name="globe-outline" size={14} color={TEXT_MUTED} />
-                          <Text style={sheet.clientDetailText}>{client.website}</Text>
-                        </View>
-                      )}
-                      {hasBudgetRange && (
-                        <View style={sheet.clientDetail}>
-                          <Ionicons name="cash-outline" size={14} color={TEXT_MUTED} />
-                          <Text style={sheet.clientDetailText}>{client.budget_range}</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-
-                  {/* Contact Details */}
-                  {(hasEmail || hasPhone || hasLocation) && (
-                    <View style={sheet.clientContactContainer}>
-                      <Text style={sheet.clientDescriptionLabel}>
-                        <Ionicons name="contact-outline" size={12} color={TEXT_MUTED} />
-                        {' '}Contact
-                      </Text>
-                      {hasEmail && (
-                        <View style={sheet.clientDetail}>
-                          <Ionicons name="mail-outline" size={14} color={TEXT_MUTED} />
-                          <Text style={sheet.clientDetailText}>{client.email}</Text>
-                        </View>
-                      )}
-                      {hasPhone && (
-                        <View style={sheet.clientDetail}>
-                          <Ionicons name="call-outline" size={14} color={TEXT_MUTED} />
-                          <Text style={sheet.clientDetailText}>{client.phone}</Text>
-                        </View>
-                      )}
-                      {hasLocation && (
-                        <View style={sheet.clientDetail}>
-                          <Ionicons name="location-outline" size={14} color={TEXT_MUTED} />
-                          <Text style={sheet.clientDetailText}>{client.location}</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-
-                  {/* Client Statistics - Updated to show rate instead of total spent and hire rate */}
-                  {(client.jobs_posted !== undefined || client.rate !== undefined) && (
-                    <View style={sheet.clientStats}>
-                      {client.jobs_posted !== undefined && (
-                        <View style={sheet.clientStat}>
-                          <Text style={sheet.clientStatValue}>{client.jobs_posted || 0}</Text>
-                          <Text style={sheet.clientStatLabel}>Jobs Posted</Text>
-                        </View>
-                      )}
-                      {client.rate !== undefined && (
-                        <View style={sheet.clientStat}>
-                          <Text style={sheet.clientStatValue}>
-                            {client.rate ? `₱${client.rate.toLocaleString()}` : 'N/A'}
-                          </Text>
-                          <Text style={sheet.clientStatLabel}>Rate</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-
-                  {/* View Full Profile Button */}
-                  <View style={sheet.viewProfileBtn}>
-                    <Text style={sheet.viewProfileBtnText}>Tap to view full profile</Text>
-                    <Ionicons name="arrow-forward" size={16} color={BLUE} />
-                  </View>
-                </TouchableOpacity>
-              </View>
-            )}
-
             {skills.length > 0 && (
               <View style={sheet.section}>
                 <Text style={sheet.sectionLabel}>Required Skills</Text>
@@ -1308,9 +1168,8 @@ function JobDetailSheet({ job, visible, onClose, onApply, hasApplied, onViewClie
 export default function FreelancerScreen({ onNavigate, route }) {
   const dispatch = useDispatch();
   const { user } = useSelector(s => s.auth);
-  const { receivedOffers, isLoading: offersLoading } = useSelector(s => s.offers);
   const { list: jobs, isLoading: jobsLoading } = useSelector(s => s.jobs.jobs);
-  const { applications, isLoading: appsLoading } = useSelector(s => s.applications);
+  const { applications, isLoading: appsLoading, applySuccess } = useSelector(s => s.applications);
 
   const [activeTab, setActiveTab] = useState('Home');
   const [refreshing, setRefreshing] = useState(false);
@@ -1338,42 +1197,58 @@ export default function FreelancerScreen({ onNavigate, route }) {
     }
   }, [route?.params]);
 
+  // Fetch dashboard data
   const fetchDashboardData = useCallback(async () => {
     try {
       await Promise.all([
-        dispatch(getReceivedOffers({})).unwrap(),
         dispatch(getFreelancerJobs({ limit: 20 })).unwrap(),
         dispatch(getFreelancerApplications({})).unwrap(),
       ]);
-      try { await dispatch(getOfferStats()).unwrap(); } catch (_) {}
-    } catch (e) { console.error('Dashboard fetch error:', e); }
+    } catch (e) { 
+      console.error('Dashboard fetch error:', e); 
+    }
   }, [dispatch]);
 
+  // Fetch applications and update local state
   const fetchApplications = useCallback(async () => {
     try {
       const result = await dispatch(getFreelancerApplications({})).unwrap();
       const list = result.applications || result.data || result || [];
-      const appliedIds = list.map(app => app.job_id?._id || app.job_id);
+      
+      const appliedIds = list.map(app => app.job_id?._id || app.job_id).filter(id => id);
       setAppliedJobIds(appliedIds);
       
       const statusMap = {};
       list.forEach(app => {
         const jobId = app.job_id?._id || app.job_id;
-        statusMap[jobId] = {
-          status: app.status || 'pending',
-          appliedAt: app.created_at,
-          message: app.message
-        };
+        if (jobId) {
+          statusMap[jobId] = {
+            status: app.status || 'pending',
+            appliedAt: app.created_at,
+            message: app.message
+          };
+        }
       });
       setApplicationStatus(statusMap);
-    } catch (e) { console.error('Error fetching applications:', e); }
+    } catch (e) { 
+      console.error('Error fetching applications:', e); 
+    }
   }, [dispatch]);
 
+  // Initial data fetch
   useEffect(() => {
     fetchDashboardData();
     fetchApplications();
   }, [fetchDashboardData, fetchApplications]);
 
+  // Handle apply success from Redux
+  useEffect(() => {
+    if (applySuccess) {
+      fetchApplications();
+    }
+  }, [applySuccess, fetchApplications]);
+
+  // Filter jobs based on search and location
   useEffect(() => {
     if (jobs && jobs.length > 0) {
       let filtered = [...jobs];
@@ -1397,7 +1272,6 @@ export default function FreelancerScreen({ onNavigate, route }) {
     }
   }, [jobs, searchQuery, locationQuery]);
 
-  const pendingOffers = receivedOffers?.filter(o => o.status === 'pending').length || 0;
   const isInitialLoading = jobsLoading && !refreshing && (!jobs || jobs.length === 0);
 
   const onRefresh = useCallback(async () => {
@@ -1427,12 +1301,22 @@ export default function FreelancerScreen({ onNavigate, route }) {
   const handleLogout = () =>
     Alert.alert('Logout', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: async () => { await dispatch(logout()); onNavigate('Login'); } },
+      { text: 'Logout', style: 'destructive', onPress: async () => { 
+        await dispatch(logout()); 
+        onNavigate('Login'); 
+      } },
     ]);
 
   const openJobDetail = (job) => { 
     setSelectedJob(job); 
     setSheetVisible(true); 
+  };
+  
+  const handleViewClient = (client) => {
+    if (client && Object.keys(client).length > 0) {
+      setSelectedClient(client);
+      setShowClientProfileModal(true);
+    }
   };
   
   const handleApply = (job) => { 
@@ -1444,26 +1328,6 @@ export default function FreelancerScreen({ onNavigate, route }) {
     setSheetVisible(false); 
     setSelectedJob(job); 
     setShowApplyModal(true); 
-  };
-
-  const handleViewClientProfile = (client) => {
-    // Ensure we have all client data, use defaults if missing
-    const fullClient = {
-      ...client,
-      description: client.description || 'No description provided',
-      email: client.email || 'No email provided',
-      location: client.location || 'No location provided',
-      phone: client.phone || 'No phone provided',
-      company_name: client.company_name || 'No company name',
-      business_type: client.business_type || 'No business type',
-      industry: client.industry || 'No industry',
-      website: client.website || 'No website',
-      budget_range: client.budget_range || 'No budget range',
-      jobs_posted: client.jobs_posted || 0,
-      rate: client.rate || null,
-    };
-    setSelectedClient(fullClient);
-    setShowClientProfileModal(true);
   };
 
   const handleSubmitApplication = async (formData) => {
@@ -1479,13 +1343,14 @@ export default function FreelancerScreen({ onNavigate, route }) {
     }
     setSubmitting(true);
     try {
-      await dispatch(applyForJob(formData)).unwrap();
+      const result = await dispatch(applyForJob(formData)).unwrap();
       setAppliedJobIds([...appliedJobIds, selectedJob._id]);
       setShowApplyModal(false);
       setShowSuccessModal(true);
       await fetchApplications();
     } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to submit application.');
+      console.error('Application error:', error);
+      Alert.alert('Error', error.message || 'Failed to submit application. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -1500,6 +1365,7 @@ export default function FreelancerScreen({ onNavigate, route }) {
     const workSetup = formatWorkSetup(job.work_setup);
     const hasApplied = appliedJobIds.includes(job._id);
     const appStatus = applicationStatus[job._id];
+    const client = job.client_id || {};
 
     return (
       <TouchableOpacity style={styles.jobCard} onPress={() => openJobDetail(job)} activeOpacity={0.85}>
@@ -1519,7 +1385,27 @@ export default function FreelancerScreen({ onNavigate, route }) {
         </View>
 
         <Text style={styles.jobTitle} numberOfLines={2}>{job.title || 'Job Title'}</Text>
-        <Text style={styles.jobCompany}>{job.client_id?.company_name || job.company_name || 'Company'}</Text>
+        
+        {/* Client info in job card */}
+        <TouchableOpacity 
+          style={styles.clientInfoRow} 
+          onPress={() => handleViewClient(client)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.clientAvatarSmall}>
+            {client.profile_picture ? (
+              <Image source={{ uri: client.profile_picture }} style={styles.clientAvatarSmallImg} />
+            ) : (
+              <Text style={styles.clientAvatarSmallText}>
+                {client.first_name?.[0] || ''}{client.last_name?.[0] || ''}
+              </Text>
+            )}
+          </View>
+          <Text style={styles.jobCompany}>
+            {client.company_name || client.name || 'Company'}
+          </Text>
+          <Ionicons name="chevron-forward" size={14} color={TEXT_LIGHT} />
+        </TouchableOpacity>
 
         <View style={styles.jobMetaRow}>
           <Ionicons name="location-outline" size={12} color={TEXT_MUTED} />
@@ -1663,7 +1549,6 @@ export default function FreelancerScreen({ onNavigate, route }) {
           </View>
           <TouchableOpacity style={styles.notifBtn} onPress={() => onNavigate('Notifications')}>
             <Ionicons name="notifications-outline" size={22} color={WHITE} />
-            {pendingOffers > 0 && <View style={styles.notifDot} />}
           </TouchableOpacity>
         </View>
 
@@ -1674,7 +1559,7 @@ export default function FreelancerScreen({ onNavigate, route }) {
           </ScrollView>
         ) : (
           <FlatList
-            data={displayJobs.slice(0, 8)}
+            data={displayJobs}
             keyExtractor={(item, index) => item._id || index.toString()}
             renderItem={renderJobItem}
             ListHeaderComponent={ListHeader}
@@ -1688,8 +1573,7 @@ export default function FreelancerScreen({ onNavigate, route }) {
         {/* Bottom Tab Bar */}
         <BottomTabBar 
           activeTab={activeTab} 
-          onTabPress={handleTabPress} 
-          pendingOffers={pendingOffers}
+          onTabPress={handleTabPress}
         />
       </View>
 
@@ -1699,17 +1583,13 @@ export default function FreelancerScreen({ onNavigate, route }) {
         onClose={() => setSheetVisible(false)}
         onApply={handleApply}
         hasApplied={selectedJob ? appliedJobIds.includes(selectedJob._id) : false}
-        onViewClientProfile={handleViewClientProfile}
+        onViewClient={handleViewClient}
       />
 
-      {/* Client Profile Modal */}
       <ClientProfileModal
         visible={showClientProfileModal}
         client={selectedClient}
-        onClose={() => {
-          setShowClientProfileModal(false);
-          setSelectedClient(null);
-        }}
+        onClose={() => { setShowClientProfileModal(false); setSelectedClient(null); }}
       />
 
       <ApplicationModal
@@ -1751,7 +1631,6 @@ const styles = StyleSheet.create({
   topbarBrand: { fontSize: 16, fontWeight: '800', color: WHITE, letterSpacing: -0.2 },
   topbarTagline: { fontSize: 9, fontWeight: '500', color: GOLD_LT, letterSpacing: 1.44, textTransform: 'uppercase', marginTop: 1 },
   notifBtn: { position: 'relative', padding: 4 },
-  notifDot: { position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: GOLD, borderWidth: 2, borderColor: NAVY },
 
   searchSection: { paddingHorizontal: 16, marginTop: 16, marginBottom: 20 },
   searchPill: {
@@ -1807,7 +1686,14 @@ const styles = StyleSheet.create({
   badgeWorkSetupText: { fontSize: 10, fontWeight: '600', color: BLUE },
   bookmarkBtn: { marginLeft: 'auto', padding: 2 },
   jobTitle: { fontSize: 17, fontWeight: '700', color: TEXT_MAIN, marginBottom: 4, lineHeight: 23 },
-  jobCompany: { fontSize: 13, color: TEXT_MUTED, marginBottom: 6 },
+  
+  // Client info in job card
+  clientInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  clientAvatarSmall: { width: 20, height: 20, borderRadius: 10, backgroundColor: `${BLUE}15`, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  clientAvatarSmallImg: { width: 20, height: 20, borderRadius: 10 },
+  clientAvatarSmallText: { fontSize: 8, fontWeight: '700', color: BLUE },
+  jobCompany: { fontSize: 13, color: BLUE, fontWeight: '500', flex: 1 },
+  
   jobMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
   jobLocation: { fontSize: 12, color: TEXT_MUTED },
   budgetChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(200,149,32,0.08)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(200,149,32,0.2)', marginBottom: 10 },
@@ -1893,17 +1779,6 @@ const styles = StyleSheet.create({
     borderRadius: 1.5,
     backgroundColor: BLUE,
   },
-  tabBadgeDot: {
-    position: 'absolute',
-    top: -3,
-    right: -6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: GOLD,
-    borderWidth: 1.5,
-    borderColor: WHITE,
-  },
 });
 
 // ── Bottom sheet styles ────────────────────────────────────────────────────────
@@ -1916,8 +1791,46 @@ const sheet = StyleSheet.create({
   companyLogo: { width: 48, height: 48, borderRadius: 14, backgroundColor: `${BLUE}10`, borderWidth: 1.5, borderColor: `${BLUE}18`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   headerInfo: { flex: 1 },
   jobTitle: { fontSize: 17, fontWeight: '700', color: TEXT_MAIN, lineHeight: 23, marginBottom: 3 },
-  jobCompany: { fontSize: 13, color: TEXT_MUTED },
+  clientInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  jobCompany: { fontSize: 13, color: BLUE, fontWeight: '500' },
   closeBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: BG, alignItems: 'center', justifyContent: 'center' },
+  
+  // Client quick info
+  clientQuickInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: `${BLUE}5`,
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: `${BLUE}15`,
+  },
+  clientQuickAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: `${BLUE}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  clientQuickAvatarImg: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  clientQuickInitials: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: BLUE,
+  },
+  clientQuickInfoText: { flex: 1 },
+  clientQuickName: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN },
+  clientQuickCompany: { fontSize: 11, color: TEXT_MUTED },
+  
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 20, marginBottom: 16 },
   metaChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BG, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1.5, borderColor: BORDER },
   metaChipBlue: { backgroundColor: 'rgba(200,149,32,0.08)', borderColor: 'rgba(200,149,32,0.2)' },
@@ -1926,149 +1839,6 @@ const sheet = StyleSheet.create({
   body: { paddingHorizontal: 20 },
   section: { marginBottom: 20 },
   sectionLabel: { fontSize: 11, fontWeight: '700', color: BLUE, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
-  
-  // Client Profile Styles
-  clientSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  clientCard: {
-    backgroundColor: BG,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-  },
-  clientHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  clientAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: BLUE,
-  },
-  clientAvatarPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: `${GOLD}30`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: GOLD,
-  },
-  clientInfo: {
-    flex: 1,
-  },
-  clientName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-    marginBottom: 2,
-  },
-  clientCompany: {
-    fontSize: 12,
-    color: TEXT_MUTED,
-  },
-  clientBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  clientBadgeText: {
-    fontSize: 10,
-    color: GREEN,
-    fontWeight: '500',
-  },
-  clientDescriptionContainer: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  clientCompanyContainer: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  clientContactContainer: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  clientDescriptionLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: TEXT_MUTED,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 6,
-  },
-  clientDescription: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    lineHeight: 20,
-  },
-  clientDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 4,
-  },
-  clientDetailText: {
-    fontSize: 12,
-    color: TEXT_MUTED,
-    flex: 1,
-  },
-  clientStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  clientStat: {
-    alignItems: 'center',
-  },
-  clientStatValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-  },
-  clientStatLabel: {
-    fontSize: 10,
-    color: TEXT_LIGHT,
-    marginTop: 2,
-  },
-  viewProfileBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: `${BLUE}10`,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: `${BLUE}20`,
-  },
-  viewProfileBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: BLUE,
-  },
-  
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   tag: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: `${BLUE}10`, borderRadius: 999, borderWidth: 1.5, borderColor: `${BLUE}22` },
   tagText: { fontSize: 12, color: BLUE, fontWeight: '600' },
@@ -2082,37 +1852,6 @@ const sheet = StyleSheet.create({
   applyBtn: { flex: 1, height: 48, borderRadius: 14, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center' },
   applyBtnDisabled: { backgroundColor: `${BLUE}50` },
   applyBtnText: { fontSize: 15, fontWeight: '700', color: WHITE },
-});
-
-// ── Client Profile Modal Styles ──────────────────────────────────────────────
-const clientProfileStyles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(7,26,62,0.55)' },
-  container: { backgroundColor: WHITE, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: SCREEN_H * 0.9, paddingTop: 12 },
-  handle: { width: 40, height: 4, borderRadius: 999, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 16 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: BORDER },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: TEXT_MAIN },
-  body: { paddingHorizontal: 20, paddingTop: 16 },
-  profileHeader: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 20 },
-  profileAvatar: { width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: BLUE },
-  profileAvatarPlaceholder: { width: 64, height: 64, borderRadius: 32, backgroundColor: `${GOLD}30`, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: GOLD },
-  profileInfo: { flex: 1 },
-  profileName: { fontSize: 20, fontWeight: '700', color: TEXT_MAIN, marginBottom: 4 },
-  profileCompany: { fontSize: 14, color: TEXT_MUTED, marginBottom: 4 },
-  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  verifiedText: { fontSize: 12, color: GREEN, fontWeight: '500' },
-  section: { marginBottom: 20 },
-  sectionLabel: { fontSize: 14, fontWeight: '600', color: BLUE, marginBottom: 12 },
-  description: { fontSize: 14, color: TEXT_MUTED, lineHeight: 22 },
-  noInfoText: { fontSize: 14, color: TEXT_LIGHT, fontStyle: 'italic' },
-  infoItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: BORDER },
-  infoText: { fontSize: 14, color: TEXT_MAIN, flex: 1 },
-  contactItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: BORDER },
-  contactText: { fontSize: 14, color: TEXT_MAIN, flex: 1 },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  statCard: { flex: 1, minWidth: '45%', backgroundColor: BG, borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1.5, borderColor: BORDER },
-  statValue: { fontSize: 20, fontWeight: '700', color: TEXT_MAIN },
-  statLabel: { fontSize: 11, color: TEXT_LIGHT, marginTop: 4 },
 });
 
 // ── Application Modal Styles ─────────────────────────────────────────────────────
@@ -2136,10 +1875,13 @@ const applyStyles = StyleSheet.create({
   applyLabel: { fontSize: 13, fontWeight: '600', color: TEXT_MUTED, marginBottom: 8, marginTop: 16 },
   applyInput: { backgroundColor: BG, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, color: TEXT_MAIN, fontSize: 14, borderWidth: 1.5, borderColor: BORDER, marginBottom: 16 },
   applyTextArea: { height: 80, textAlignVertical: 'top' },
+  educationScroll: { marginBottom: 16 },
   uploadBtn: { backgroundColor: BG, borderRadius: 10, paddingVertical: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: BORDER, borderStyle: 'dashed', marginBottom: 16 },
-  uploadBtnText: { fontSize: 12, color: BLUE, marginTop: 8 },
+  uploadBtnText: { fontSize: 13, color: BLUE, marginTop: 8 },
+  uploadBtnSubtext: { fontSize: 10, color: TEXT_LIGHT, marginTop: 2 },
   fileInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: BG, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, marginBottom: 16, borderWidth: 1.5, borderColor: BORDER },
   fileName: { flex: 1, fontSize: 12, color: TEXT_MAIN },
+  fileSize: { fontSize: 10, color: TEXT_LIGHT },
   educationChip: { backgroundColor: BG, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, marginRight: 8, borderWidth: 1.5, borderColor: BORDER },
   educationChipActive: { backgroundColor: `${BLUE}10`, borderColor: BLUE },
   educationChipText: { fontSize: 12, color: TEXT_MUTED },
@@ -2155,6 +1897,7 @@ const applyStyles = StyleSheet.create({
   experienceJobTitle: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN },
   experienceCompany: { fontSize: 12, color: TEXT_MUTED, marginBottom: 4 },
   experienceDate: { fontSize: 11, color: TEXT_LIGHT },
+  experienceDescription: { fontSize: 11, color: TEXT_MUTED, marginTop: 4 },
   expModalWrap: { flex: 1, backgroundColor: 'rgba(7,26,62,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   expModalSheet: { backgroundColor: WHITE, borderRadius: 16, width: '100%', maxHeight: '80%', borderWidth: 1.5, borderColor: BORDER },
   expModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 15, borderBottomWidth: 1.5, borderBottomColor: BORDER },
@@ -2199,4 +1942,35 @@ const statusStyles = StyleSheet.create({
   infoText: { fontSize: 12, color: BLUE, flex: 1, lineHeight: 16 },
   button: { backgroundColor: GREEN, paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12, minWidth: 120, alignItems: 'center' },
   buttonText: { fontSize: 16, fontWeight: '600', color: WHITE },
+});
+
+// ── Client Profile Modal Styles ──────────────────────────────────────────────────
+const clientProfileStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(7,26,62,0.55)' },
+  container: { backgroundColor: WHITE, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: SCREEN_H * 0.85, paddingTop: 12 },
+  handle: { width: 40, height: 4, borderRadius: 999, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 16 },
+  header: { alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: BORDER },
+  avatarLarge: { width: 72, height: 72, borderRadius: 36, backgroundColor: `${BLUE}15`, alignItems: 'center', justifyContent: 'center', marginBottom: 12, overflow: 'hidden' },
+  avatarImage: { width: 72, height: 72, borderRadius: 36 },
+  avatarInitials: { fontSize: 28, fontWeight: '700', color: BLUE },
+  clientName: { fontSize: 18, fontWeight: '700', color: TEXT_MAIN, marginBottom: 2 },
+  companyName: { fontSize: 14, color: TEXT_MUTED, marginBottom: 6 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 4 },
+  ratingText: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN, marginLeft: 4 },
+  closeBtn: { position: 'absolute', top: 0, right: 12, width: 32, height: 32, borderRadius: 10, backgroundColor: BG, alignItems: 'center', justifyContent: 'center' },
+  body: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
+  section: { marginBottom: 20 },
+  sectionLabel: { fontSize: 11, fontWeight: '700', color: BLUE, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
+  bioText: { fontSize: 14, color: TEXT_MUTED, lineHeight: 22 },
+  detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, backgroundColor: BG, borderRadius: 16, padding: 16, borderWidth: 1.5, borderColor: BORDER },
+  detailItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, width: '45%' },
+  detailLabel: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500', marginBottom: 2 },
+  detailValue: { fontSize: 13, color: TEXT_MAIN, fontWeight: '500', flexShrink: 1 },
+  skillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  skillTag: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: `${BLUE}10`, borderRadius: 999, borderWidth: 1.5, borderColor: `${BLUE}22` },
+  skillTagText: { fontSize: 12, color: BLUE, fontWeight: '500' },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyStateTitle: { fontSize: 16, fontWeight: '600', color: TEXT_MUTED, marginTop: 12 },
+  emptyStateText: { fontSize: 13, color: TEXT_LIGHT, textAlign: 'center', marginTop: 4, paddingHorizontal: 20 },
 });

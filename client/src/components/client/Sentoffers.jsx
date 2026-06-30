@@ -1,825 +1,1149 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, Image,
-  Alert, ActivityIndicator, RefreshControl, Modal, StatusBar,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
+  Modal,
+  TextInput,
+  Image,
+  StatusBar,
+  FlatList,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
+import { useFocusEffect } from '@react-navigation/native';
 
-const NAVY       = '#071A3E';
-const NAVY2      = '#0D2151';
-const BLUE       = '#0055A5';
-const BLUE_MD    = '#0073CF';
-const BLUE_LT    = '#1E90FF';
-const GOLD       = '#C89520';
-const GOLD_LT    = '#E8B84B';
-const GOLD_DK    = '#8A6410';
-const SILVER     = '#8899B0';
-const SILVER2    = '#B8C8D8';
-const WHITE      = '#FFFFFF';
-const BG         = '#EEF4FA';
-const CARD       = '#FFFFFF';
-const TEXT_MAIN  = '#071A3E';
+import {
+  getClientApplications,
+  updateApplicationStatus,
+} from '../../Redux/slices/applicationSlice';
+
+import {
+  getClientContracts,
+  updateContractProgress,
+  updateContractStatus,
+} from '../../Redux/slices/contractSlice';
+
+import { getJobProgress } from '../../Redux/slices/jobSlice';
+
+const NAVY = '#071A3E';
+const BLUE = '#0055A5';
+const BLUE_MD = '#0073CF';
+const GOLD = '#C89520';
+const GOLD_LT = '#E8B84B';
+const GOLD_DK = '#8A6410';
+const WHITE = '#FFFFFF';
+const BG = '#EEF4FA';
+const CARD = '#FFFFFF';
+const TEXT_MAIN = '#071A3E';
 const TEXT_MUTED = '#3A5070';
 const TEXT_LIGHT = '#7A90A8';
-const BORDER     = '#C8D8E8';
-const GREEN      = '#059669';
+const BORDER = '#C8D8E8';
+const GREEN = '#059669';
 const GREEN_SOFT = '#D1FAE5';
-const GREEN_MID  = '#86EFAC';
+const GREEN_MID = '#86EFAC';
 const GREEN_DARK = '#059669';
-const ORANGE     = '#F97316';
-const RED        = '#EF4444';
-// ─────────────────────────────────────────────────────────────────────────────────
+const BG_GRAY = '#F9FAFB';
+const RED = '#DC2626';
+const ORANGE = '#F97316';
+const YELLOW = '#F59E0B';
 
-const TABS = ['All', 'pending', 'accepted', 'declined', 'expired'];
+const { width } = Dimensions.get('window');
 
-const statusStyle = {
-  pending:  { bg: `${GOLD}15`, border: `${GOLD}30`, text: GOLD, dot: GOLD, label: 'Pending', icon: 'time-outline' },
-  accepted: { bg: `${GREEN}15`, border: `${GREEN}30`, text: GREEN, dot: GREEN, label: 'Accepted', icon: 'checkmark-circle-outline' },
-  declined: { bg: `${RED}15`, border: `${RED}30`, text: RED, dot: RED, label: 'Declined', icon: 'close-circle-outline' },
-  expired:  { bg: `${TEXT_MUTED}15`, border: `${TEXT_MUTED}30`, text: TEXT_MUTED, dot: TEXT_MUTED, label: 'Expired', icon: 'alert-circle-outline' },
+// Status colors and icons
+const STATUS_CONFIG = {
+  'active': { color: GREEN, icon: 'play-circle', label: 'Active' },
+  'paused': { color: YELLOW, icon: 'pause-circle', label: 'Paused' },
+  'completed': { color: BLUE, icon: 'checkmark-done-circle', label: 'Completed' },
+  'cancelled': { color: RED, icon: 'close-circle', label: 'Cancelled' },
+  'in_progress': { color: GREEN, icon: 'construct', label: 'In Progress' },
+  'in_review': { color: YELLOW, icon: 'eye', label: 'In Review' },
 };
 
-// Helper function to format date
+const getStatusInfo = (status) => {
+  return STATUS_CONFIG[status] || { color: TEXT_MUTED, icon: 'help-circle', label: status || 'Unknown' };
+};
+
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
   const date = new Date(dateString);
-  const now = new Date();
-  const diffTime = Math.abs(now - date);
-  const diffHours = Math.ceil(diffTime / (1000 * 60 * 60));
-  
-  if (diffHours < 1) return 'Just now';
-  if (diffHours === 1) return '1 hour ago';
-  if (diffHours < 24) return `${diffHours} hours ago`;
-  if (diffHours < 48) return 'Yesterday';
-  const diffDays = Math.ceil(diffHours / 24);
-  return `${diffDays} days ago`;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[date.getMonth()];
+  const day = date.getDate();
+  const year = date.getFullYear();
+  return `${month} ${day}, ${year}`;
 };
 
-// Format full date
-const formatFullDate = (dateString) => {
+const formatTimeAgo = (dateString) => {
   if (!dateString) return 'N/A';
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-PH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const now = new Date();
+  const diff = Math.floor((now - date) / 1000);
+  
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+  return formatDate(dateString);
 };
 
-// Get initials from name
-const getInitials = (firstName, lastName) => {
-  return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
-};
-
-// Generate random color based on name
-const getAvatarColor = (name) => {
-  const colors = [BLUE, BLUE_MD, GOLD, '#60a5fa', '#fbbf24', '#f87171', '#34d399', '#818cf8', '#f472b6'];
-  const index = name?.length % colors.length || 0;
-  return colors[index];
-};
-
-export default function SentOffersScreen({ onNavigate }) {
-  const dispatch = useDispatch();
-  const { sentOffers, isLoading } = useSelector((state) => state.offers);
-  const { token } = useSelector((state) => state.auth);
-  const [activeTab, setActiveTab] = useState('All');
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedOffer, setSelectedOffer] = useState(null);
-  const [showOfferModal, setShowOfferModal] = useState(false);
-  const [showFreelancerModal, setShowFreelancerModal] = useState(false);
-
-  // Fetch sent offers when screen loads
-  useEffect(() => {
-    fetchSentOffers();
-  }, []);
-
-  const fetchSentOffers = async () => {
-    if (!token) {
-      Alert.alert('Error', 'Please login again');
-      return;
-    }
-    
-    try {
-      await dispatch(getSentOffers()).unwrap();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load sent offers');
-    }
+// ── Progress Bar Component ──────────────────────────────────────────────────
+const ProgressBar = ({ progress, size = 'medium' }) => {
+  const isSmall = size === 'small';
+  const height = isSmall ? 6 : 10;
+  const width = isSmall ? 60 : '100%';
+  
+  const getColor = (value) => {
+    if (value < 30) return RED;
+    if (value < 60) return YELLOW;
+    if (value < 90) return BLUE;
+    return GREEN;
   };
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchSentOffers();
-    setRefreshing(false);
-  }, []);
-
-  // Filter offers based on active tab
-  const filteredOffers = sentOffers.filter((offer) =>
-    activeTab === 'All' ? true : offer.status === activeTab
+  return (
+    <View style={[pb.container, { height, width }]}>
+      <View 
+        style={[
+          pb.fill, 
+          { 
+            width: `${Math.min(progress || 0, 100)}%`,
+            backgroundColor: getColor(progress || 0),
+            height,
+          }
+        ]} 
+      />
+    </View>
   );
+};
 
-  // Get counts for summary
-  const getCountByStatus = (status) => {
-    return sentOffers.filter((offer) => offer.status === status).length;
+const pb = StyleSheet.create({
+  container: {
+    backgroundColor: BG,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  fill: {
+    borderRadius: 10,
+  },
+});
+
+// ── Rating Stars ──────────────────────────────────────────────────────────
+const RatingStars = ({ rating = 0, size = 14 }) => {
+  const full = Math.floor(rating);
+  const half = rating - full >= 0.5;
+  const empty = 5 - full - (half ? 1 : 0);
+  const stars = [];
+  
+  for (let i = 0; i < full; i++) {
+    stars.push(<Ionicons key={'f' + i} name="star" size={size} color={GOLD} />);
+  }
+  if (half) {
+    stars.push(<Ionicons key="h" name="star-half" size={size} color={GOLD} />);
+  }
+  for (let i = 0; i < empty; i++) {
+    stars.push(<Ionicons key={'e' + i} name="star-outline" size={size} color={GOLD} />);
+  }
+  
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+      {stars}
+      {rating > 0 && (
+        <Text style={{ fontSize: 11, fontWeight: '600', color: GOLD_DK, marginLeft: 4 }}>
+          {rating.toFixed(1)}
+        </Text>
+      )}
+    </View>
+  );
+};
+
+// ── Update Modal ──────────────────────────────────────────────────────────
+const UpdateModal = ({ visible, contract, onClose, onUpdate }) => {
+  const [progress, setProgress] = useState(contract?.progress || 0);
+  const [status, setStatus] = useState(contract?.status || 'active');
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (contract) {
+      setProgress(contract.progress || 0);
+      setStatus(contract.status || 'active');
+    }
+  }, [contract]);
+
+  const handleUpdate = async () => {
+    setLoading(true);
+    try {
+      await onUpdate(contract._id, { progress, status, notes });
+      onClose();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update progress');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Cancel/Withdraw offer
-  const handleCancelOffer = (offerId) => {
-    Alert.alert(
-      'Withdraw Offer',
-      'Are you sure you want to withdraw this offer? The freelancer will be notified.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Withdraw',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await dispatch(updateOfferStatus({ offerId, status: 'declined' })).unwrap();
-              Alert.alert('Success', 'Offer has been withdrawn');
-              fetchSentOffers();
-              setShowOfferModal(false);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to withdraw offer');
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  // Resend offer (create new offer)
-  const handleResendOffer = (offer) => {
-    Alert.alert(
-      'Resend Offer',
-      `Would you like to send a new offer to ${offer.freelancer_name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Resend',
-          onPress: () => {
-            onNavigate('SendOffer', { freelancerId: offer.freelancer_id, jobId: offer.job_id });
-          }
-        }
-      ]
-    );
-  };
-
-  // View freelancer profile
-  const handleViewFreelancer = (offer) => {
-    setSelectedOffer(offer);
-    setShowFreelancerModal(true);
-  };
-
-  // Message freelancer
-  const handleMessageFreelancer = (freelancerId) => {
-    onNavigate('Messages', { userId: freelancerId, userRole: 'freelancer' });
-  };
-
-  // View job details
-  const handleViewJob = (jobId) => {
-    setShowOfferModal(false);
-    onNavigate('JobDetails', { jobId });
-  };
-
-  // Offer Details Modal
-  const OfferDetailsModal = () => {
-    if (!selectedOffer) return null;
-    const st = statusStyle[selectedOffer.status] || statusStyle.pending;
-    
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showOfferModal}
-        onRequestClose={() => setShowOfferModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Offer Details</Text>
-              <TouchableOpacity onPress={() => setShowOfferModal(false)} style={styles.modalCloseBtn}>
-                <Ionicons name="close" size={22} color={TEXT_MUTED} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Status Banner */}
-              <View style={[styles.statusBanner, { backgroundColor: st.bg, borderColor: st.border }]}>
-                <Ionicons name={st.icon} size={24} color={st.text} />
-                <Text style={[styles.statusBannerText, { color: st.text }]}>{st.label}</Text>
-              </View>
-
-              {/* Offer Amount */}
-              <View style={styles.detailSection}>
-                <Text style={styles.detailLabel}>Offer Amount</Text>
-                <Text style={styles.amountLarge}>₱{selectedOffer.amount?.toLocaleString()}</Text>
-              </View>
-
-              {/* Job Info */}
-              <View style={styles.detailSection}>
-                <Text style={styles.detailLabel}>Job Title</Text>
-                <Text style={styles.detailValue}>{selectedOffer.job_title}</Text>
-              </View>
-
-              {/* Message */}
-              {selectedOffer.message && (
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailLabel}>Your Message</Text>
-                  <View style={styles.messageCard}>
-                    <Ionicons name="chatbubble-outline" size={14} color={BLUE} style={{ marginRight: 8 }} />
-                    <Text style={styles.messageValue}>{selectedOffer.message}</Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Dates */}
-              <View style={styles.detailSection}>
-                <Text style={styles.detailLabel}>Sent Date</Text>
-                <Text style={styles.detailValue}>{formatFullDate(selectedOffer.created_at)}</Text>
-              </View>
-
-              {selectedOffer.expiry_date && (
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailLabel}>Expiry Date</Text>
-                  <Text style={[styles.detailValue, { color: selectedOffer.status === 'expired' ? RED : BLUE }]}>
-                    {formatFullDate(selectedOffer.expiry_date)}
-                    {selectedOffer.status === 'expired' && ' (Expired)'}
-                  </Text>
-                </View>
-              )}
-
-              {selectedOffer.responded_at && (
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailLabel}>Response Date</Text>
-                  <Text style={styles.detailValue}>{formatFullDate(selectedOffer.responded_at)}</Text>
-                </View>
-              )}
-
-              {/* Action Buttons */}
-              <View style={styles.modalActions}>
-                {selectedOffer.status === 'pending' && (
-                  <>
-                    <TouchableOpacity 
-                      style={[styles.modalActionBtn, styles.viewFreelancerBtn]}
-                      onPress={() => handleViewFreelancer(selectedOffer)}
-                    >
-                      <Ionicons name="person-outline" size={16} color={BLUE} />
-                      <Text style={styles.viewFreelancerBtnText}>View Freelancer</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[styles.modalActionBtn, styles.viewJobBtn]}
-                      onPress={() => handleViewJob(selectedOffer.job_id)}
-                    >
-                      <Ionicons name="briefcase-outline" size={16} color={BLUE} />
-                      <Text style={styles.viewJobBtnText}>View Job</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[styles.modalActionBtn, styles.cancelOfferBtn]}
-                      onPress={() => handleCancelOffer(selectedOffer._id)}
-                    >
-                      <Ionicons name="close-circle-outline" size={16} color={RED} />
-                      <Text style={styles.cancelOfferBtnText}>Withdraw Offer</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-                
-                {selectedOffer.status === 'expired' && (
-                  <TouchableOpacity 
-                    style={[styles.modalActionBtn, styles.resendOfferBtn]}
-                    onPress={() => handleResendOffer(selectedOffer)}
-                  >
-                    <Ionicons name="refresh-outline" size={16} color={WHITE} />
-                    <Text style={styles.resendOfferBtnText}>Send New Offer</Text>
-                  </TouchableOpacity>
-                )}
-                
-                {(selectedOffer.status === 'accepted' || selectedOffer.status === 'declined') && (
-                  <>
-                    <TouchableOpacity 
-                      style={[styles.modalActionBtn, styles.viewFreelancerBtn]}
-                      onPress={() => handleViewFreelancer(selectedOffer)}
-                    >
-                      <Ionicons name="person-outline" size={16} color={BLUE} />
-                      <Text style={styles.viewFreelancerBtnText}>View Freelancer</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[styles.modalActionBtn, styles.messageFreelancerBtn]}
-                      onPress={() => handleMessageFreelancer(selectedOffer.freelancer_id)}
-                    >
-                      <Ionicons name="chatbubble-outline" size={16} color={WHITE} />
-                      <Text style={styles.messageFreelancerBtnText}>Message</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            </ScrollView>
+  return (
+    <Modal transparent animationType="slide" visible={visible} onRequestClose={onClose}>
+      <View style={um.overlay}>
+        <View style={um.sheet}>
+          <View style={um.header}>
+            <Text style={um.title}>Update Progress</Text>
+            <TouchableOpacity onPress={onClose} style={um.closeBtn}>
+              <Ionicons name="close" size={22} color={TEXT_MUTED} />
+            </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
-    );
-  };
 
-  // Freelancer Profile Modal
-  const FreelancerProfileModal = () => {
-    if (!selectedOffer) return null;
-    const freelancer = selectedOffer;
-    
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showFreelancerModal}
-        onRequestClose={() => setShowFreelancerModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Freelancer Profile</Text>
-              <TouchableOpacity onPress={() => setShowFreelancerModal(false)} style={styles.modalCloseBtn}>
-                <Ionicons name="close" size={22} color={TEXT_MUTED} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Profile Header */}
-              <View style={styles.profileHeader}>
-                <View style={[styles.profileAvatar, { backgroundColor: BLUE }]}>
-                  {freelancer.freelancer_profile_picture ? (
-                    <Image source={{ uri: freelancer.freelancer_profile_picture }} style={styles.profileAvatarImage} />
+          <ScrollView style={um.content} showsVerticalScrollIndicator={false}>
+            {contract?.freelancer_id && (
+              <View style={um.freelancerInfo}>
+                <View style={um.avatar}>
+                  {contract.freelancer_id.profile_picture ? (
+                    <Image source={{ uri: contract.freelancer_id.profile_picture }} style={um.avatarImg} />
                   ) : (
-                    <Text style={styles.profileInitials}>
-                      {getInitials(freelancer.freelancer_first_name, freelancer.freelancer_last_name)}
+                    <Text style={um.avatarText}>
+                      {(contract.freelancer_id.first_name || '')[0]}{(contract.freelancer_id.last_name || '')[0]}
                     </Text>
                   )}
                 </View>
-                <Text style={styles.profileName}>{freelancer.freelancer_name}</Text>
-                <Text style={styles.profileUsername}>@{freelancer.freelancer_username || 'freelancer'}</Text>
-              </View>
-
-              {/* Skills */}
-              {freelancer.freelancer_skills && freelancer.freelancer_skills.length > 0 && (
-                <View style={styles.detailSection}>
-                  <View style={styles.sectionHeader}>
-                    <Ionicons name="flash-outline" size={16} color={BLUE} />
-                    <Text style={styles.detailSectionTitle}>Skills</Text>
-                  </View>
-                  <View style={styles.skillsContainer}>
-                    {freelancer.freelancer_skills.map((skill, idx) => (
-                      <View key={idx} style={styles.skillChip}>
-                        <Text style={styles.skillChipText}>{skill}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {/* Offer Info */}
-              <View style={styles.detailSection}>
-                <View style={styles.sectionHeader}>
-                  <Ionicons name="document-text-outline" size={16} color={BLUE} />
-                  <Text style={styles.detailSectionTitle}>Offer Details</Text>
-                </View>
-                <View style={styles.offerInfoCard}>
-                  <View style={styles.offerInfoRow}>
-                    <Ionicons name="cash-outline" size={14} color={BLUE} />
-                    <Text style={styles.offerInfoText}>Amount: ₱{freelancer.amount?.toLocaleString()}</Text>
-                  </View>
-                  <View style={styles.offerInfoRow}>
-                    <Ionicons name="briefcase-outline" size={14} color={BLUE} />
-                    <Text style={styles.offerInfoText}>Job: {freelancer.job_title}</Text>
-                  </View>
-                  <View style={styles.offerInfoRow}>
-                    <Ionicons name="calendar-outline" size={14} color={BLUE} />
-                    <Text style={styles.offerInfoText}>Sent: {formatFullDate(freelancer.created_at)}</Text>
-                  </View>
-                  {freelancer.status === 'accepted' && (
-                    <View style={styles.offerInfoRow}>
-                      <Ionicons name="checkmark-circle-outline" size={14} color={GREEN} />
-                      <Text style={[styles.offerInfoText, { color: GREEN }]}>Accepted on {formatFullDate(freelancer.responded_at)}</Text>
-                    </View>
-                  )}
-                  {freelancer.status === 'declined' && (
-                    <View style={styles.offerInfoRow}>
-                      <Ionicons name="close-circle-outline" size={14} color={RED} />
-                      <Text style={[styles.offerInfoText, { color: RED }]}>Declined on {formatFullDate(freelancer.responded_at)}</Text>
-                    </View>
-                  )}
+                <View style={{ flex: 1 }}>
+                  <Text style={um.freelancerName}>
+                    {contract.freelancer_id.first_name} {contract.freelancer_id.last_name}
+                  </Text>
+                  <Text style={um.jobTitle}>{contract.job_id?.title || 'Contract'}</Text>
                 </View>
               </View>
+            )}
 
-              {/* Action Buttons */}
-              <View style={styles.profileActions}>
-                <TouchableOpacity 
-                  style={[styles.profileActionBtn, styles.messageProfileBtn]}
-                  onPress={() => {
-                    setShowFreelancerModal(false);
-                    handleMessageFreelancer(freelancer.freelancer_id);
-                  }}
-                >
-                  <Ionicons name="chatbubble-outline" size={16} color={WHITE} />
-                  <Text style={styles.messageProfileBtnText}>Message</Text>
-                </TouchableOpacity>
-                
-                {freelancer.status === 'pending' && (
-                  <TouchableOpacity 
-                    style={[styles.profileActionBtn, styles.withdrawProfileBtn]}
-                    onPress={() => {
-                      setShowFreelancerModal(false);
-                      handleCancelOffer(freelancer._id);
-                    }}
+            <View style={um.field}>
+              <Text style={um.label}>Progress</Text>
+              <View style={um.progressRow}>
+                <View style={{ flex: 1 }}>
+                  <ProgressBar progress={progress} />
+                </View>
+                <Text style={um.progressText}>{progress}%</Text>
+              </View>
+              <View style={um.progressButtons}>
+                {[0, 25, 50, 75, 100].map((p) => (
+                  <TouchableOpacity
+                    key={p}
+                    style={[um.progressBtn, progress === p && um.progressBtnActive]}
+                    onPress={() => setProgress(p)}
                   >
-                    <Ionicons name="close-circle-outline" size={16} color={RED} />
-                    <Text style={styles.withdrawProfileBtnText}>Withdraw</Text>
+                    <Text style={[um.progressBtnText, progress === p && um.progressBtnTextActive]}>
+                      {p}%
+                    </Text>
                   </TouchableOpacity>
-                )}
+                ))}
               </View>
-            </ScrollView>
+            </View>
+
+            <View style={um.field}>
+              <Text style={um.label}>Status</Text>
+              <View style={um.statusButtons}>
+                {['active', 'paused', 'completed'].map((s) => (
+                  <TouchableOpacity
+                    key={s}
+                    style={[um.statusBtn, status === s && um.statusBtnActive]}
+                    onPress={() => setStatus(s)}
+                  >
+                    <Ionicons 
+                      name={getStatusInfo(s).icon} 
+                      size={16} 
+                      color={status === s ? WHITE : getStatusInfo(s).color} 
+                    />
+                    <Text style={[um.statusBtnText, status === s && um.statusBtnTextActive]}>
+                      {getStatusInfo(s).label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={um.field}>
+              <Text style={um.label}>Notes (Optional)</Text>
+              <TextInput
+                style={um.input}
+                placeholder="Add notes about progress..."
+                placeholderTextColor={TEXT_LIGHT}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[um.updateBtn, loading && um.updateBtnDisabled]}
+              onPress={handleUpdate}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={WHITE} size="small" />
+              ) : (
+                <>
+                  <Ionicons name="cloud-upload-outline" size={20} color={WHITE} />
+                  <Text style={um.updateBtnText}>Update Progress</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const um = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(7,26,62,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1.5,
+    borderBottomColor: BORDER,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: TEXT_MAIN,
+  },
+  closeBtn: {
+    padding: 4,
+  },
+  content: {
+    padding: 20,
+  },
+  freelancerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: BG,
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: BLUE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: WHITE,
+  },
+  freelancerName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  jobTitle: {
+    fontSize: 12,
+    color: TEXT_MUTED,
+    marginTop: 2,
+  },
+  field: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: TEXT_MUTED,
+    marginBottom: 8,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: BLUE,
+    minWidth: 40,
+    textAlign: 'right',
+  },
+  progressButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  progressBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: BG,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    alignItems: 'center',
+  },
+  progressBtnActive: {
+    backgroundColor: BLUE,
+    borderColor: BLUE,
+  },
+  progressBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+  },
+  progressBtnTextActive: {
+    color: WHITE,
+  },
+  statusButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statusBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: BG,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+  },
+  statusBtnActive: {
+    backgroundColor: BLUE,
+    borderColor: BLUE,
+  },
+  statusBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+  },
+  statusBtnTextActive: {
+    color: WHITE,
+  },
+  input: {
+    backgroundColor: BG,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: TEXT_MAIN,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  updateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: GREEN,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 8,
+    shadowColor: GREEN,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  updateBtnDisabled: {
+    opacity: 0.6,
+  },
+  updateBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: WHITE,
+  },
+});
+
+// ── Main Component ─────────────────────────────────────────────────────────
+export default function HiredFreelancers({ navigation }) {
+  const dispatch = useDispatch();
+  const { applications } = useSelector((state) => state.applications);
+  const { contracts } = useSelector((state) => state.contracts);
+  
+  const [hiredFreelancers, setHiredFreelancers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedContract, setSelectedContract] = useState(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [filter, setFilter] = useState('all'); // all, active, completed
+  
+  // Load hired freelancers
+  const loadHiredFreelancers = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Get all applications with 'hired' status
+      await dispatch(getClientApplications({ status: 'hired', limit: 100 })).unwrap();
+      
+      // Get all contracts for the client
+      await dispatch(getClientContracts({ limit: 100 })).unwrap();
+    } catch (error) {
+      console.error('Error loading hired freelancers:', error);
+      Alert.alert('Error', 'Failed to load hired freelancers');
+    } finally {
+      setLoading(false);
+    }
+  }, [dispatch]);
+
+  // Combine applications and contracts data
+  useEffect(() => {
+    if (applications.length > 0 && contracts.length > 0) {
+      const hired = applications
+        .filter(app => app.status === 'hired')
+        .map(app => {
+          // Find matching contract
+          const contract = contracts.find(c => 
+            c.application_id === app._id || 
+            c.application_id?._id === app._id
+          );
+          
+          return {
+            ...app,
+            contract: contract || null,
+            progress: contract?.progress || 0,
+            contractStatus: contract?.status || 'active',
+          };
+        });
+      
+      setHiredFreelancers(hired);
+    }
+  }, [applications, contracts]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHiredFreelancers();
+    }, [loadHiredFreelancers])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadHiredFreelancers();
+    setRefreshing(false);
+  }, [loadHiredFreelancers]);
+
+  const handleUpdateProgress = async (contractId, data) => {
+    try {
+      // Update contract progress
+      await dispatch(updateContractProgress({
+        contractId,
+        progress: data.progress,
+      })).unwrap();
+      
+      // Update contract status if changed
+      if (data.status) {
+        await dispatch(updateContractStatus({
+          contractId,
+          status: data.status,
+        })).unwrap();
+      }
+      
+      // Refresh data
+      await loadHiredFreelancers();
+      
+      Alert.alert('Success', 'Progress updated successfully!');
+    } catch (error) {
+      console.error('Error updating progress:', error);
+      throw error;
+    }
+  };
+
+  const handleViewContract = (contractId) => {
+    navigation?.navigate('ContractDetails', { contractId });
+  };
+
+  const handleMessageFreelancer = (freelancerId) => {
+    navigation?.navigate('Messages', { userId: freelancerId, userRole: 'freelancer' });
+  };
+
+  // Filter freelancers
+  const filteredFreelancers = hiredFreelancers.filter(item => {
+    if (filter === 'all') return true;
+    if (filter === 'active') return item.contractStatus === 'active' || item.contractStatus === 'in_progress';
+    if (filter === 'completed') return item.contractStatus === 'completed';
+    return true;
+  });
+
+  // Stats
+  const totalHired = hiredFreelancers.length;
+  const activeCount = hiredFreelancers.filter(f => 
+    f.contractStatus === 'active' || f.contractStatus === 'in_progress'
+  ).length;
+  const completedCount = hiredFreelancers.filter(f => f.contractStatus === 'completed').length;
+  const avgProgress = hiredFreelancers.length > 0 
+    ? Math.round(hiredFreelancers.reduce((sum, f) => sum + (f.progress || 0), 0) / hiredFreelancers.length)
+    : 0;
+
+  // ── Render Stats Cards ──────────────────────────────────────────────────
+  const renderStats = () => (
+    <View style={hf.statsContainer}>
+      <View style={hf.statCard}>
+        <Text style={hf.statNumber}>{totalHired}</Text>
+        <Text style={hf.statLabel}>Total Hired</Text>
+        <Ionicons name="people" size={20} color={BLUE} style={hf.statIcon} />
+      </View>
+      <View style={hf.statCard}>
+        <Text style={[hf.statNumber, { color: GREEN }]}>{activeCount}</Text>
+        <Text style={hf.statLabel}>Active</Text>
+        <Ionicons name="play-circle" size={20} color={GREEN} style={hf.statIcon} />
+      </View>
+      <View style={hf.statCard}>
+        <Text style={[hf.statNumber, { color: BLUE }]}>{completedCount}</Text>
+        <Text style={hf.statLabel}>Completed</Text>
+        <Ionicons name="checkmark-done-circle" size={20} color={BLUE} style={hf.statIcon} />
+      </View>
+      <View style={hf.statCard}>
+        <Text style={[hf.statNumber, { color: YELLOW }]}>{avgProgress}%</Text>
+        <Text style={hf.statLabel}>Avg Progress</Text>
+        <Ionicons name="trending-up" size={20} color={YELLOW} style={hf.statIcon} />
+      </View>
+    </View>
+  );
+
+  // ── Render Filter Tabs ──────────────────────────────────────────────────
+  const renderFilters = () => (
+    <View style={hf.filterContainer}>
+      {['all', 'active', 'completed'].map((f) => (
+        <TouchableOpacity
+          key={f}
+          style={[hf.filterBtn, filter === f && hf.filterBtnActive]}
+          onPress={() => setFilter(f)}
+        >
+          <Text style={[hf.filterText, filter === f && hf.filterTextActive]}>
+            {f === 'all' ? 'All' : f === 'active' ? 'Active' : 'Completed'}
+          </Text>
+          {filter === f && <View style={hf.filterIndicator} />}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  // ── Render Freelancer Card ──────────────────────────────────────────────
+  const renderFreelancerCard = ({ item }) => {
+    const freelancer = item.freelancer_id || {};
+    const job = item.job_id || {};
+    const statusInfo = getStatusInfo(item.contractStatus);
+    const firstName = freelancer.first_name || '';
+    const lastName = freelancer.last_name || '';
+    const fullName = (firstName + ' ' + lastName).trim() || 'Freelancer';
+    const initials = (firstName.charAt(0) || '') + (lastName.charAt(0) || '');
+    
+    return (
+      <View style={hf.card}>
+        <View style={hf.cardHeader}>
+          <View style={hf.avatar}>
+            {freelancer.profile_picture ? (
+              <Image source={{ uri: freelancer.profile_picture }} style={hf.avatarImg} />
+            ) : (
+              <Text style={hf.avatarText}>{initials || '?'}</Text>
+            )}
+          </View>
+          <View style={hf.cardInfo}>
+            <Text style={hf.freelancerName} numberOfLines={1}>{fullName}</Text>
+            <Text style={hf.jobTitle} numberOfLines={1}>{job.title || 'Contract'}</Text>
+            <View style={hf.ratingRow}>
+              <RatingStars rating={freelancer.rating || 0} size={12} />
+            </View>
+          </View>
+          <View style={[hf.statusBadge, { backgroundColor: statusInfo.color + '15', borderColor: statusInfo.color + '30' }]}>
+            <Ionicons name={statusInfo.icon} size={10} color={statusInfo.color} />
+            <Text style={[hf.statusText, { color: statusInfo.color }]}>{statusInfo.label}</Text>
           </View>
         </View>
-      </Modal>
+
+        <View style={hf.cardBody}>
+          <View style={hf.progressSection}>
+            <View style={hf.progressHeader}>
+              <Text style={hf.progressLabel}>Progress</Text>
+              <Text style={hf.progressValue}>{item.progress || 0}%</Text>
+            </View>
+            <ProgressBar progress={item.progress || 0} />
+          </View>
+
+          <View style={hf.detailsRow}>
+            <View style={hf.detailItem}>
+              <Ionicons name="calendar-outline" size={14} color={TEXT_LIGHT} />
+              <Text style={hf.detailText}>
+                Started {formatDate(item.contract?.start_date || item.applied_at)}
+              </Text>
+            </View>
+            {item.contract?.end_date && (
+              <View style={hf.detailItem}>
+                <Ionicons name="flag-outline" size={14} color={TEXT_LIGHT} />
+                <Text style={hf.detailText}>
+                  Ends {formatDate(item.contract.end_date)}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {item.proposed_rate && (
+            <View style={hf.rateContainer}>
+              <Ionicons name="cash-outline" size={14} color={GOLD_DK} />
+              <Text style={hf.rateText}>
+                ₱{item.proposed_rate.toLocaleString()}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={hf.cardFooter}>
+          <TouchableOpacity
+            style={[hf.footerBtn, hf.updateBtn]}
+            onPress={() => {
+              setSelectedContract(item.contract || { 
+                _id: 'temp',
+                freelancer_id: freelancer,
+                job_id: job,
+                progress: item.progress || 0,
+                status: item.contractStatus,
+              });
+              setShowUpdateModal(true);
+            }}
+          >
+            <Ionicons name="refresh-circle" size={16} color={WHITE} />
+            <Text style={hf.footerBtnText}>Update</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[hf.footerBtn, hf.contractBtn]}
+            onPress={() => handleViewContract(item.contract?._id)}
+            disabled={!item.contract?._id}
+          >
+            <Ionicons name="document-text-outline" size={16} color={BLUE} />
+            <Text style={[hf.footerBtnText, { color: BLUE }]}>Contract</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[hf.footerBtn, hf.messageBtn]}
+            onPress={() => handleMessageFreelancer(freelancer._id)}
+          >
+            <Ionicons name="chatbubble-outline" size={16} color={BLUE} />
+            <Text style={[hf.footerBtnText, { color: BLUE }]}>Message</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     );
   };
 
-  // Render loading state
-  if (isLoading && !refreshing) {
+  if (loading && !refreshing) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <SafeAreaView style={hf.safe} edges={['top']}>
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />
-        <View style={styles.topbar}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('Mypostings')}>
-            <View style={styles.backIconWrap}>
-              <Ionicons name="arrow-back" size={18} color={WHITE} />
-            </View>
-          </TouchableOpacity>
-          <Text style={styles.topbarTitle}>Sent Offers</Text>
-          <View style={{ width: 40 }} />
+        <View style={hf.topbar}>
+          <Text style={hf.topbarTitle}>My <Text style={hf.gold}>Hires</Text></Text>
         </View>
-        <View style={styles.centerContainer}>
+        <View style={hf.center}>
           <ActivityIndicator size="large" color={BLUE} />
-          <Text style={styles.loadingText}>Loading your offers...</Text>
+          <Text style={hf.loadingText}>Loading hired freelancers…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={hf.safe} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
-      <View style={styles.topbar}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => onNavigate('Mypostings')}>
-          <View style={styles.backIconWrap}>
-            <Ionicons name="arrow-back" size={18} color={WHITE} />
-          </View>
-        </TouchableOpacity>
-        <Text style={styles.topbarTitle}>Sent Offers</Text>
-        <TouchableOpacity style={styles.refreshBtn} onPress={fetchSentOffers}>
-          <View style={styles.refreshIconWrap}>
-            <Ionicons name="refresh-outline" size={18} color={BLUE} />
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* Summary Row */}
-      <View style={styles.summaryRow}>
-        {['pending', 'accepted', 'declined', 'expired'].map((status) => {
-          const count = getCountByStatus(status);
-          const st = statusStyle[status];
-          return (
-            <View key={status} style={[styles.summaryCard, { borderColor: st.border, backgroundColor: st.bg }]}>
-              <Text style={[styles.summaryCount, { color: st.text }]}>{count}</Text>
-              <Text style={styles.summaryLabel}>{st.label}</Text>
+      <View style={hf.root}>
+        {/* Top Bar */}
+        <View style={hf.topbar}>
+          <TouchableOpacity onPress={() => navigation?.goBack()} activeOpacity={0.7}>
+            <View style={hf.iconWrap}>
+              <Ionicons name="arrow-back" size={18} color={WHITE} />
             </View>
-          );
-        })}
-      </View>
-
-      {/* Tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll}>
-        <View style={styles.tabRow}>
-          {TABS.map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, activeTab === tab && styles.tabActive]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                {tab === 'All' ? 'All' : statusStyle[tab]?.label || tab}
-              </Text>
-              <View style={[styles.tabDot, activeTab === tab && styles.tabDotActive]} />
-            </TouchableOpacity>
-          ))}
+          </TouchableOpacity>
+          <Text style={hf.topbarTitle}>My <Text style={hf.gold}>Hires</Text></Text>
+          <TouchableOpacity onPress={onRefresh} activeOpacity={0.7}>
+            <View style={hf.iconWrap}>
+              <Ionicons name="refresh-outline" size={18} color={WHITE} />
+            </View>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
 
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
-        contentContainerStyle={styles.scroll}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
-        }
-      >
-        {filteredOffers.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconWrap}>
-              <Ionicons name="paper-plane-outline" size={48} color={BLUE} />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={hf.scrollContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
+          }
+        >
+          {/* Stats */}
+          {renderStats()}
+
+          {/* Filters */}
+          {renderFilters()}
+
+          {/* List */}
+          {filteredFreelancers.length === 0 ? (
+            <View style={hf.empty}>
+              <Ionicons name="people-outline" size={48} color={TEXT_LIGHT} />
+              <Text style={hf.emptyTitle}>No Hired Freelancers</Text>
+              <Text style={hf.emptyDesc}>
+                {filter === 'all' 
+                  ? "You haven't hired any freelancers yet."
+                  : `No ${filter} freelancers found.`}
+              </Text>
             </View>
-            <Text style={styles.emptyTitle}>No sent offers</Text>
-            <Text style={styles.emptyText}>
-              {activeTab === 'All' 
-                ? "You haven't sent any offers yet" 
-                : `No ${statusStyle[activeTab]?.label?.toLowerCase() || activeTab} offers found`}
-            </Text>
-            <TouchableOpacity 
-              style={styles.browseBtn}
-              onPress={() => onNavigate('FindJobs')}
-            >
-              <Ionicons name="search-outline" size={18} color={WHITE} style={{ marginRight: 6 }} />
-              <Text style={styles.browseBtnText}>Browse Freelancers</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          filteredOffers.map((item) => {
-            const st = statusStyle[item.status] || statusStyle.pending;
-            const avatarColor = getAvatarColor(item.freelancer_name);
-            const initials = getInitials(item.freelancer_first_name, item.freelancer_last_name);
-            
-            return (
-              <TouchableOpacity 
-                key={item._id} 
-                style={styles.card} 
-                activeOpacity={0.85}
-                onPress={() => {
-                  setSelectedOffer(item);
-                  setShowOfferModal(true);
-                }}
-              >
-                {/* Avatar */}
-                <View style={[styles.avatar, { backgroundColor: `${avatarColor}15` }]}>
-                  {item.freelancer_profile_picture ? (
-                    <Image source={{ uri: item.freelancer_profile_picture }} style={styles.avatarImage} />
-                  ) : (
-                    <Text style={[styles.avatarText, { color: avatarColor }]}>{initials}</Text>
-                  )}
-                </View>
-                
-                <View style={styles.cardBody}>
-                  <View style={styles.cardTop}>
-                    <View>
-                      <Text style={styles.name}>{item.freelancer_name}</Text>
-                      <Text style={styles.role}>{item.freelancer_title || 'Freelancer'}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: st.bg, borderColor: st.border }]}>
-                      <View style={[styles.statusDot, { backgroundColor: st.dot }]} />
-                      <Text style={[styles.statusText, { color: st.text }]}>{st.label}</Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.cardMiddle}>
-                    <Text style={styles.jobTitle}>{item.job_title}</Text>
-                  </View>
-                  
-                  <View style={styles.cardBottom}>
-                    <View style={styles.metaItem}>
-                      <Ionicons name="cash-outline" size={11} color={BLUE} />
-                      <Text style={styles.amount}>₱{item.amount?.toLocaleString()}</Text>
-                    </View>
-                    <View style={styles.metaItem}>
-                      <Ionicons name="time-outline" size={11} color={TEXT_MUTED} />
-                      <Text style={styles.metaText}>{formatDate(item.created_at)}</Text>
-                    </View>
-                    {item.message && (
-                      <View style={styles.messagePreview}>
-                        <Ionicons name="chatbubble-outline" size={10} color={TEXT_LIGHT} />
-                        <Text style={styles.messageText} numberOfLines={1}>
-                          {item.message}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  
-                  {/* Action buttons for pending offers */}
-                  {item.status === 'pending' && (
-                    <View style={styles.actionButtons}>
-                      <TouchableOpacity 
-                        style={[styles.actionBtn, styles.cancelBtn]}
-                        onPress={() => handleCancelOffer(item._id)}
-                      >
-                        <Ionicons name="close-circle-outline" size={12} color={RED} />
-                        <Text style={styles.cancelBtnText}>Withdraw</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={[styles.actionBtn, styles.messageBtn]}
-                        onPress={() => handleMessageFreelancer(item.freelancer_id)}
-                      >
-                        <Ionicons name="chatbubble-outline" size={12} color={WHITE} />
-                        <Text style={styles.messageBtnText}>Message</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  
-                  {/* Action buttons for expired offers */}
-                  {item.status === 'expired' && (
-                    <View style={styles.actionButtons}>
-                      <TouchableOpacity 
-                        style={[styles.actionBtn, styles.resendActionBtn]}
-                        onPress={() => handleResendOffer(item)}
-                      >
-                        <Ionicons name="refresh-outline" size={12} color={WHITE} />
-                        <Text style={styles.resendActionBtnText}>Send New Offer</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  
-                  {/* Action buttons for accepted/declined offers */}
-                  {(item.status === 'accepted' || item.status === 'declined') && (
-                    <View style={styles.actionButtons}>
-                      <TouchableOpacity 
-                        style={[styles.actionBtn, styles.viewProfileActionBtn]}
-                        onPress={() => {
-                          setSelectedOffer(item);
-                          setShowFreelancerModal(true);
-                        }}
-                      >
-                        <Ionicons name="person-outline" size={12} color={BLUE} />
-                        <Text style={styles.viewProfileActionBtnText}>View Profile</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={[styles.actionBtn, styles.messageBtn]}
-                        onPress={() => handleMessageFreelancer(item.freelancer_id)}
-                      >
-                        <Ionicons name="chatbubble-outline" size={12} color={WHITE} />
-                        <Text style={styles.messageBtnText}>Message</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })
-        )}
-      </ScrollView>
+          ) : (
+            filteredFreelancers.map((item, index) => (
+              <View key={item._id || index}>
+                {renderFreelancerCard({ item })}
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </View>
 
-      {/* Modals */}
-      <OfferDetailsModal />
-      <FreelancerProfileModal />
+      {/* Update Modal */}
+      <UpdateModal
+        visible={showUpdateModal}
+        contract={selectedContract}
+        onClose={() => {
+          setShowUpdateModal(false);
+          setSelectedContract(null);
+        }}
+        onUpdate={handleUpdateProgress}
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
-  topbar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 16,
+// ── Styles ────────────────────────────────────────────────────────────────
+const hf = StyleSheet.create({
+  safe: {
+    flex: 1,
     backgroundColor: NAVY,
   },
-  backBtn: { alignSelf: 'flex-start' },
-  backIconWrap: {
-    width: 40, height: 40,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  refreshBtn: { alignSelf: 'flex-start' },
-  refreshIconWrap: {
-    width: 40, height: 40,
-    backgroundColor: 'rgba(0,104,181,0.1)',
-    borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(0,104,181,0.25)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  topbarTitle: { fontSize: 18, fontWeight: '700', color: WHITE, letterSpacing: -0.3 },
-  summaryRow: {
-    flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingVertical: 14,
-    backgroundColor: CARD,
-    borderBottomWidth: 1, borderBottomColor: BORDER,
-  },
-  summaryCard: {
-    flex: 1, borderRadius: 12, padding: 12, alignItems: 'center',
-    borderWidth: 1,
-  },
-  summaryCount: { fontSize: 22, fontWeight: '700', marginBottom: 2 },
-  summaryLabel: { fontSize: 10, color: TEXT_MUTED, letterSpacing: 0.5, fontWeight: '500' },
-  tabScroll: { flexGrow: 0, backgroundColor: CARD },
-  tabRow: {
-    flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 10,
-  },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: BORDER,
+  root: {
+    flex: 1,
     backgroundColor: BG,
   },
-  tabActive: { backgroundColor: `${BLUE}10`, borderColor: BLUE },
-  tabText: { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
-  tabTextActive: { color: BLUE, fontWeight: '600' },
-  tabDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'transparent',
+  topbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    backgroundColor: NAVY,
   },
-  tabDotActive: {
+  iconWrap: {
+    width: 38,
+    height: 38,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topbarTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: WHITE,
+    letterSpacing: -0.2,
+  },
+  gold: {
+    color: GOLD_LT,
+    fontStyle: 'italic',
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 13,
+    color: TEXT_MUTED,
+  },
+  // Stats
+  statsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: (width - 40) / 4 - 8,
+    backgroundColor: CARD,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    position: 'relative',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: TEXT_MAIN,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: TEXT_LIGHT,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  statIcon: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    opacity: 0.3,
+  },
+  // Filters
+  filterContainer: {
+    flexDirection: 'row',
+    backgroundColor: CARD,
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    marginBottom: 16,
+  },
+  filterBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  filterBtnActive: {
     backgroundColor: BLUE,
   },
-  scroll: { padding: 16, paddingBottom: 40 },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 12, fontSize: 14, color: TEXT_MUTED },
-  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
-  emptyIconWrap: { width: 80, height: 80, backgroundColor: `${BLUE}10`, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: TEXT_MAIN, marginTop: 16, marginBottom: 8 },
-  emptyText: { fontSize: 13, color: TEXT_MUTED, textAlign: 'center', marginBottom: 24, paddingHorizontal: 40 },
-  browseBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: BLUE, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
-  browseBtnText: { fontSize: 13, fontWeight: '600', color: WHITE },
-  card: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    backgroundColor: CARD, borderRadius: 18, padding: 14,
-    borderWidth: 1, borderColor: BORDER, marginBottom: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  filterText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: TEXT_MUTED,
   },
-  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  avatarImage: { width: 48, height: 48, borderRadius: 24 },
-  avatarText: { fontSize: 16, fontWeight: '700' },
-  cardBody: { flex: 1 },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  name: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN, marginBottom: 2 },
-  role: { fontSize: 11, color: TEXT_MUTED },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 0.5 },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 10, fontWeight: '600' },
-  cardMiddle: { marginBottom: 8 },
-  jobTitle: { fontSize: 12, color: BLUE, fontWeight: '500' },
-  cardBottom: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  amount: { fontSize: 12, fontWeight: '600', color: BLUE },
-  metaText: { fontSize: 10, color: TEXT_LIGHT },
-  messagePreview: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
-  messageText: { fontSize: 10, color: TEXT_LIGHT, flex: 1 },
-  actionButtons: { flexDirection: 'row', gap: 8, marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: BORDER },
-  actionBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
-  cancelBtn: { backgroundColor: `${RED}10`, borderWidth: 0.5, borderColor: `${RED}30` },
-  cancelBtnText: { fontSize: 11, fontWeight: '500', color: RED },
-  messageBtn: { backgroundColor: BLUE, borderWidth: 0.5, borderColor: `${BLUE}30` },
-  messageBtnText: { fontSize: 11, fontWeight: '500', color: WHITE },
-  resendActionBtn: { backgroundColor: BLUE, borderWidth: 0.5, borderColor: `${BLUE}30` },
-  resendActionBtnText: { fontSize: 11, fontWeight: '500', color: WHITE },
-  viewProfileActionBtn: { backgroundColor: `${BLUE}10`, borderWidth: 0.5, borderColor: `${BLUE}30` },
-  viewProfileActionBtnText: { fontSize: 11, fontWeight: '500', color: BLUE },
-  // Modal Styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(7,26,62,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: CARD, borderRadius: 20, width: '100%', maxHeight: '85%', borderWidth: 1, borderColor: BORDER },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: BORDER },
-  modalCloseBtn: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: TEXT_MAIN },
-  statusBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, margin: 16, borderRadius: 12, borderWidth: 1 },
-  statusBannerText: { fontSize: 16, fontWeight: '600' },
-  detailSection: { paddingHorizontal: 16, paddingBottom: 16 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  detailSectionTitle: { fontSize: 14, fontWeight: '600', color: BLUE },
-  detailLabel: { fontSize: 11, fontWeight: '500', color: TEXT_MUTED, marginBottom: 4 },
-  detailValue: { fontSize: 14, color: TEXT_MAIN },
-  amountLarge: { fontSize: 28, fontWeight: '700', color: BLUE },
-  messageCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: BG, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: BORDER },
-  messageValue: { flex: 1, fontSize: 13, color: TEXT_MAIN, lineHeight: 18 },
-  modalActions: { flexDirection: 'column', gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: BORDER, marginTop: 8 },
-  modalActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12 },
-  viewFreelancerBtn: { backgroundColor: `${BLUE}10`, borderWidth: 1, borderColor: `${BLUE}20` },
-  viewFreelancerBtnText: { fontSize: 14, fontWeight: '600', color: BLUE },
-  viewJobBtn: { backgroundColor: `${BLUE}10`, borderWidth: 1, borderColor: `${BLUE}20` },
-  viewJobBtnText: { fontSize: 14, fontWeight: '600', color: BLUE },
-  cancelOfferBtn: { backgroundColor: `${RED}10`, borderWidth: 1, borderColor: `${RED}20` },
-  cancelOfferBtnText: { fontSize: 14, fontWeight: '600', color: RED },
-  resendOfferBtn: { backgroundColor: BLUE, borderWidth: 1, borderColor: `${BLUE}20` },
-  resendOfferBtnText: { fontSize: 14, fontWeight: '600', color: WHITE },
-  messageFreelancerBtn: { backgroundColor: BLUE, borderWidth: 1, borderColor: `${BLUE}20` },
-  messageFreelancerBtnText: { fontSize: 14, fontWeight: '600', color: WHITE },
-  // Freelancer Profile Modal Styles
-  profileHeader: { alignItems: 'center', paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: BORDER },
-  profileAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  profileAvatarImage: { width: 80, height: 80, borderRadius: 40 },
-  profileInitials: { fontSize: 32, fontWeight: '700', color: WHITE },
-  profileName: { fontSize: 20, fontWeight: '600', color: TEXT_MAIN, marginBottom: 4 },
-  profileUsername: { fontSize: 13, color: TEXT_MUTED },
-  skillsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  skillChip: { backgroundColor: `${BLUE}10`, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 0.5, borderColor: `${BLUE}20` },
-  skillChipText: { fontSize: 12, color: BLUE, fontWeight: '500' },
-  offerInfoCard: { backgroundColor: BG, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: BORDER, gap: 6 },
-  offerInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  offerInfoText: { fontSize: 13, color: TEXT_MAIN },
-  profileActions: { flexDirection: 'row', padding: 16, gap: 12 },
-  profileActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12 },
-  messageProfileBtn: { backgroundColor: BLUE, borderWidth: 1, borderColor: `${BLUE}20` },
-  messageProfileBtnText: { fontSize: 14, fontWeight: '600', color: WHITE },
-  withdrawProfileBtn: { backgroundColor: `${RED}10`, borderWidth: 1, borderColor: `${RED}20` },
-  withdrawProfileBtnText: { fontSize: 14, fontWeight: '600', color: RED },
+  filterTextActive: {
+    color: WHITE,
+  },
+  filterIndicator: {
+    position: 'absolute',
+    bottom: -1,
+    left: '30%',
+    right: '30%',
+    height: 2,
+    backgroundColor: WHITE,
+    borderRadius: 1,
+  },
+  // Cards
+  card: {
+    backgroundColor: CARD,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: BLUE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  avatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  avatarText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: WHITE,
+  },
+  cardInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  freelancerName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  jobTitle: {
+    fontSize: 12,
+    color: TEXT_MUTED,
+    marginTop: 1,
+  },
+  ratingRow: {
+    marginTop: 2,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexShrink: 0,
+  },
+  statusText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  cardBody: {
+    gap: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  progressSection: {
+    gap: 4,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  progressLabel: {
+    fontSize: 11,
+    color: TEXT_LIGHT,
+    fontWeight: '600',
+  },
+  progressValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: BLUE,
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  detailText: {
+    fontSize: 11,
+    color: TEXT_LIGHT,
+  },
+  rateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(200,149,32,0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(200,149,32,0.2)',
+  },
+  rateText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: GOLD_DK,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  footerBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  updateBtn: {
+    backgroundColor: GREEN,
+    borderColor: GREEN,
+  },
+  contractBtn: {
+    backgroundColor: 'transparent',
+    borderColor: BORDER,
+  },
+  messageBtn: {
+    backgroundColor: 'transparent',
+    borderColor: BORDER,
+  },
+  footerBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: WHITE,
+  },
+  // Empty State
+  empty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    backgroundColor: CARD,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    borderStyle: 'dashed',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    marginTop: 12,
+  },
+  emptyDesc: {
+    fontSize: 13,
+    color: TEXT_LIGHT,
+    textAlign: 'center',
+    marginTop: 6,
+    paddingHorizontal: 20,
+  },
 });
