@@ -6,6 +6,7 @@ import {
   StyleSheet,
   StatusBar,
   BackHandler,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -73,8 +74,14 @@ export default function RoleSelection({ onNavigate, navigation }) {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoBox}>
-            <Ionicons name="flash-outline" size={32} color={NAVY} />
+            <Image 
+              source={require('../../../assets/taskra.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+            <View style={styles.logoGoldBar} />
           </View>
+          <Text style={styles.logoWordmark}>TASKRA</Text>
           <Text style={styles.title}>Join Taskra</Text>
           <Text style={styles.subtitle}>Choose how you want to use the platform</Text>
         </View>
@@ -177,17 +184,54 @@ const styles = StyleSheet.create({
   // Header
   header: { alignItems: 'center', marginBottom: 36 },
   logoBox: {
-    width: 68, height: 68,
-    backgroundColor: GOLD,
-    borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
+    width: 120,
+    height: 120,
+    backgroundColor: WHITE,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 18,
-    shadowColor: GOLD,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+    overflow: 'hidden',
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(0,85,165,0.15)',
+    position: 'relative',
   },
-  title: { fontSize: 26, fontWeight: '700', color: TEXT_MAIN, marginBottom: 6, letterSpacing: -0.3 },
-  subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center' },
+  logoImage: {
+    width: 90,
+    height: 90,
+    borderRadius: 16,
+  },
+  logoGoldBar: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    height: 4,
+    backgroundColor: GOLD_LT,
+  },
+  logoWordmark: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 5,
+    color: BLUE,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  title: { 
+    fontSize: 26, 
+    fontWeight: '700', 
+    color: TEXT_MAIN, 
+    marginBottom: 6, 
+    letterSpacing: -0.3 
+  },
+  subtitle: { 
+    fontSize: 14, 
+    color: TEXT_MUTED, 
+    textAlign: 'center' 
+  },
 
   // Role cards
   roleCard: {

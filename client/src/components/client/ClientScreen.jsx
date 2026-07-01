@@ -621,7 +621,11 @@ export default function ClientScreen({ onNavigate }) {
           <View style={styles.topbarInner}>
             <View style={styles.topbarLeft}>
               <View style={styles.logoBox}>
-                <Text style={styles.logoLetter}>T</Text>
+                <Image 
+                  source={require('../../../assets/taskra.png')} 
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
               </View>
               <Text style={styles.topbarBrand}>Taskra</Text>
             </View>
@@ -888,10 +892,21 @@ const styles = StyleSheet.create({
   topbarInner:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   topbarLeft:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logoBox: {
-    width: 28, height: 28, backgroundColor: BLUE, borderRadius: 7,
-    alignItems: 'center', justifyContent: 'center',
+    width: 34,
+    height: 34,
+    backgroundColor: WHITE,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,85,165,0.15)',
+    overflow: 'hidden',
   },
-  logoLetter:   { fontSize: 14, fontWeight: '900', color: WHITE },
+  logoImage: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+  },
   topbarBrand:  { fontSize: 17, fontWeight: '800', color: TEXT_MAIN, letterSpacing: 0.5 },
   topbarRight:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
   notifBtn:     { padding: 4 },

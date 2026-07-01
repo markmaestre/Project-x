@@ -1,5 +1,5 @@
 // screens/freelancer/JobManagement.js
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -45,53 +45,50 @@ import {
   clearUpdateSuccess,
 } from '../../Redux/slices/projectUpdateSlice';
 
-// Design tokens
-const NAVY = '#071A3E';
-const NAVY2 = '#0D2151';
-const BLUE = '#0055A5';
-const BLUE_MD = '#0073CF';
-const BLUE_LT = '#1E90FF';
-const GOLD = '#C89520';
-const GOLD_LT = '#E8B84B';
-const GOLD_DK = '#8A6410';
-const SILVER = '#8899B0';
-const SILVER2 = '#B8C8D8';
-const WHITE = '#FFFFFF';
-const BG = '#F0F4FA';
-const CARD = '#FFFFFF';
-const TEXT_MAIN = '#071A3E';
-const TEXT_MUTED = '#3A5070';
-const TEXT_LIGHT = '#7A90A8';
-const BORDER = '#DCE4EC';
-const GREEN = '#059669';
-const GREEN_SOFT = '#D1FAE5';
-const GREEN_MID = '#86EFAC';
-const GREEN_DARK = '#059669';
-const BG_GRAY = '#F8FAFC';
-const RED = '#DC2626';
-const RED_SOFT = '#FEF2F2';
-const ORANGE = '#F59E0B';
-const ORANGE_SOFT = '#FEF3C7';
+// ─────────────────────────────────────────────────────────
+// DESIGN SYSTEM — Blue / Gold / White only
+// A restrained, workflow / ops-console palette. All emphasis,
+// hierarchy and status differentiation is carried by value
+// (light/dark), weight, and structure — not extra hues.
+// ─────────────────────────────────────────────────────────
+const NAVY        = '#0A2247';   // primary surface (header, tab bar accents)
+const NAVY_DEEP   = '#061733';   // darkest — pressed / high emphasis
+const BLUE        = '#1B5FC4';   // primary action blue
+const BLUE_DARK   = '#123C82';   // hover/active blue
+const BLUE_LIGHT  = '#E8F0FC';   // light blue tint (backgrounds/chips)
+const BLUE_LINE   = '#CBDCF4';   // blue-tinted border/divider
+const GOLD        = '#B8862B';   // primary gold accent
+const GOLD_DARK   = '#8C6414';   // deep gold (text-on-light)
+const GOLD_LIGHT  = '#FBF1DC';   // light gold tint (backgrounds/chips)
+const GOLD_LINE   = '#EAD6A6';   // gold-tinted border
+const WHITE       = '#FFFFFF';
+const OFFWHITE    = '#F5F7FB';   // app background, faint blue-white
+const CARD        = '#FFFFFF';
+const TEXT_MAIN   = '#0A2247';   // navy — primary text
+const TEXT_MUTED  = '#5E718F';   // blue-grey — secondary text
+const TEXT_FAINT  = '#96A6C0';   // blue-grey — tertiary/placeholder
+const BORDER      = '#E1E7F2';   // neutral blue-white border
+const BORDER_SOFT = '#EDF1F8';
 
-// Status configurations
+// Status treatment — differentiated by tone/weight within the blue+gold family
 const CONTRACT_STATUS = {
-  active: { bg: GREEN_SOFT, text: GREEN, label: 'Active', icon: 'checkmark-circle' },
-  paused: { bg: ORANGE_SOFT, text: ORANGE, label: 'Paused', icon: 'pause-circle' },
-  completed: { bg: GREEN_SOFT, text: GREEN, label: 'Completed', icon: 'checkmark-done-circle' },
-  cancelled: { bg: RED_SOFT, text: RED, label: 'Cancelled', icon: 'close-circle' },
+  active: { bg: BLUE_LIGHT, border: BLUE_LINE, text: BLUE_DARK, dot: BLUE, label: 'Active', icon: 'flash' },
+  paused: { bg: OFFWHITE, border: BORDER, text: TEXT_MUTED, dot: TEXT_FAINT, label: 'Paused', icon: 'pause' },
+  completed: { bg: GOLD_LIGHT, border: GOLD_LINE, text: GOLD_DARK, dot: GOLD, label: 'Completed', icon: 'checkmark-done' },
+  cancelled: { bg: OFFWHITE, border: BORDER, text: TEXT_FAINT, dot: TEXT_FAINT, label: 'Cancelled', icon: 'close' },
 };
 
 const UPDATE_TYPES = {
   progress: { label: 'Progress Update', icon: 'trending-up', color: BLUE },
-  milestone: { label: 'Milestone', icon: 'flag', color: GOLD_DK },
-  delivery: { label: 'Delivery', icon: 'document', color: GREEN },
-  feedback: { label: 'Feedback', icon: 'chatbox', color: ORANGE },
-  announcement: { label: 'Announcement', icon: 'megaphone', color: BLUE_MD },
+  milestone: { label: 'Milestone', icon: 'flag', color: GOLD_DARK },
+  delivery: { label: 'Delivery', icon: 'document-text', color: BLUE_DARK },
+  feedback: { label: 'Feedback', icon: 'chatbox', color: GOLD },
+  announcement: { label: 'Announcement', icon: 'megaphone', color: NAVY },
 };
 
 // Helper functions
 const getContractStatus = (status) =>
-  CONTRACT_STATUS[status] || { bg: BG_GRAY, text: TEXT_MUTED, label: status || 'Unknown', icon: 'help-circle' };
+  CONTRACT_STATUS[status] || { bg: OFFWHITE, border: BORDER, text: TEXT_MUTED, dot: TEXT_FAINT, label: status || 'Unknown', icon: 'help' };
 
 const formatCurrency = (amount) => {
   if (!amount) return '₱0.00';
@@ -122,33 +119,83 @@ const timeAgo = (date) => {
   return formatDate(date);
 };
 
-// Pill Component
-const Pill = ({ icon, label, color = TEXT_MUTED, bg = BG_GRAY }) => (
-  <View style={[pillStyles.wrap, { backgroundColor: bg }]}>
-    <Ionicons name={icon} size={11} color={color} />
-    <Text style={[pillStyles.text, { color }]} numberOfLines={1}>{label}</Text>
+const refCode = (id) => {
+  if (!id) return '——————';
+  const s = String(id);
+  return s.slice(-6).toUpperCase();
+};
+
+// ─────────────────────────────────────────────────────────
+// Status Chip — dot + label, used across cards/detail
+// ─────────────────────────────────────────────────────────
+const StatusChip = ({ status, size = 'md' }) => {
+  const s = getContractStatus(status);
+  const isSm = size === 'sm';
+  return (
+    <View style={[
+      chipStyles.wrap,
+      { backgroundColor: s.bg, borderColor: s.border },
+      isSm && chipStyles.wrapSm,
+    ]}>
+      <View style={[chipStyles.dot, { backgroundColor: s.dot }]} />
+      <Text style={[chipStyles.text, { color: s.text }, isSm && chipStyles.textSm]}>{s.label}</Text>
+    </View>
+  );
+};
+
+const chipStyles = StyleSheet.create({
+  wrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  wrapSm: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  text: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  textSm: {
+    fontSize: 10,
+  },
+});
+
+// Meta Tag — small info tag used in card footers
+const Tag = ({ icon, label }) => (
+  <View style={tagStyles.wrap}>
+    <Ionicons name={icon} size={11} color={TEXT_MUTED} />
+    <Text style={tagStyles.text} numberOfLines={1}>{label}</Text>
   </View>
 );
 
-const pillStyles = StyleSheet.create({
+const tagStyles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 0.5,
-    borderColor: BORDER,
   },
-  text: { fontSize: 11, fontWeight: '500' },
+  text: { fontSize: 11.5, fontWeight: '500', color: TEXT_MUTED },
 });
 
-// Earnings Badge — compact, professional summary of total earnings, shown in the header
+// ─────────────────────────────────────────────────────────
+// Header summary badge (Total Earnings)
+// ─────────────────────────────────────────────────────────
 const EarningsBadge = ({ amount }) => (
   <View style={summaryStyles.wrap}>
     <View style={summaryStyles.iconCircle}>
-      <Ionicons name="cash-outline" size={13} color={GOLD_LT} />
+      <Ionicons name="wallet-outline" size={13} color={GOLD} />
     </View>
     <View style={summaryStyles.textWrap}>
       <Text style={summaryStyles.label}>Total Earnings</Text>
@@ -164,29 +211,27 @@ const summaryStyles = StyleSheet.create({
     gap: 8,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 12,
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 10,
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
   iconCircle: {
     width: 26,
     height: 26,
-    borderRadius: 8,
-    backgroundColor: 'rgba(232,184,75,0.16)',
+    borderRadius: 7,
+    backgroundColor: 'rgba(184,134,43,0.20)',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  textWrap: {
-    minWidth: 0,
-  },
+  textWrap: { minWidth: 0 },
   label: {
     fontSize: 9,
-    fontWeight: '600',
-    color: SILVER2,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.55)',
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
   value: {
     fontSize: 13,
@@ -196,166 +241,61 @@ const summaryStyles = StyleSheet.create({
   },
 });
 
-// Completion Celebration Component
-const CompletionCelebration = ({ contract, onClose }) => {
-  const job = contract?.job_id || {};
+// ─────────────────────────────────────────────────────────
+// Overview strip — quick stats row under the header
+// ─────────────────────────────────────────────────────────
+const OverviewStrip = ({ total, active, completed, avgProgress }) => (
+  <View style={overviewStyles.wrap}>
+    <View style={overviewStyles.item}>
+      <Text style={overviewStyles.num}>{total}</Text>
+      <Text style={overviewStyles.label}>Total</Text>
+    </View>
+    <View style={overviewStyles.sep} />
+    <View style={overviewStyles.item}>
+      <Text style={[overviewStyles.num, { color: BLUE }]}>{active}</Text>
+      <Text style={overviewStyles.label}>Active</Text>
+    </View>
+    <View style={overviewStyles.sep} />
+    <View style={overviewStyles.item}>
+      <Text style={[overviewStyles.num, { color: GOLD_DARK }]}>{completed}</Text>
+      <Text style={overviewStyles.label}>Completed</Text>
+    </View>
+    <View style={overviewStyles.sep} />
+    <View style={overviewStyles.item}>
+      <Text style={overviewStyles.num}>{avgProgress}%</Text>
+      <Text style={overviewStyles.label}>Avg. Progress</Text>
+    </View>
+  </View>
+);
 
-  return (
-    <Modal transparent animationType="fade" visible={true} onRequestClose={onClose}>
-      <View style={celebrationStyles.overlay}>
-        <View style={celebrationStyles.container}>
-          <View style={celebrationStyles.iconContainer}>
-            <View style={celebrationStyles.iconCircle}>
-              <Ionicons name="checkmark-done-circle" size={56} color={GREEN} />
-            </View>
-          </View>
-
-          <Text style={celebrationStyles.title}>Contract Completed</Text>
-          <Text style={celebrationStyles.subtitle}>You've successfully wrapped up</Text>
-          <Text style={celebrationStyles.jobTitle} numberOfLines={2}>"{job.title || 'the job'}"</Text>
-
-          <View style={celebrationStyles.divider} />
-
-          <View style={celebrationStyles.details}>
-            <View style={celebrationStyles.detailRow}>
-              <View style={celebrationStyles.detailIconWrap}>
-                <Ionicons name="cash-outline" size={16} color={BLUE} />
-              </View>
-              <Text style={celebrationStyles.detailLabel}>Earned</Text>
-              <Text style={celebrationStyles.detailValue}>
-                {formatCurrency(contract?.agreed_budget?.amount)}
-              </Text>
-            </View>
-            <View style={celebrationStyles.detailRow}>
-              <View style={celebrationStyles.detailIconWrap}>
-                <Ionicons name="time-outline" size={16} color={BLUE} />
-              </View>
-              <Text style={celebrationStyles.detailLabel}>Completed</Text>
-              <Text style={celebrationStyles.detailValue}>
-                {formatDate(contract?.updated_at)}
-              </Text>
-            </View>
-          </View>
-
-          <TouchableOpacity style={celebrationStyles.button} onPress={onClose} activeOpacity={0.85}>
-            <Text style={celebrationStyles.buttonText}>Continue</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
-const celebrationStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(7,26,62,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  container: {
-    backgroundColor: WHITE,
-    borderRadius: 24,
-    padding: 32,
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 340,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  iconContainer: {
-    marginBottom: 16,
-  },
-  iconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: GREEN_SOFT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: TEXT_MAIN,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  jobTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: BLUE,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  divider: {
-    width: 48,
-    height: 3,
-    backgroundColor: GOLD,
-    borderRadius: 2,
-    marginBottom: 16,
-  },
-  details: {
-    width: '100%',
-    gap: 8,
-    marginBottom: 24,
-  },
-  detailRow: {
+const overviewStyles = StyleSheet.create({
+  wrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: BG_GRAY,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    backgroundColor: CARD,
+    marginHorizontal: 16,
+    marginTop: 14,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: BORDER,
-  },
-  detailIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    backgroundColor: `${BLUE}14`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  detailLabel: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    fontWeight: '500',
-    flex: 1,
-  },
-  detailValue: {
-    fontSize: 14,
-    color: TEXT_MAIN,
-    fontWeight: '700',
-  },
-  button: {
-    backgroundColor: BLUE,
-    paddingHorizontal: 40,
     paddingVertical: 14,
-    borderRadius: 14,
-    width: '100%',
-    alignItems: 'center',
   },
-  buttonText: {
-    color: WHITE,
-    fontSize: 16,
-    fontWeight: '700',
+  item: { flex: 1, alignItems: 'center' },
+  sep: { width: 1, height: 26, backgroundColor: BORDER },
+  num: { fontSize: 17, fontWeight: '800', color: TEXT_MAIN },
+  label: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: TEXT_FAINT,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginTop: 3,
   },
 });
 
-// Contract Card
+// ─────────────────────────────────────────────────────────
+// Contract Card — ticket-style, left accent bar carries status
+// ─────────────────────────────────────────────────────────
 const ContractCard = ({ contract, onPress, onUpdateProgress }) => {
   const status = getContractStatus(contract.status);
   const progress = contract.progress || 0;
@@ -370,87 +310,82 @@ const ContractCard = ({ contract, onPress, onUpdateProgress }) => {
 
   return (
     <TouchableOpacity
-      style={[cardStyles.card, isCompleted && cardStyles.cardCompleted]}
+      style={cardStyles.card}
       onPress={() => onPress(contract)}
       activeOpacity={0.7}
     >
-      <View style={cardStyles.header}>
-        <View style={cardStyles.titleSection}>
+      <View style={[cardStyles.accentBar, { backgroundColor: status.dot }]} />
+
+      <View style={cardStyles.body}>
+        <View style={cardStyles.topRow}>
+          <Text style={cardStyles.refCode}>REF #{refCode(contract._id)}</Text>
+          <StatusChip status={contract.status} size="sm" />
+        </View>
+
+        <View style={cardStyles.header}>
           {client.profile_picture ? (
-            <Image
-              source={{ uri: client.profile_picture }}
-              style={cardStyles.avatar}
-            />
+            <Image source={{ uri: client.profile_picture }} style={cardStyles.avatar} />
           ) : (
-            <View style={[cardStyles.logoBox, isCompleted && cardStyles.logoBoxCompleted]}>
-              <Ionicons name="briefcase-outline" size={20} color={isCompleted ? GREEN : BLUE} />
+            <View style={cardStyles.logoBox}>
+              <Ionicons name="briefcase" size={18} color={BLUE} />
             </View>
           )}
           <View style={cardStyles.titleContent}>
-            <Text style={[cardStyles.title, isCompleted && cardStyles.titleCompleted]} numberOfLines={1}>
-              {job.title || 'Contract'}
-            </Text>
+            <Text style={cardStyles.title} numberOfLines={1}>{job.title || 'Contract'}</Text>
             <View style={cardStyles.clientRow}>
               <Ionicons name="person-outline" size={12} color={TEXT_MUTED} />
               <Text style={cardStyles.clientName} numberOfLines={1}>{clientName}</Text>
             </View>
           </View>
         </View>
-        <View style={[cardStyles.statusBadge, { backgroundColor: status.bg }]}>
-          <Ionicons name={status.icon} size={10} color={status.text} />
-          <Text style={[cardStyles.statusText, { color: status.text }]}>{status.label}</Text>
-        </View>
-      </View>
 
-      <View style={cardStyles.statsRow}>
-        <View style={cardStyles.statItem}>
-          <Text style={cardStyles.statLabel}>Budget</Text>
-          <Text style={cardStyles.statValue} numberOfLines={1}>{formatCurrency(contract.agreed_budget?.amount)}</Text>
-        </View>
-        <View style={cardStyles.statDivider} />
-        <View style={cardStyles.statItem}>
-          <Text style={cardStyles.statLabel}>Progress</Text>
-          <Text style={[cardStyles.statValue, isCompleted && { color: GREEN }]}>
-            {isCompleted ? '100%' : `${progress}%`}
-          </Text>
-        </View>
-        <View style={cardStyles.statDivider} />
-        <View style={cardStyles.statItem}>
-          <Text style={cardStyles.statLabel}>Type</Text>
-          <Text style={cardStyles.statValue} numberOfLines={1}>{job.budget?.type || 'Fixed'}</Text>
-        </View>
-      </View>
-
-      <View style={cardStyles.progressContainer}>
-        <View style={[cardStyles.progressBar, isCompleted && cardStyles.progressBarCompleted]}>
-          <View style={[
-            cardStyles.progressFill,
-            { width: `${isCompleted ? 100 : Math.min(progress, 100)}%` },
-            isCompleted && cardStyles.progressFillCompleted,
-          ]} />
-        </View>
-        {!isCompleted && (
-          <TouchableOpacity
-            style={cardStyles.progressUpdateBtn}
-            onPress={() => onUpdateProgress(contract)}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="add-circle-outline" size={20} color={BLUE} />
-          </TouchableOpacity>
-        )}
-        {isCompleted && (
-          <View style={cardStyles.completedBadge}>
-            <Ionicons name="checkmark-circle" size={18} color={GREEN} />
+        <View style={cardStyles.statsRow}>
+          <View style={cardStyles.statItem}>
+            <Text style={cardStyles.statLabel}>Budget</Text>
+            <Text style={cardStyles.statValue} numberOfLines={1}>{formatCurrency(contract.agreed_budget?.amount)}</Text>
           </View>
-        )}
-      </View>
+          <View style={cardStyles.statDivider} />
+          <View style={cardStyles.statItem}>
+            <Text style={cardStyles.statLabel}>Progress</Text>
+            <Text style={[cardStyles.statValue, isCompleted && { color: GOLD_DARK }]}>
+              {isCompleted ? '100%' : `${progress}%`}
+            </Text>
+          </View>
+          <View style={cardStyles.statDivider} />
+          <View style={cardStyles.statItem}>
+            <Text style={cardStyles.statLabel}>Type</Text>
+            <Text style={cardStyles.statValue} numberOfLines={1}>{job.budget?.type || 'Fixed'}</Text>
+          </View>
+        </View>
 
-      <View style={cardStyles.metaRow}>
-        <Pill icon="calendar-outline" label={`Started ${formatDate(contract.start_date)}`} />
-        {job.category && (
-          <Pill icon="pricetag-outline" label={job.category} />
-        )}
+        <View style={cardStyles.progressContainer}>
+          <View style={cardStyles.progressBar}>
+            <View style={[
+              cardStyles.progressFill,
+              { width: `${isCompleted ? 100 : Math.min(progress, 100)}%` },
+              isCompleted && { backgroundColor: GOLD },
+            ]} />
+          </View>
+          {!isCompleted ? (
+            <TouchableOpacity
+              style={cardStyles.progressUpdateBtn}
+              onPress={() => onUpdateProgress(contract)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="add" size={16} color={WHITE} />
+            </TouchableOpacity>
+          ) : (
+            <View style={cardStyles.doneMark}>
+              <Ionicons name="checkmark" size={14} color={WHITE} />
+            </View>
+          )}
+        </View>
+
+        <View style={cardStyles.metaRow}>
+          <Tag icon="calendar-outline" label={`Started ${formatDate(contract.start_date)}`} />
+          {job.category ? <Tag icon="pricetag-outline" label={job.category} /> : null}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -458,69 +393,56 @@ const ContractCard = ({ contract, onPress, onUpdateProgress }) => {
 
 const cardStyles = StyleSheet.create({
   card: {
+    flexDirection: 'row',
     backgroundColor: CARD,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: BORDER,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    overflow: 'hidden',
   },
-  cardCompleted: {
-    borderColor: GREEN_MID,
-    backgroundColor: '#FAFFFE',
+  accentBar: { width: 4 },
+  body: { flex: 1, padding: 14, paddingLeft: 13 },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  refCode: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: TEXT_FAINT,
+    letterSpacing: 0.6,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 11,
     marginBottom: 12,
   },
-  titleSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-    minWidth: 0,
-  },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: BORDER,
   },
   logoBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,104,181,0.08)',
+    width: 40,
+    height: 40,
+    borderRadius: 9,
+    backgroundColor: BLUE_LIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    borderWidth: 0.5,
-    borderColor: 'rgba(0,104,181,0.15)',
   },
-  logoBoxCompleted: {
-    backgroundColor: GREEN_SOFT,
-    borderColor: GREEN,
-  },
-  titleContent: {
-    flex: 1,
-    minWidth: 0,
-  },
+  titleContent: { flex: 1, minWidth: 0 },
   title: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: '700',
     color: TEXT_MAIN,
-    lineHeight: 20,
-  },
-  titleCompleted: {
-    color: GREEN_DARK,
+    lineHeight: 19,
   },
   clientRow: {
     flexDirection: 'row',
@@ -534,109 +456,82 @@ const cardStyles = StyleSheet.create({
     fontWeight: '500',
     flexShrink: 1,
   },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    flexShrink: 0,
-    marginLeft: 8,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: BG_GRAY,
-    borderRadius: 12,
-    paddingVertical: 12,
+    backgroundColor: OFFWHITE,
+    borderRadius: 9,
+    paddingVertical: 11,
     paddingHorizontal: 8,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: BORDER_SOFT,
   },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-    minWidth: 0,
-    paddingHorizontal: 4,
-  },
+  statItem: { flex: 1, alignItems: 'center', minWidth: 0, paddingHorizontal: 4 },
   statLabel: {
     fontSize: 9,
-    color: TEXT_LIGHT,
-    fontWeight: '600',
+    color: TEXT_FAINT,
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
     marginBottom: 3,
   },
-  statValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-  },
-  statDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: BORDER,
-  },
+  statValue: { fontSize: 13.5, fontWeight: '700', color: TEXT_MAIN },
+  statDivider: { width: 1, height: 26, backgroundColor: BORDER },
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 9,
     marginBottom: 12,
   },
   progressBar: {
     flex: 1,
-    height: 8,
-    backgroundColor: BG_GRAY,
-    borderRadius: 4,
+    height: 6,
+    backgroundColor: OFFWHITE,
+    borderRadius: 3,
     overflow: 'hidden',
-    borderWidth: 0.5,
-    borderColor: BORDER,
-  },
-  progressBarCompleted: {
-    backgroundColor: GREEN_SOFT,
-    borderColor: GREEN,
+    borderWidth: 1,
+    borderColor: BORDER_SOFT,
   },
   progressFill: {
     height: '100%',
     backgroundColor: BLUE,
-    borderRadius: 4,
-  },
-  progressFillCompleted: {
-    backgroundColor: GREEN,
+    borderRadius: 3,
   },
   progressUpdateBtn: {
-    padding: 2,
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    backgroundColor: BLUE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  completedBadge: {
-    padding: 2,
+  doneMark: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 14,
   },
 });
 
-// Update Card
+// ─────────────────────────────────────────────────────────
+// Update Card (activity log entry)
+// ─────────────────────────────────────────────────────────
 const UpdateCard = ({ update, onPress, onStatusChange }) => {
   const updateType = UPDATE_TYPES[update.update_type] || UPDATE_TYPES.progress;
 
   return (
-    <TouchableOpacity
-      style={updateCardStyles.card}
-      onPress={() => onPress(update)}
-      activeOpacity={0.7}
-    >
+    <TouchableOpacity style={updateCardStyles.card} onPress={() => onPress(update)} activeOpacity={0.7}>
       <View style={updateCardStyles.header}>
-        <View style={[updateCardStyles.typeIcon, { backgroundColor: `${updateType.color}15` }]}>
-          <Ionicons name={updateType.icon} size={16} color={updateType.color} />
+        <View style={[updateCardStyles.typeIcon, { backgroundColor: `${updateType.color}16` }]}>
+          <Ionicons name={updateType.icon} size={15} color={updateType.color} />
         </View>
         <View style={updateCardStyles.typeContent}>
           <Text style={updateCardStyles.typeLabel} numberOfLines={1}>{updateType.label}</Text>
@@ -648,16 +543,16 @@ const UpdateCard = ({ update, onPress, onStatusChange }) => {
           </View>
         )}
         {update.status === 'completed' && (
-          <Ionicons name="checkmark-circle" size={18} color={GREEN} />
+          <View style={updateCardStyles.doneBadge}>
+            <Ionicons name="checkmark" size={12} color={WHITE} />
+          </View>
         )}
       </View>
 
       <Text style={updateCardStyles.title} numberOfLines={2}>{update.title}</Text>
-      {update.description && (
-        <Text style={updateCardStyles.description} numberOfLines={2}>
-          {update.description}
-        </Text>
-      )}
+      {update.description ? (
+        <Text style={updateCardStyles.description} numberOfLines={2}>{update.description}</Text>
+      ) : null}
 
       {update.progress !== undefined && update.progress !== null && (
         <View style={updateCardStyles.progressSection}>
@@ -684,8 +579,8 @@ const UpdateCard = ({ update, onPress, onStatusChange }) => {
             onPress={() => onStatusChange(update._id, 'revision_requested')}
             activeOpacity={0.85}
           >
-            <Ionicons name="close" size={14} color={WHITE} />
-            <Text style={updateCardStyles.actionBtnText}>Revise</Text>
+            <Ionicons name="refresh" size={14} color={BLUE_DARK} />
+            <Text style={[updateCardStyles.actionBtnText, { color: BLUE_DARK }]}>Revise</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -696,139 +591,59 @@ const UpdateCard = ({ update, onPress, onStatusChange }) => {
 const updateCardStyles = StyleSheet.create({
   card: {
     backgroundColor: CARD,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 10,
+    padding: 13,
     borderWidth: 1,
     borderColor: BORDER,
-    marginBottom: 10,
+    marginBottom: 9,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   typeIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    width: 30, height: 30, borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  typeContent: {
-    flex: 1,
-    minWidth: 0,
-  },
-  typeLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-  },
-  updateTime: {
-    fontSize: 10,
-    color: TEXT_LIGHT,
-    marginTop: 1,
-  },
+  typeContent: { flex: 1, minWidth: 0 },
+  typeLabel: { fontSize: 12, fontWeight: '700', color: TEXT_MAIN },
+  updateTime: { fontSize: 10, color: TEXT_FAINT, marginTop: 1 },
   pendingBadge: {
-    backgroundColor: ORANGE_SOFT,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    flexShrink: 0,
-  },
-  pendingText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: ORANGE,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-    marginBottom: 4,
-    lineHeight: 19,
-  },
-  description: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    lineHeight: 18,
-    marginBottom: 6,
-  },
-  progressSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: BG_GRAY,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    marginTop: 4,
+    backgroundColor: GOLD_LIGHT,
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: GOLD_LINE,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, flexShrink: 0,
   },
-  progressLabel: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-    fontWeight: '500',
+  pendingText: { fontSize: 9, fontWeight: '700', color: GOLD_DARK },
+  doneBadge: {
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: GOLD, alignItems: 'center', justifyContent: 'center',
   },
-  progressBar: {
-    flex: 1,
-    height: 4,
-    backgroundColor: BORDER,
-    borderRadius: 2,
-    overflow: 'hidden',
+  title: { fontSize: 13.5, fontWeight: '700', color: TEXT_MAIN, marginBottom: 4, lineHeight: 18 },
+  description: { fontSize: 12.5, color: TEXT_MUTED, lineHeight: 18, marginBottom: 6 },
+  progressSection: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: OFFWHITE, paddingVertical: 8, paddingHorizontal: 10,
+    borderRadius: 8, marginTop: 4, borderWidth: 1, borderColor: BORDER_SOFT,
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: BLUE,
-    borderRadius: 2,
-  },
-  progressValue: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    minWidth: 32,
-    textAlign: 'right',
-  },
+  progressLabel: { fontSize: 11, color: TEXT_MUTED, fontWeight: '600' },
+  progressBar: { flex: 1, height: 4, backgroundColor: BORDER, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: BLUE, borderRadius: 2 },
+  progressValue: { fontSize: 11, fontWeight: '700', color: TEXT_MAIN, minWidth: 32, textAlign: 'right' },
   actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
+    flexDirection: 'row', gap: 8, marginTop: 10, paddingTop: 10,
+    borderTopWidth: 1, borderTopColor: BORDER_SOFT,
   },
   actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 8,
-    borderRadius: 8,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, paddingVertical: 9, borderRadius: 8,
   },
-  approveBtn: {
-    backgroundColor: GREEN,
-  },
-  rejectBtn: {
-    backgroundColor: RED,
-  },
-  actionBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: WHITE,
-  },
+  approveBtn: { backgroundColor: BLUE },
+  rejectBtn: { backgroundColor: BLUE_LIGHT, borderWidth: 1, borderColor: BLUE_LINE },
+  actionBtnText: { fontSize: 12, fontWeight: '700', color: WHITE },
 });
 
+// ─────────────────────────────────────────────────────────
 // Progress Update Modal
-const ProgressUpdateModal = ({
-  visible,
-  contract,
-  onClose,
-  onSubmit,
-  isLoading,
-}) => {
+// ─────────────────────────────────────────────────────────
+const ProgressUpdateModal = ({ visible, contract, onClose, onSubmit, isLoading }) => {
   const [progress, setProgress] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -864,16 +679,13 @@ const ProgressUpdateModal = ({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={modalStyles.overlay}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={modalStyles.sheetContainer}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={modalStyles.sheetContainer}>
           <View style={modalStyles.sheet}>
             <View style={modalStyles.handle} />
             <View style={modalStyles.header}>
               <Text style={modalStyles.title}>Update Progress</Text>
               <TouchableOpacity style={modalStyles.closeBtn} onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close" size={20} color={TEXT_MUTED} />
+                <Ionicons name="close" size={19} color={TEXT_MUTED} />
               </TouchableOpacity>
             </View>
 
@@ -898,7 +710,7 @@ const ProgressUpdateModal = ({
                     onChangeText={setProgress}
                     keyboardType="numeric"
                     placeholder="0-100"
-                    placeholderTextColor={TEXT_LIGHT}
+                    placeholderTextColor={TEXT_FAINT}
                     maxLength={3}
                   />
                   <Text style={modalStyles.progressPercent}>%</Text>
@@ -914,16 +726,12 @@ const ProgressUpdateModal = ({
                         key={type}
                         style={[
                           modalStyles.typeBtn,
-                          isSelected && { backgroundColor: `${info.color}15`, borderColor: info.color },
+                          isSelected && { backgroundColor: `${info.color}14`, borderColor: info.color },
                         ]}
                         onPress={() => setUpdateType(type)}
                         activeOpacity={0.75}
                       >
-                        <Ionicons
-                          name={info.icon}
-                          size={14}
-                          color={isSelected ? info.color : TEXT_LIGHT}
-                        />
+                        <Ionicons name={info.icon} size={13} color={isSelected ? info.color : TEXT_FAINT} />
                         <Text style={[modalStyles.typeBtnText, isSelected && { color: info.color }]}>
                           {info.label}
                         </Text>
@@ -938,7 +746,7 @@ const ProgressUpdateModal = ({
                   value={title}
                   onChangeText={setTitle}
                   placeholder="Update title..."
-                  placeholderTextColor={TEXT_LIGHT}
+                  placeholderTextColor={TEXT_FAINT}
                 />
 
                 <Text style={modalStyles.label}>Description</Text>
@@ -947,7 +755,7 @@ const ProgressUpdateModal = ({
                   value={description}
                   onChangeText={setDescription}
                   placeholder="Describe your progress..."
-                  placeholderTextColor={TEXT_LIGHT}
+                  placeholderTextColor={TEXT_FAINT}
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
@@ -963,7 +771,7 @@ const ProgressUpdateModal = ({
                     <ActivityIndicator color={WHITE} size="small" />
                   ) : (
                     <>
-                      <Ionicons name="send-outline" size={16} color={WHITE} />
+                      <Ionicons name="send-outline" size={15} color={WHITE} />
                       <Text style={modalStyles.submitBtnText}>Submit Update</Text>
                     </>
                   )}
@@ -978,173 +786,68 @@ const ProgressUpdateModal = ({
 };
 
 const modalStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(7,26,62,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheetContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(10,34,71,0.5)', justifyContent: 'flex-end' },
+  sheetContainer: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: WHITE,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     padding: 20,
     maxHeight: '92%',
     borderTopWidth: 1,
     borderColor: BORDER,
   },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: BORDER,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 16 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: BORDER,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-  },
+  title: { fontSize: 16.5, fontWeight: '800', color: TEXT_MAIN },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: BG,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 30, height: 30, borderRadius: 8, backgroundColor: OFFWHITE,
+    alignItems: 'center', justifyContent: 'center',
   },
-  form: {
-    paddingTop: 16,
-  },
-  contractInfo: {
-    marginBottom: 16,
-  },
+  form: { paddingTop: 16 },
+  contractInfo: { marginBottom: 16 },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-    marginBottom: 6,
-    marginTop: 12,
+    fontSize: 11.5, fontWeight: '700', color: TEXT_MUTED,
+    textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 7, marginTop: 14,
   },
-  contractTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginBottom: 2,
-  },
-  clientName: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-  },
+  contractTitle: { fontSize: 16, fontWeight: '800', color: TEXT_MAIN, marginBottom: 2 },
+  clientName: { fontSize: 13, color: TEXT_MUTED },
   progressInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderColor: BORDER, borderRadius: 10, paddingHorizontal: 12,
   },
-  progressInput: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 16,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-  },
-  progressPercent: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: TEXT_MUTED,
-    paddingRight: 4,
-  },
-  typeRow: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
+  progressInput: { flex: 1, paddingVertical: 12, fontSize: 16, fontWeight: '700', color: TEXT_MAIN },
+  progressPercent: { fontSize: 16, fontWeight: '700', color: TEXT_MUTED, paddingRight: 4 },
+  typeRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   typeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: BG_GRAY,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+    borderWidth: 1, borderColor: BORDER, backgroundColor: OFFWHITE,
   },
-  typeBtnText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: TEXT_MUTED,
-  },
-  titleInput: {
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 14,
-    color: TEXT_MAIN,
-  },
+  typeBtnText: { fontSize: 11, fontWeight: '600', color: TEXT_MUTED },
+  titleInput: { borderWidth: 1.5, borderColor: BORDER, borderRadius: 10, padding: 12, fontSize: 14, color: TEXT_MAIN },
   textArea: {
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    borderRadius: 12,
-    padding: 12,
-    minHeight: 100,
-    fontSize: 13,
-    color: TEXT_MAIN,
-    textAlignVertical: 'top',
+    borderWidth: 1.5, borderColor: BORDER, borderRadius: 10, padding: 12,
+    minHeight: 100, fontSize: 13, color: TEXT_MAIN, textAlignVertical: 'top',
   },
   submitBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: BLUE,
-    paddingVertical: 16,
-    borderRadius: 14,
-    marginTop: 20,
-    marginBottom: 12,
-    shadowColor: BLUE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 3,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: BLUE, paddingVertical: 15, borderRadius: 12, marginTop: 20, marginBottom: 12,
   },
-  submitBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: WHITE,
-  },
+  submitBtnText: { fontSize: 15, fontWeight: '700', color: WHITE },
 });
 
+// ─────────────────────────────────────────────────────────
 // Contract Detail Modal
+// ─────────────────────────────────────────────────────────
 const ContractDetailModal = ({
-  contract,
-  visible,
-  onClose,
-  updates,
-  onUpdateProgress,
-  onStatusChange,
-  onUpdatePress,
-  isLoading,
+  contract, visible, onClose, updates, onUpdateProgress, onStatusChange, onUpdatePress, isLoading,
 }) => {
   if (!contract) return null;
 
-  const status = getContractStatus(contract.status);
   const progress = contract.progress || 0;
   const job = contract.job_id || {};
   const client = job.client_id || {};
@@ -1162,7 +865,7 @@ const ContractDetailModal = ({
           <View style={modalStyles.header}>
             <Text style={modalStyles.title}>Contract Details</Text>
             <TouchableOpacity style={modalStyles.closeBtn} onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close" size={20} color={TEXT_MUTED} />
+              <Ionicons name="close" size={19} color={TEXT_MUTED} />
             </TouchableOpacity>
           </View>
 
@@ -1174,33 +877,27 @@ const ContractDetailModal = ({
           )}
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={[detailStyles.hero, isCompleted && detailStyles.heroCompleted]}>
-              {client.profile_picture ? (
-                <Image
-                  source={{ uri: client.profile_picture }}
-                  style={detailStyles.heroImage}
-                />
-              ) : (
-                <View style={[detailStyles.heroIcon, isCompleted && detailStyles.heroIconCompleted]}>
-                  <Ionicons name="person" size={28} color={WHITE} />
-                </View>
-              )}
-              <Text style={[detailStyles.heroTitle, isCompleted && detailStyles.heroTitleCompleted]} numberOfLines={2}>
-                {job.title || 'Contract'}
-              </Text>
-              <View style={detailStyles.heroClientRow}>
-                <Ionicons name="person-outline" size={12} color={TEXT_MUTED} />
-                <Text style={detailStyles.heroClient}>{clientName}</Text>
+            <View style={detailStyles.hero}>
+              <View style={detailStyles.heroTopRow}>
+                <Text style={detailStyles.refCode}>REF #{refCode(contract._id)}</Text>
+                <StatusChip status={contract.status} />
               </View>
-              {isCompleted && (
-                <View style={detailStyles.completedBadge}>
-                  <Ionicons name="checkmark-done-circle" size={16} color={GREEN} />
-                  <Text style={detailStyles.completedText}>Completed</Text>
+
+              <View style={detailStyles.heroMain}>
+                {client.profile_picture ? (
+                  <Image source={{ uri: client.profile_picture }} style={detailStyles.heroImage} />
+                ) : (
+                  <View style={detailStyles.heroIcon}>
+                    <Ionicons name="person" size={24} color={WHITE} />
+                  </View>
+                )}
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={detailStyles.heroTitle} numberOfLines={2}>{job.title || 'Contract'}</Text>
+                  <View style={detailStyles.heroClientRow}>
+                    <Ionicons name="person-outline" size={12} color={TEXT_MUTED} />
+                    <Text style={detailStyles.heroClient} numberOfLines={1}>{clientName}</Text>
+                  </View>
                 </View>
-              )}
-              <View style={[detailStyles.statusBadge, { backgroundColor: status.bg }]}>
-                <Ionicons name={status.icon} size={12} color={status.text} />
-                <Text style={[detailStyles.statusText, { color: status.text }]}>{status.label}</Text>
               </View>
             </View>
 
@@ -1211,7 +908,7 @@ const ContractDetailModal = ({
               </View>
               <View style={detailStyles.statCard}>
                 <Text style={detailStyles.statLabel}>Progress</Text>
-                <Text style={[detailStyles.statValue, isCompleted && { color: GREEN }]}>
+                <Text style={[detailStyles.statValue, isCompleted && { color: GOLD_DARK }]}>
                   {isCompleted ? '100%' : `${progress}%`}
                 </Text>
               </View>
@@ -1221,12 +918,12 @@ const ContractDetailModal = ({
               </View>
             </View>
 
-            {job.description && (
+            {job.description ? (
               <View style={detailStyles.section}>
                 <Text style={detailStyles.sectionTitle}>Description</Text>
                 <Text style={detailStyles.descriptionText}>{job.description}</Text>
               </View>
-            )}
+            ) : null}
 
             {job.required_skills && job.required_skills.length > 0 && (
               <View style={detailStyles.section}>
@@ -1247,12 +944,12 @@ const ContractDetailModal = ({
             <View style={detailStyles.section}>
               <Text style={detailStyles.sectionTitle}>Timeline</Text>
               <View style={detailStyles.infoRow}>
-                <Ionicons name="calendar-outline" size={14} color={TEXT_LIGHT} />
+                <Ionicons name="calendar-outline" size={14} color={TEXT_FAINT} />
                 <Text style={detailStyles.infoText}>Started: {formatDate(contract.start_date)}</Text>
               </View>
               {contract.end_date && (
                 <View style={detailStyles.infoRow}>
-                  <Ionicons name="calendar-outline" size={14} color={TEXT_LIGHT} />
+                  <Ionicons name="calendar-outline" size={14} color={TEXT_FAINT} />
                   <Text style={detailStyles.infoText}>Ends: {formatDate(contract.end_date)}</Text>
                 </View>
               )}
@@ -1262,7 +959,7 @@ const ContractDetailModal = ({
               <Text style={detailStyles.sectionTitle}>Recent Updates</Text>
               {updates.length === 0 ? (
                 <View style={detailStyles.emptyUpdates}>
-                  <Ionicons name="chatbubble-outline" size={24} color={TEXT_LIGHT} />
+                  <Ionicons name="chatbubble-outline" size={22} color={TEXT_FAINT} />
                   <Text style={detailStyles.emptyText}>No updates yet</Text>
                 </View>
               ) : (
@@ -1281,10 +978,7 @@ const ContractDetailModal = ({
               <View style={detailStyles.actionRow}>
                 <TouchableOpacity
                   style={detailStyles.updateBtn}
-                  onPress={() => {
-                    onClose();
-                    onUpdateProgress(contract);
-                  }}
+                  onPress={() => { onClose(); onUpdateProgress(contract); }}
                   activeOpacity={0.85}
                 >
                   <Ionicons name="trending-up-outline" size={16} color={WHITE} />
@@ -1300,210 +994,61 @@ const ContractDetailModal = ({
 };
 
 const detailStyles = StyleSheet.create({
-  loadingBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 8,
-  },
-  loadingBarText: {
-    fontSize: 12,
-    color: TEXT_MUTED,
-    fontWeight: '500',
-  },
+  loadingBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
+  loadingBarText: { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
   hero: {
-    alignItems: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    backgroundColor: BG_GRAY,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: BORDER,
-    marginTop: 16,
-    marginBottom: 16,
+    paddingVertical: 16, paddingHorizontal: 16, backgroundColor: OFFWHITE,
+    borderRadius: 14, borderWidth: 1, borderColor: BORDER, marginTop: 16, marginBottom: 16,
   },
-  heroCompleted: {
-    backgroundColor: GREEN_SOFT,
-    borderColor: GREEN,
-  },
-  heroImage: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: WHITE,
-  },
-  heroIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: BLUE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  heroIconCompleted: {
-    backgroundColor: GREEN,
-  },
-  heroTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  heroTitleCompleted: {
-    color: GREEN_DARK,
-  },
-  heroClientRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 10,
-  },
-  heroClient: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  completedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  completedText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: GREEN,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  refCode: { fontSize: 11, fontWeight: '700', color: TEXT_FAINT, letterSpacing: 0.6 },
+  heroMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  heroImage: { width: 56, height: 56, borderRadius: 13, borderWidth: 1, borderColor: BORDER },
+  heroIcon: { width: 56, height: 56, borderRadius: 13, backgroundColor: NAVY, alignItems: 'center', justifyContent: 'center' },
+  heroTitle: { fontSize: 16.5, fontWeight: '800', color: TEXT_MAIN, marginBottom: 4 },
+  heroClientRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  heroClient: { fontSize: 13, color: TEXT_MUTED },
+  statsGrid: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   statCard: {
-    flex: 1,
-    backgroundColor: BG_GRAY,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
+    flex: 1, backgroundColor: OFFWHITE, borderRadius: 10, paddingVertical: 14,
+    paddingHorizontal: 6, alignItems: 'center', borderWidth: 1, borderColor: BORDER,
   },
   statLabel: {
-    fontSize: 9,
-    color: TEXT_LIGHT,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 4,
+    fontSize: 9, color: TEXT_FAINT, fontWeight: '700',
+    textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4,
   },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-  },
-  section: {
-    marginBottom: 16,
-  },
+  statValue: { fontSize: 16, fontWeight: '800', color: TEXT_MAIN },
+  section: { marginBottom: 16 },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginBottom: 10,
+    fontSize: 12.5, fontWeight: '800', color: TEXT_MAIN,
+    textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10,
   },
-  descriptionText: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    lineHeight: 20,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  infoText: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-  },
-  skillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
+  descriptionText: { fontSize: 13, color: TEXT_MUTED, lineHeight: 20 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  infoText: { fontSize: 13, color: TEXT_MUTED },
+  skillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   skillTag: {
-    backgroundColor: 'rgba(0,104,181,0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 0.5,
-    borderColor: 'rgba(0,104,181,0.15)',
+    backgroundColor: BLUE_LIGHT, paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 7, borderWidth: 1, borderColor: BLUE_LINE,
   },
-  skillText: {
-    fontSize: 11,
-    color: BLUE,
-    fontWeight: '500',
-  },
-  moreSkills: {
-    fontSize: 11,
-    color: TEXT_LIGHT,
-    alignSelf: 'center',
-  },
+  skillText: { fontSize: 11, color: BLUE_DARK, fontWeight: '600' },
+  moreSkills: { fontSize: 11, color: TEXT_FAINT, alignSelf: 'center' },
   emptyUpdates: {
-    alignItems: 'center',
-    paddingVertical: 30,
-    backgroundColor: BG_GRAY,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: BORDER,
+    alignItems: 'center', paddingVertical: 28, backgroundColor: OFFWHITE,
+    borderRadius: 12, borderWidth: 1, borderColor: BORDER,
   },
-  emptyText: {
-    fontSize: 13,
-    color: TEXT_LIGHT,
-    marginTop: 8,
-  },
-  actionRow: {
-    marginTop: 8,
-    marginBottom: 24,
-  },
+  emptyText: { fontSize: 13, color: TEXT_FAINT, marginTop: 8 },
+  actionRow: { marginTop: 8, marginBottom: 24 },
   updateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: BLUE,
-    paddingVertical: 16,
-    borderRadius: 14,
-    shadowColor: BLUE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 3,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: BLUE, paddingVertical: 15, borderRadius: 12,
   },
-  updateBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: WHITE,
-  },
+  updateBtnText: { fontSize: 15, fontWeight: '700', color: WHITE },
 });
 
+// ─────────────────────────────────────────────────────────
 // Bottom Tab Bar
+// ─────────────────────────────────────────────────────────
 function BottomTabBar({ activeTab, onTabPress }) {
   const tabs = [
     { key: 'FreelancerDashboard', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
@@ -1523,33 +1068,20 @@ function BottomTabBar({ activeTab, onTabPress }) {
           return (
             <TouchableOpacity
               key={tab.key}
-              style={[
-                tabStyles.tabItem,
-                isMyJobs && tabStyles.tabItemCenter,
-              ]}
+              style={[tabStyles.tabItem, isMyJobs && tabStyles.tabItemCenter]}
               onPress={() => onTabPress(tab.key)}
               activeOpacity={0.7}
             >
               {isMyJobs ? (
                 <View style={[tabStyles.centerButton, isActive && tabStyles.centerButtonActive]}>
-                  <Ionicons
-                    name={isActive ? tab.activeIcon : tab.icon}
-                    size={26}
-                    color={isActive ? WHITE : BLUE}
-                  />
+                  <Ionicons name={isActive ? tab.activeIcon : tab.icon} size={23} color={isActive ? WHITE : NAVY} />
                 </View>
               ) : (
                 <>
                   <View style={tabStyles.tabIconWrap}>
-                    <Ionicons
-                      name={isActive ? tab.activeIcon : tab.icon}
-                      size={22}
-                      color={isActive ? BLUE : TEXT_LIGHT}
-                    />
+                    <Ionicons name={isActive ? tab.activeIcon : tab.icon} size={21} color={isActive ? BLUE : TEXT_FAINT} />
                   </View>
-                  <Text style={[tabStyles.tabLabel, isActive && tabStyles.tabLabelActive]}>
-                    {tab.label}
-                  </Text>
+                  <Text style={[tabStyles.tabLabel, isActive && tabStyles.tabLabelActive]}>{tab.label}</Text>
                   {isActive && <View style={tabStyles.tabIndicator} />}
                 </>
               )}
@@ -1562,75 +1094,29 @@ function BottomTabBar({ activeTab, onTabPress }) {
 }
 
 const tabStyles = StyleSheet.create({
-  tabSafe: {
-    backgroundColor: CARD,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
+  tabSafe: { backgroundColor: CARD, borderTopWidth: 1, borderTopColor: BORDER },
   tabBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingTop: 8,
-    paddingBottom: 12,
-    paddingHorizontal: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
+    paddingTop: 8, paddingBottom: 12, paddingHorizontal: 8,
   },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 6,
-    position: 'relative',
-  },
-  tabItemCenter: {
-    flex: 0,
-    marginHorizontal: 8,
-    marginTop: -16,
-  },
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 6, position: 'relative' },
+  tabItemCenter: { flex: 0, marginHorizontal: 8, marginTop: -14 },
   centerButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: WHITE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: BLUE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 2.5,
-    borderColor: WHITE,
+    width: 48, height: 48, borderRadius: 13, backgroundColor: WHITE,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: GOLD_LINE,
+    shadowColor: NAVY, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 3,
   },
-  centerButtonActive: {
-    backgroundColor: BLUE,
-    transform: [{ scale: 1.02 }],
-  },
-  tabIconWrap: {
-    position: 'relative',
-    marginBottom: 4,
-  },
-  tabLabel: {
-    fontSize: 10,
-    color: TEXT_LIGHT,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  tabLabelActive: {
-    color: BLUE,
-    fontWeight: '700',
-  },
-  tabIndicator: {
-    position: 'absolute',
-    bottom: -8,
-    width: 20,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: BLUE,
-  },
+  centerButtonActive: { backgroundColor: BLUE, borderColor: BLUE },
+  tabIconWrap: { position: 'relative', marginBottom: 4 },
+  tabLabel: { fontSize: 10, color: TEXT_FAINT, fontWeight: '500', marginTop: 2 },
+  tabLabelActive: { color: BLUE, fontWeight: '700' },
+  tabIndicator: { position: 'absolute', bottom: -8, width: 20, height: 3, borderRadius: 1.5, backgroundColor: GOLD },
 });
 
+// ─────────────────────────────────────────────────────────
 // MAIN SCREEN
+// ─────────────────────────────────────────────────────────
 export default function JobManagement({ navigation, route, onNavigate: propNavigate }) {
   const dispatch = useDispatch();
 
@@ -1647,16 +1133,9 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
   const [statusFilter, setStatusFilter] = useState('all');
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const [completedContract, setCompletedContract] = useState(null);
   const [selectedContractForUpdate, setSelectedContractForUpdate] = useState(null);
   const [selectedContractForDetail, setSelectedContractForDetail] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Contracts whose "just completed" celebration has already been shown
-  // during this session, so the modal only ever fires ONCE per contract per
-  // visit to this screen (kept in memory only — no external storage dependency).
-  const [celebratedContracts, setCelebratedContracts] = useState(new Set());
 
   const stats = useMemo(() => {
     const total = contracts?.length || 0;
@@ -1669,23 +1148,19 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
     return { total, active, completed, totalBudget, avgProgress };
   }, [contracts]);
 
-  // Navigation handler
   const handleNavigate = (screen, params) => {
     if (propNavigate && typeof propNavigate === 'function') {
       propNavigate(screen, params);
       return;
     }
-
     if (navigation && navigation.navigate && typeof navigation.navigate === 'function') {
       navigation.navigate(screen, params);
       return;
     }
-
     if (route?.params?.onNavigate && typeof route.params.onNavigate === 'function') {
       route.params.onNavigate(screen, params);
       return;
     }
-
     console.warn('Navigation not available for:', screen);
     Alert.alert('Navigation Error', 'Unable to navigate to ' + screen);
   };
@@ -1701,9 +1176,7 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
     }
   }, [dispatch]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
     if (createSuccess || statusUpdateSuccess || deliveryUpdateSuccess) {
@@ -1712,24 +1185,6 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
       dispatch(clearContractSuccess());
     }
   }, [createSuccess, statusUpdateSuccess, deliveryUpdateSuccess, dispatch, fetchData]);
-
-  // Check for newly completed contracts and mark them as celebrated so the
-  // modal doesn't fire again for the same contract on subsequent refreshes.
-  useEffect(() => {
-    if (contracts && contracts.length > 0) {
-      const justCompleted = contracts.find(c =>
-        c.status === 'completed' &&
-        c.progress === 100 &&
-        !celebratedContracts.has(c._id)
-      );
-
-      if (justCompleted) {
-        setCompletedContract(justCompleted);
-        setShowCelebration(true);
-        setCelebratedContracts(prev => new Set(prev).add(justCompleted._id));
-      }
-    }
-  }, [contracts, celebratedContracts]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -1747,11 +1202,7 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
     setShowDetailModal(true);
     try {
       await dispatch(getContractById(contract._id)).unwrap();
-      await dispatch(getContractUpdates({
-        contractId: contract._id,
-        page: 1,
-        limit: 50,
-      })).unwrap();
+      await dispatch(getContractUpdates({ contractId: contract._id, page: 1, limit: 50 })).unwrap();
     } catch (error) {
       console.error('Error fetching contract details:', error);
       Alert.alert('Error', 'Failed to load contract details');
@@ -1769,13 +1220,8 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
     setIsSubmitting(true);
     try {
       let jobId = selectedContractForUpdate.job_id;
-
-      if (jobId && typeof jobId === 'object' && jobId._id) {
-        jobId = jobId._id;
-      }
-      if (!jobId && selectedContractForUpdate.job) {
-        jobId = selectedContractForUpdate.job;
-      }
+      if (jobId && typeof jobId === 'object' && jobId._id) jobId = jobId._id;
+      if (!jobId && selectedContractForUpdate.job) jobId = selectedContractForUpdate.job;
 
       await dispatch(updateContractProgress({
         contractId: selectedContractForUpdate._id,
@@ -1810,9 +1256,7 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
   const handleDeliveryStatusChange = async (updateId, status) => {
     Alert.alert(
       status === 'approved' ? 'Approve Update' : 'Request Changes',
-      status === 'approved'
-        ? 'Approve this update and mark it as complete?'
-        : 'Request changes to this update?',
+      status === 'approved' ? 'Approve this update and mark it as complete?' : 'Request changes to this update?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -1826,10 +1270,7 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
               })).unwrap();
 
               if (status === 'approved') {
-                await dispatch(updateProjectUpdateStatus({
-                  updateId,
-                  status: 'completed',
-                })).unwrap();
+                await dispatch(updateProjectUpdateStatus({ updateId, status: 'completed' })).unwrap();
               }
 
               Alert.alert('Success', status === 'approved' ? 'Update approved!' : 'Changes requested.');
@@ -1845,7 +1286,6 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
 
   const handleTabBarPress = (key) => {
     const returnState = { activeTab: 'MyJobs' };
-
     if (key === 'FreelancerDashboard') {
       handleNavigate('FreelancerDashboard', { returnState });
     } else if (key === 'Messages') {
@@ -1875,11 +1315,6 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (showCelebration) {
-        setShowCelebration(false);
-        setCompletedContract(null);
-        return true;
-      }
       if (showProgressModal) {
         setShowProgressModal(false);
         setSelectedContractForUpdate(null);
@@ -1890,13 +1325,11 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
         setSelectedContractForDetail(null);
         return true;
       }
-
       handleBack();
       return true;
     });
-
     return () => backHandler.remove();
-  }, [showCelebration, showProgressModal, showDetailModal]);
+  }, [showProgressModal, showDetailModal]);
 
   const statusTabs = [
     { key: 'all', label: 'All', count: stats.total },
@@ -1911,19 +1344,17 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
         <View style={styles.root}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <Text style={styles.headerTitle}>My <Text style={styles.blue}>Jobs</Text></Text>
+              <Text style={styles.headerTitle}>My <Text style={styles.gold}>Jobs</Text></Text>
               <EarningsBadge amount={stats.totalBudget} />
             </View>
             <TouchableOpacity
               style={styles.iconBtn}
-              onPress={() => {
-                Alert.alert('Coming Soon', 'Analytics will be available in the next update.');
-              }}
+              onPress={() => Alert.alert('Coming Soon', 'Analytics will be available in the next update.')}
               activeOpacity={0.75}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <View style={styles.iconWrap}>
-                <Ionicons name="analytics-outline" size={18} color={WHITE} />
+                <Ionicons name="stats-chart-outline" size={17} color={WHITE} />
               </View>
             </TouchableOpacity>
           </View>
@@ -1944,53 +1375,42 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
       <View style={styles.root}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>My <Text style={styles.blue}>Jobs</Text></Text>
+            <Text style={styles.headerTitle}>My <Text style={styles.gold}>Jobs</Text></Text>
             <EarningsBadge amount={stats.totalBudget} />
           </View>
           <TouchableOpacity
             style={styles.iconBtn}
-            onPress={() => {
-              Alert.alert('Coming Soon', 'Analytics will be available in the next update.');
-            }}
+            onPress={() => Alert.alert('Coming Soon', 'Analytics will be available in the next update.')}
             activeOpacity={0.75}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <View style={styles.iconWrap}>
-              <Ionicons name="analytics-outline" size={18} color={WHITE} />
+              <Ionicons name="stats-chart-outline" size={17} color={WHITE} />
             </View>
           </TouchableOpacity>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterTabs}
-        >
+        <OverviewStrip
+          total={stats.total}
+          active={stats.active}
+          completed={stats.completed}
+          avgProgress={stats.avgProgress}
+        />
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabs}>
           {statusTabs.map(tab => (
             <TouchableOpacity
               key={tab.key}
-              style={[
-                styles.filterTab,
-                statusFilter === tab.key && styles.filterTabActive,
-              ]}
+              style={[styles.filterTab, statusFilter === tab.key && styles.filterTabActive]}
               onPress={() => setStatusFilter(tab.key)}
               activeOpacity={0.8}
             >
-              <Text style={[
-                styles.filterTabText,
-                statusFilter === tab.key && styles.filterTabTextActive,
-              ]}>
+              <Text style={[styles.filterTabText, statusFilter === tab.key && styles.filterTabTextActive]}>
                 {tab.label}
               </Text>
               {tab.count > 0 && (
-                <View style={[
-                  styles.filterBadge,
-                  statusFilter === tab.key && styles.filterBadgeActive,
-                ]}>
-                  <Text style={[
-                    styles.filterBadgeText,
-                    statusFilter === tab.key && styles.filterBadgeTextActive,
-                  ]}>
+                <View style={[styles.filterBadge, statusFilter === tab.key && styles.filterBadgeActive]}>
+                  <Text style={[styles.filterBadgeText, statusFilter === tab.key && styles.filterBadgeTextActive]}>
                     {tab.count}
                   </Text>
                 </View>
@@ -2002,18 +1422,12 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={BLUE}
-            />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />}
         >
           {filteredContracts.length === 0 ? (
             <View style={styles.empty}>
               <View style={styles.emptyIconBox}>
-                <Ionicons name="briefcase-outline" size={36} color={TEXT_LIGHT} />
+                <Ionicons name="briefcase-outline" size={32} color={TEXT_FAINT} />
               </View>
               <Text style={styles.emptyTitle}>
                 {statusFilter === 'all' ? 'No contracts yet' : `No ${statusFilter} contracts`}
@@ -2043,10 +1457,7 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
       <ProgressUpdateModal
         visible={showProgressModal}
         contract={selectedContractForUpdate}
-        onClose={() => {
-          setShowProgressModal(false);
-          setSelectedContractForUpdate(null);
-        }}
+        onClose={() => { setShowProgressModal(false); setSelectedContractForUpdate(null); }}
         onSubmit={handleSubmitUpdate}
         isLoading={isSubmitting}
       />
@@ -2054,10 +1465,7 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
       <ContractDetailModal
         contract={selectedContractForDetail}
         visible={showDetailModal}
-        onClose={() => {
-          setShowDetailModal(false);
-          setSelectedContractForDetail(null);
-        }}
+        onClose={() => { setShowDetailModal(false); setSelectedContractForDetail(null); }}
         updates={updates || []}
         onUpdateProgress={handleUpdateProgress}
         onStatusChange={handleDeliveryStatusChange}
@@ -2069,23 +1477,13 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
         }}
         isLoading={updatesLoading}
       />
-
-      {showCelebration && completedContract && (
-        <CompletionCelebration
-          contract={completedContract}
-          onClose={() => {
-            setShowCelebration(false);
-            setCompletedContract(null);
-          }}
-        />
-      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: NAVY },
-  root: { flex: 1, backgroundColor: BG },
+  root: { flex: 1, backgroundColor: OFFWHITE },
 
   header: {
     flexDirection: 'row',
@@ -2095,141 +1493,41 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: NAVY,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  iconBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1, minWidth: 0 },
+  iconBtn: { alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   iconWrap: {
-    width: 36,
-    height: 36,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36, height: 36, backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: WHITE,
-    letterSpacing: 0.2,
-  },
-  blue: { color: GOLD_LT, fontWeight: '700' },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: WHITE, letterSpacing: 0.2 },
+  gold: { color: GOLD, fontWeight: '800' },
 
-  filterTabs: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 10,
-  },
+  filterTabs: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 10 },
   filterTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: BORDER,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: CARD, borderWidth: 1, borderColor: BORDER,
   },
-  filterTabActive: {
-    backgroundColor: BLUE,
-    borderColor: BLUE,
-    shadowColor: BLUE,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  filterTabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: TEXT_MUTED,
-  },
-  filterTabTextActive: {
-    color: WHITE,
-  },
-  filterBadge: {
-    backgroundColor: BORDER,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    minWidth: 18,
-    alignItems: 'center',
-  },
-  filterBadgeActive: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  filterBadgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: TEXT_MUTED,
-  },
-  filterBadgeTextActive: {
-    color: WHITE,
-  },
+  filterTabActive: { backgroundColor: NAVY, borderColor: NAVY },
+  filterTabText: { fontSize: 12, fontWeight: '700', color: TEXT_MUTED },
+  filterTabTextActive: { color: WHITE },
+  filterBadge: { backgroundColor: BORDER, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, minWidth: 18, alignItems: 'center' },
+  filterBadgeActive: { backgroundColor: GOLD },
+  filterBadgeText: { fontSize: 9, fontWeight: '700', color: TEXT_MUTED },
+  filterBadgeTextActive: { color: NAVY },
 
-  list: {
-    padding: 16,
-    paddingTop: 4,
-    paddingBottom: 80,
-  },
+  list: { padding: 16, paddingTop: 4, paddingBottom: 80 },
 
-  centerLoading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: BG,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 13,
-    color: TEXT_MUTED,
-  },
+  centerLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: OFFWHITE },
+  loadingText: { marginTop: 12, fontSize: 13, color: TEXT_MUTED },
 
-  empty: {
-    alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 24,
-  },
+  empty: { alignItems: 'center', paddingVertical: 80, paddingHorizontal: 24 },
   emptyIconBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: CARD,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    width: 72, height: 72, borderRadius: 16, backgroundColor: CARD,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+    borderWidth: 1, borderColor: BORDER,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptyDesc: {
-    fontSize: 13,
-    color: TEXT_LIGHT,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  emptyTitle: { fontSize: 16.5, fontWeight: '800', color: TEXT_MAIN, marginBottom: 8, textAlign: 'center' },
+  emptyDesc: { fontSize: 13, color: TEXT_FAINT, textAlign: 'center', lineHeight: 20 },
 });

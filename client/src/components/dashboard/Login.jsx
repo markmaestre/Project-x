@@ -12,6 +12,7 @@ import {
   ScrollView,
   ActivityIndicator,
   BackHandler,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -221,8 +222,12 @@ export default function Login({ onNavigate }) {
             {/* ── Header ──────────────────────────────────────────────── */}
             <View style={styles.header}>
               <View style={styles.logoBox}>
+                <Image 
+                  source={require('../../../assets/taskra.png')} 
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
                 <View style={styles.logoGoldBar} />
-                <Text style={styles.logoLetter}>T</Text>
               </View>
               <Text style={styles.logoWordmark}>TASKRA</Text>
               <Text style={styles.title}>Welcome Back</Text>
@@ -407,21 +412,32 @@ const styles = StyleSheet.create({
 
   header: { alignItems: 'center', marginBottom: 36 },
   logoBox: {
-    width: 76, height: 76,
-    backgroundColor: BLUE,
-    borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 14,
+    width: 120, // Increased from 76
+    height: 120, // Increased from 76
+    backgroundColor: WHITE, // Changed from BLUE to WHITE
+    borderRadius: 30, // Increased from 22
+    alignItems: 'center', 
+    justifyContent: 'center',
+    marginBottom: 18,
     overflow: 'hidden',
     shadowColor: BLUE_DARK,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 14, elevation: 8,
-    borderWidth: 1, borderColor: BLUE_LIGHT,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, 
+    shadowRadius: 20, 
+    elevation: 10,
+    borderWidth: 2, 
+    borderColor: BLUE_SOFT,
+    position: 'relative',
+  },
+  logoImage: {
+    width: 90, // Increased from 50
+    height: 90, // Increased from 50
+    borderRadius: 16,
   },
   logoGoldBar: {
     position: 'absolute',
     top: 0, left: 0, right: 0,
-    height: 3,
+    height: 4, // Increased from 3
     backgroundColor: GOLD_LIGHT,
   },
   logoLetter: {
@@ -431,10 +447,12 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
   },
   logoWordmark: {
-    fontSize: 11, fontWeight: '800',
-    letterSpacing: 4,
-    color: TEXT_LIGHT,
+    fontSize: 12, 
+    fontWeight: '800',
+    letterSpacing: 5,
+    color: BLUE, // Changed from TEXT_LIGHT to BLUE
     marginBottom: 16,
+    marginTop: 4,
   },
   title: {
     fontSize: 26, fontWeight: '700',

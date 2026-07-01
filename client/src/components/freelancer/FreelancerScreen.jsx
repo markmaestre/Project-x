@@ -544,23 +544,16 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
   const [editingExperienceIndex, setEditingExperienceIndex] = useState(null);
   const [isCheckingCV, setIsCheckingCV] = useState(false);
 
-  // Updated useEffect with proper URI handling
   useEffect(() => {
     if (visible && job) {
       const checkExistingCV = async () => {
         setIsCheckingCV(true);
         try {
-          // Use FileSystem.documentDirectory which returns a proper URI
           const cvDirPath = FileSystem.documentDirectory + 'cvs/';
-          
-          // Create directory with proper URI
           const cvDir = new Directory(cvDirPath);
-          
-          // Check if directory exists
           const dirExists = await cvDir.exists();
           
           if (dirExists) {
-            // List files in directory
             const files = await cvDir.list();
             const cvFiles = files.filter(file => 
               file.name.endsWith('.pdf') || 
@@ -571,8 +564,6 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
             if (cvFiles.length > 0) {
               const latestCV = cvFiles[0];
               const filePath = cvDirPath + latestCV.name;
-              
-              // Create file with proper URI
               const file = new File(filePath);
               const fileInfo = await file.getInfo();
               
@@ -602,7 +593,6 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
       
       checkExistingCV();
       
-      // Set proposed rate from job budget
       if (job.budget?.min) {
         setProposedRate(job.budget.min.toString());
       } else if (job.budget_amount) {
@@ -738,7 +728,6 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
       formData.append('proposed_rate', parseFloat(proposedRate).toString());
     }
     
-    // Handle resume upload
     if (useExistingCV && existingCVInfo) {
       const fileExt = existingCVInfo.name.split('.').pop().toLowerCase();
       let mimeType = 'application/pdf';
@@ -760,7 +749,6 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
       });
     }
     
-    // Add education data
     const educationData = {
       level: educationLevel,
       field: fieldOfStudy,
@@ -769,7 +757,6 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
     };
     formData.append('education', JSON.stringify(educationData));
     
-    // Add experiences data
     const experiencesData = experiences.map(exp => ({
       job_title: exp.jobTitle,
       company: exp.companyName,
@@ -1536,14 +1523,12 @@ export default function FreelancerScreen({ onNavigate, route }) {
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
   const fullName = `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
 
-  // Restore active tab when coming back from other screens
   useEffect(() => {
     if (route?.params?.returnState?.activeTab) {
       setActiveTab(route.params.returnState.activeTab);
     }
   }, [route?.params]);
 
-  // Fetch jobs
   const fetchJobs = useCallback(async () => {
     try {
       await dispatch(getFreelancerJobs({ limit: 20 })).unwrap();
@@ -1552,7 +1537,6 @@ export default function FreelancerScreen({ onNavigate, route }) {
     }
   }, [dispatch]);
 
-  // Fetch applications
   const fetchApplications = useCallback(async () => {
     try {
       const result = await dispatch(getFreelancerApplications({})).unwrap();
@@ -1564,13 +1548,11 @@ export default function FreelancerScreen({ onNavigate, route }) {
     }
   }, [dispatch]);
 
-  // Initial fetch
   useEffect(() => {
     fetchJobs();
     fetchApplications();
   }, [fetchJobs, fetchApplications]);
 
-  // Handle apply success
   useEffect(() => {
     if (applySuccess) {
       fetchApplications();
@@ -1682,7 +1664,6 @@ export default function FreelancerScreen({ onNavigate, route }) {
 
   const isJobSaved = (jobId) => savedJobs.includes(jobId);
 
-  // Filter jobs based on search query
   const filteredJobs = jobs?.filter(job => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase().trim();
@@ -1852,10 +1833,13 @@ export default function FreelancerScreen({ onNavigate, route }) {
 
   const ListHeader = (
     <>
-      <Text style={styles.welcomeBack}>Welcome back</Text>
-      <View style={styles.welcomeRow}>
+      <View style={styles.welcomeHeader}>
         <View style={styles.userInfoContainer}>
-          <Text style={styles.welcomeName}>{fullName || 'Freelancer'}</Text>
+          <Text style={styles.greetingText}>Welcome back</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.welcomeName}>{fullName || 'Freelancer'}</Text>
+           
+          </View>
           <Text style={styles.userEmail}>{user?.email || ''}</Text>
         </View>
         <TouchableOpacity onPress={handleLogout} style={styles.avatarBtn}>
@@ -1883,6 +1867,18 @@ export default function FreelancerScreen({ onNavigate, route }) {
               <Ionicons name="close-circle" size={18} color={TEXT_LIGHT} />
             </TouchableOpacity>
           )}
+        </View>
+      </View>
+
+      <View style={styles.statsRow}>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{jobs?.length || 0}</Text>
+          <Text style={styles.statLabel}>Available Jobs</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{appliedJobIds.length}</Text>
+          <Text style={styles.statLabel}>Applications</Text>
         </View>
       </View>
 
@@ -1926,14 +1922,18 @@ export default function FreelancerScreen({ onNavigate, route }) {
         <View style={styles.topbar}>
           <View style={styles.topbarLeft}>
             <View style={styles.logoBox}>
-              <Text style={styles.logoLetter}>T</Text>
+              <Image 
+                source={require('../../../assets/taskra.png')} 
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
             <View>
               <Text style={styles.topbarBrand}>Taskra</Text>
               <Text style={styles.topbarTagline}>Freelancer Hub</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.notifBtn} onPress={() => onNavigate('Notifications')}>
+          <TouchableOpacity style={styles.notifBtn} onPress={() => onNavigate('Notification')}>
             <Ionicons name="notifications-outline" size={22} color={WHITE} />
           </TouchableOpacity>
         </View>
@@ -2017,69 +2017,100 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingVertical: 12, backgroundColor: NAVY,
   },
-  topbarLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoBox: { width: 34, height: 34, backgroundColor: GOLD, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  logoLetter: { fontSize: 18, fontWeight: '800', color: NAVY },
+  topbarLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  logoBox: {
+    width: 34,
+    height: 34,
+    backgroundColor: WHITE,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+  },
   topbarBrand: { fontSize: 16, fontWeight: '800', color: WHITE, letterSpacing: -0.2 },
   topbarTagline: { fontSize: 9, fontWeight: '500', color: GOLD_LT, letterSpacing: 1.44, textTransform: 'uppercase', marginTop: 1 },
   notifBtn: { position: 'relative', padding: 4 },
 
-  welcomeBack: { 
-    fontSize: 22, 
-    fontWeight: '700', 
-    color: TEXT_MAIN, 
+  welcomeHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    marginBottom: 2 
-  },
-  
-  welcomeRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingTop: 16,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
   },
-  
   userInfoContainer: {
     flex: 1,
   },
-  
-  welcomeName: { 
-    fontSize: 22, 
-    fontWeight: '700', 
-    color: TEXT_MAIN 
+  greetingText: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    fontWeight: '500',
+    marginBottom: 2,
   },
-  
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 2,
+  },
+  welcomeName: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: GREEN_SOFT,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: GREEN_MID,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: GREEN,
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    color: GREEN,
+    fontWeight: '600',
+  },
   userEmail: {
     fontSize: 13,
     color: TEXT_MUTED,
-    marginTop: 2,
   },
-  
-  avatarBtn: { 
-    width: 42, 
-    height: 42, 
-    borderRadius: 21, 
-    backgroundColor: GOLD, 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    borderWidth: 2, 
-    borderColor: GOLD_LT 
+  avatarBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: GOLD_LT,
   },
-  
-  avatarImg: { 
-    width: 42, 
-    height: 42, 
-    borderRadius: 21 
+  avatarImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
-  
-  avatarInitials: { 
-    fontSize: 14, 
-    fontWeight: '700', 
-    color: NAVY 
+  avatarInitials: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: NAVY,
   },
 
   searchContainer: {
@@ -2109,10 +2140,42 @@ const styles = StyleSheet.create({
   clearSearchBtn: {
     padding: 4,
   },
-  searchResultText: {
-    fontSize: 13,
-    fontWeight: '400',
+
+  statsRow: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: WHITE,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  statLabel: {
+    fontSize: 11,
     color: TEXT_MUTED,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: BORDER,
   },
 
   sectionHeader: { 
@@ -2131,6 +2194,11 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     fontWeight: '500', 
     color: TEXT_MUTED 
+  },
+  searchResultText: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: TEXT_MUTED,
   },
 
   jobsListContainer: { 

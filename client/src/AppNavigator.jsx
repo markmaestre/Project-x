@@ -32,6 +32,7 @@ import Messages from './components/freelancer/Messages';
 import MyApplications from './components/freelancer/MyApplications';
 import EditProfile from './components/freelancer/EditProfile';
 import RatingFreelancer from './components/freelancer/RatingFreelancer';
+import Notification from './components/freelancer/Notifications';
 
 export default function AppNavigator() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
@@ -158,7 +159,7 @@ export default function AppNavigator() {
     case 'Contract':
       return <Contract onNavigate={handleNavigate} />;
     case 'Notif':
-      return <Settings onNavigate={handleNavigate} />;
+      return <Notif onNavigate={handleNavigate} />;
 
     // ── Freelancer Screens ──────────────────────────────────
     case 'Freelancer':
@@ -178,6 +179,8 @@ export default function AppNavigator() {
       return <EditProfile onNavigate={handleNavigate} onBack={() => handleNavigate('FreelancerDashboard')} />;
     case 'RatingFreelancer':
       return <RatingFreelancer onNavigate={handleNavigate} />;
+    case 'Notification':
+      return <Notification onNavigate={handleNavigate} />;
 
     // ── Messages ──────────────────────────────────────────────
     case 'Message':

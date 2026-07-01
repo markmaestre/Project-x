@@ -134,6 +134,115 @@ const has = (value) => {
   return Boolean(value);
 };
 
+// ── Star Rating Component ──────────────────────────────────────────────────
+const StarRating = ({ rating, size = 16, showLabel = false }) => {
+  const fullStars = Math.floor(rating);
+  const hasHalfStar = rating % 1 >= 0.5;
+  const emptyStars = 5 - Math.ceil(rating);
+
+  return (
+    <View style={sr.container}>
+      {[...Array(fullStars)].map((_, i) => (
+        <Ionicons key={`full-${i}`} name="star" size={size} color={GOLD} />
+      ))}
+      {hasHalfStar && (
+        <Ionicons name="star-half" size={size} color={GOLD} />
+      )}
+      {[...Array(emptyStars)].map((_, i) => (
+        <Ionicons key={`empty-${i}`} name="star-outline" size={size} color={GOLD} />
+      ))}
+      {showLabel && (
+        <Text style={sr.ratingText}>{rating.toFixed(1)}</Text>
+      )}
+    </View>
+  );
+};
+
+const sr = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  ratingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    marginLeft: 4,
+  },
+});
+
+// ── Feedback Display Component ──────────────────────────────────────────────
+const FeedbackDisplay = ({ feedback }) => {
+  if (!feedback) return null;
+
+  return (
+    <View style={fd.container}>
+      <View style={fd.header}>
+        <Text style={fd.label}>Rating & Feedback</Text>
+        {feedback.rating && <StarRating rating={feedback.rating} size={14} showLabel />}
+      </View>
+      {feedback.comment ? (
+        <View style={fd.commentBox}>
+          <Ionicons name="chatbubble" size={14} color={BLUE} />
+          <Text style={fd.commentText}>"{feedback.comment}"</Text>
+        </View>
+      ) : null}
+      {feedback.date ? (
+        <Text style={fd.dateText}>Reviewed {formatRelativeTime(feedback.date)}</Text>
+      ) : null}
+    </View>
+  );
+};
+
+const fd = StyleSheet.create({
+  container: {
+    backgroundColor: GOLD + '08',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: GOLD + '30',
+    marginTop: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: TEXT_MUTED,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  commentBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: WHITE,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: BORDER,
+    marginTop: 6,
+  },
+  commentText: {
+    fontSize: 13,
+    color: TEXT_MAIN,
+    flex: 1,
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  dateText: {
+    fontSize: 10,
+    color: TEXT_LIGHT,
+    marginTop: 6,
+    textAlign: 'right',
+  },
+});
+
 // ── Update Detail Modal ──────────────────────────────────────────────────────
 const UpdateDetailModal = ({ visible, update, onClose }) => {
   if (!update) return null;
@@ -230,6 +339,11 @@ const UpdateDetailModal = ({ visible, update, onClose }) => {
                   ))}
                 </View>
               ) : null}
+
+              {/* Show feedback if completed */}
+              {update.status === 'completed' && update.feedback && (
+                <FeedbackDisplay feedback={update.feedback} />
+              )}
             </View>
           </ScrollView>
         </View>
@@ -276,6 +390,10 @@ const ProfileModal = ({ visible, application, onClose, onMessage, onViewUpdate }
   const fullName = (firstName + ' ' + lastName).trim() || 'Freelancer';
   const initials = (firstName.charAt(0) || '') + (lastName.charAt(0) || '');
 
+  // Check if project is completed and has feedback
+  const isCompleted = application.status === 'completed';
+  const hasFeedback = application.feedback && application.feedback.rating;
+
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
       <View style={pm.overlay}>
@@ -308,6 +426,19 @@ const ProfileModal = ({ visible, application, onClose, onMessage, onViewUpdate }
                 </View>
               ) : null}
 
+              {/* Show completion status with rating */}
+              {isCompleted && (
+                <View style={pm.completedBadge}>
+                  <Ionicons name="checkmark-circle" size={16} color={GREEN} />
+                  <Text style={pm.completedText}>Project Completed</Text>
+                  {hasFeedback && (
+                    <View style={pm.ratingInline}>
+                      <StarRating rating={application.feedback.rating} size={14} />
+                    </View>
+                  )}
+                </View>
+              )}
+
               <View style={pm.appliedInfo}>
                 <View style={pm.appliedRow}>
                   <Ionicons name="briefcase-outline" size={14} color={BLUE} />
@@ -318,7 +449,8 @@ const ProfileModal = ({ visible, application, onClose, onMessage, onViewUpdate }
                 <View style={pm.appliedRow}>
                   <Ionicons name="calendar-outline" size={14} color={TEXT_LIGHT} />
                   <Text style={pm.appliedTimeText}>
-                    Hired {formatRelativeTime(application.updatedAt || application.applied_at)}
+                    {isCompleted ? 'Completed ' : 'Hired '} 
+                    {formatRelativeTime(application.updatedAt || application.applied_at)}
                   </Text>
                 </View>
                 {has(application.contract?.agreed_budget?.amount) ? (
@@ -331,6 +463,13 @@ const ProfileModal = ({ visible, application, onClose, onMessage, onViewUpdate }
                   </View>
                 ) : null}
               </View>
+
+              {/* Show feedback in hero if completed */}
+              {isCompleted && hasFeedback && application.feedback.comment && (
+                <View style={pm.feedbackHero}>
+                  <Text style={pm.feedbackHeroText}>"{application.feedback.comment}"</Text>
+                </View>
+              )}
             </View>
 
             {/* Job Description */}
@@ -394,17 +533,19 @@ const ProfileModal = ({ visible, application, onClose, onMessage, onViewUpdate }
 
             {/* Buttons */}
             <View style={pm.buttonRow}>
-              <TouchableOpacity
-                style={[pm.msgBtn, { flex: 1 }]}
-                onPress={() => onMessage(freelancer._id)}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="chatbubble-outline" size={16} color={WHITE} />
-                <Text style={pm.msgBtnText}>Message</Text>
-              </TouchableOpacity>
+              {!isCompleted && (
+                <TouchableOpacity
+                  style={[pm.msgBtn, { flex: 1 }]}
+                  onPress={() => onMessage(freelancer._id)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="chatbubble-outline" size={16} color={WHITE} />
+                  <Text style={pm.msgBtnText}>Message</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
-                style={[pm.msgBtn, { flex: 1, backgroundColor: GOLD }]}
+                style={[pm.msgBtn, { flex: isCompleted ? 1 : 1, backgroundColor: GOLD }]}
                 onPress={() => onViewUpdate(application)}
                 activeOpacity={0.85}
               >
@@ -434,11 +575,16 @@ const pm = StyleSheet.create({
   username: { fontSize: 12, color: TEXT_MUTED, marginBottom: 8 },
   experienceBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BLUE + '10', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: 12 },
   experienceText: { fontSize: 11, color: BLUE, fontWeight: '600' },
+  completedBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: GREEN + '10', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12, marginBottom: 12 },
+  completedText: { fontSize: 12, color: GREEN, fontWeight: '700' },
+  ratingInline: { marginLeft: 4 },
   appliedInfo: { width: '100%', backgroundColor: BG_GRAY, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: BORDER, gap: 6 },
   appliedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   appliedText: { fontSize: 12, color: TEXT_MAIN, fontWeight: '600', flex: 1 },
   appliedTimeText: { fontSize: 11, color: TEXT_LIGHT },
   budgetText: { fontSize: 13, color: GOLD_DK, fontWeight: '700' },
+  feedbackHero: { width: '100%', backgroundColor: GOLD + '10', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: GOLD + '30', marginTop: 10 },
+  feedbackHeroText: { fontSize: 13, color: TEXT_MAIN, fontStyle: 'italic', textAlign: 'center', lineHeight: 18 },
   section: { marginBottom: 18 },
   sectionLabel: { fontSize: 10, fontWeight: '800', color: BLUE, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
   infoCard: { backgroundColor: BG_GRAY, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4, borderWidth: 1.5, borderColor: BORDER },
@@ -470,6 +616,25 @@ export default function HiredFreelancers({ onNavigate }) {
   const [contractUpdates, setContractUpdates] = useState({});
   const [activeBottomTab, setActiveBottomTab] = useState('Hiredtalents');
 
+  // ── Mock feedback data for completed projects ──────────────────────────
+  const mockFeedback = {
+    'completed_project_1': {
+      rating: 4.5,
+      comment: "Excellent work! The freelancer delivered high-quality results ahead of schedule. Would definitely hire again.",
+      date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    'completed_project_2': {
+      rating: 5.0,
+      comment: "Outstanding performance! Very professional and communicative throughout the project.",
+      date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    'completed_project_3': {
+      rating: 3.5,
+      comment: "Good work overall, but there were some minor delays. Still satisfied with the final output.",
+      date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  };
+
   // ── Handle bottom tab navigation ──────────────────────────────────────
   const handleTabPress = (key) => {
     setActiveBottomTab(key);
@@ -493,7 +658,7 @@ export default function HiredFreelancers({ onNavigate }) {
         status: 'active',
       })).unwrap();
 
-      const hired = (result.applications || []).map((app) => {
+      const hired = (result.applications || []).map((app, index) => {
         const contract = (contractResult?.contracts || []).find(
           (c) => c.application_id === app._id || c.application_id?._id === app._id
         );
@@ -503,12 +668,23 @@ export default function HiredFreelancers({ onNavigate }) {
           ? Math.floor((new Date() - new Date(hiredDate)) / (1000 * 60 * 60 * 24))
           : 0;
 
+        // Mock status - alternate between active and completed for demo
+        // In real app, this would come from the API
+        const mockStatus = index % 3 === 0 ? 'completed' : 'active';
+        const isMockCompleted = mockStatus === 'completed';
+        const mockFeedbackData = isMockCompleted 
+          ? mockFeedback[`completed_project_${(index % 3) + 1}`] 
+          : null;
+
         return {
           ...app,
           contract: contract || null,
           daysSinceHired,
-          status: contract?.status || 'active',
-          progress: contract?.progress || 0,
+          status: isMockCompleted ? 'completed' : contract?.status || 'active',
+          progress: isMockCompleted ? 100 : contract?.progress || 0,
+          // Mock feedback for completed projects
+          feedback: mockFeedbackData,
+          isMockCompleted,
         };
       });
 
@@ -521,9 +697,25 @@ export default function HiredFreelancers({ onNavigate }) {
               getContractUpdates({ contractId: hiredItem.contract._id, limit: 10 })
             ).unwrap();
 
+            let updates = updatesResult.projectUpdates || updatesResult.updates || [];
+            
+            // If completed, add mock feedback to the last update
+            if (hiredItem.isMockCompleted && hiredItem.feedback) {
+              updates = updates.map((u, idx) => {
+                if (idx === updates.length - 1) {
+                  return {
+                    ...u,
+                    status: 'completed',
+                    feedback: hiredItem.feedback,
+                  };
+                }
+                return u;
+              });
+            }
+
             setContractUpdates((prev) => ({
               ...prev,
-              [hiredItem.contract._id]: updatesResult.projectUpdates || updatesResult.updates || [],
+              [hiredItem.contract._id]: updates,
             }));
           } catch (error) {
             console.warn('Failed to fetch updates for contract:', hiredItem.contract._id);
@@ -583,7 +775,17 @@ export default function HiredFreelancers({ onNavigate }) {
     if (application.contract?._id) {
       const updatesList = contractUpdates[application.contract._id] || [];
       if (updatesList.length > 0) {
-        setSelectedUpdate(updatesList[0]);
+        // If completed, show the latest update with feedback
+        const latestUpdate = updatesList[0];
+        if (application.isMockCompleted && application.feedback) {
+          setSelectedUpdate({
+            ...latestUpdate,
+            status: 'completed',
+            feedback: application.feedback,
+          });
+        } else {
+          setSelectedUpdate(latestUpdate);
+        }
         setShowUpdateDetail(true);
       } else {
         Alert.alert('No Updates', 'No project updates have been posted yet.');
@@ -617,6 +819,8 @@ export default function HiredFreelancers({ onNavigate }) {
   // ── Render Update Item ──────────────────────────────────────────────────
   const renderUpdateItem = (update, index) => {
     const isLatest = index === 0;
+    const isCompleted = update.status === 'completed';
+    
     return (
       <TouchableOpacity
         key={update._id || index}
@@ -646,6 +850,14 @@ export default function HiredFreelancers({ onNavigate }) {
             <Text style={ui.updateTime}>{formatRelativeTime(update.created_at)}</Text>
             <Text style={ui.updateProgress}>Progress: {update.progress ?? 0}%</Text>
           </View>
+          {isCompleted && update.feedback && (
+            <View style={ui.feedbackPreview}>
+              <StarRating rating={update.feedback.rating} size={12} />
+              <Text style={ui.feedbackPreviewText} numberOfLines={1}>
+                {update.feedback.comment ? `"${update.feedback.comment}"` : ''}
+              </Text>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -660,11 +872,13 @@ export default function HiredFreelancers({ onNavigate }) {
     const initials = (firstName.charAt(0) || '') + (lastName.charAt(0) || '');
     const jobTitle = hired.job_id?.title || 'Project';
     const updatesList = hired.contract?._id ? contractUpdates[hired.contract._id] || [] : [];
+    const isCompleted = hired.status === 'completed';
+    const hasFeedback = hired.feedback && hired.feedback.rating;
 
     return (
       <TouchableOpacity
         key={hired._id}
-        style={hc.card}
+        style={[hc.card, isCompleted && hc.completedCard]}
         onPress={() => handleViewProfile(hired)}
         activeOpacity={0.85}
       >
@@ -683,9 +897,15 @@ export default function HiredFreelancers({ onNavigate }) {
             <Text style={hc.jobTitle} numberOfLines={1}>{jobTitle}</Text>
           </View>
 
-          <View style={hc.statusBadge}>
-            <Ionicons name="checkmark-circle" size={12} color={GREEN} />
-            <Text style={hc.statusText}>Hired</Text>
+          <View style={[hc.statusBadge, isCompleted && hc.completedStatusBadge]}>
+            <Ionicons 
+              name={isCompleted ? "checkmark-circle" : "checkmark-circle"} 
+              size={12} 
+              color={isCompleted ? GREEN : GREEN} 
+            />
+            <Text style={[hc.statusText, isCompleted && hc.completedStatusText]}>
+              {isCompleted ? 'Completed' : 'Hired'}
+            </Text>
           </View>
         </View>
 
@@ -693,7 +913,8 @@ export default function HiredFreelancers({ onNavigate }) {
           <View style={hc.detailItem}>
             <Ionicons name="calendar-outline" size={14} color={TEXT_LIGHT} />
             <Text style={hc.detailText}>
-              Hired {formatRelativeTime(hired.updatedAt || hired.applied_at)}
+              {isCompleted ? 'Completed ' : 'Hired '}
+              {formatRelativeTime(hired.updatedAt || hired.applied_at)}
             </Text>
           </View>
 
@@ -709,7 +930,7 @@ export default function HiredFreelancers({ onNavigate }) {
         </View>
 
         {/* Progress Bar */}
-        {hired.contract?.progress !== undefined ? (
+        {hired.contract?.progress !== undefined && !isCompleted ? (
           <View style={hc.progressContainer}>
             <View style={hc.progressHeader}>
               <Text style={hc.progressLabel}>Project Progress</Text>
@@ -727,10 +948,27 @@ export default function HiredFreelancers({ onNavigate }) {
               />
             </View>
           </View>
-        ) : null}
+        ) : isCompleted && (
+          <View style={hc.completedSection}>
+            <View style={hc.completedHeader}>
+              <Ionicons name="checkmark-done-circle" size={16} color={GREEN} />
+              <Text style={hc.completedLabel}>Project Completed</Text>
+            </View>
+            {hasFeedback && (
+              <View style={hc.feedbackCard}>
+                <StarRating rating={hired.feedback.rating} size={14} showLabel />
+                {hired.feedback.comment && (
+                  <Text style={hc.feedbackComment} numberOfLines={2}>
+                    "{hired.feedback.comment}"
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Latest Updates */}
-        {has(updatesList) ? (
+        {has(updatesList) && (
           <View style={hc.updatesSection}>
             <View style={hc.updatesHeader}>
               <Ionicons name="time-outline" size={14} color={TEXT_MUTED} />
@@ -745,7 +983,7 @@ export default function HiredFreelancers({ onNavigate }) {
               </TouchableOpacity>
             ) : null}
           </View>
-        ) : null}
+        )}
 
         <View style={hc.actionRow}>
           <TouchableOpacity
@@ -766,14 +1004,16 @@ export default function HiredFreelancers({ onNavigate }) {
             <Text style={[hc.actionText, { color: GOLD_DK }]}>Updates</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[hc.actionBtn, { backgroundColor: PURPLE + '12', borderColor: PURPLE + '30' }]}
-            onPress={() => handleMessageFreelancer(freelancer._id)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="chatbubble-outline" size={14} color={PURPLE} />
-            <Text style={[hc.actionText, { color: PURPLE }]}>Message</Text>
-          </TouchableOpacity>
+          {!isCompleted && (
+            <TouchableOpacity
+              style={[hc.actionBtn, { backgroundColor: PURPLE + '12', borderColor: PURPLE + '30' }]}
+              onPress={() => handleMessageFreelancer(freelancer._id)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="chatbubble-outline" size={14} color={PURPLE} />
+              <Text style={[hc.actionText, { color: PURPLE }]}>Message</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -783,8 +1023,8 @@ export default function HiredFreelancers({ onNavigate }) {
   const filterOptions = [
     { value: 'all', label: 'All', icon: 'apps-outline' },
     { value: 'active', label: 'Active', icon: 'pulse-outline' },
-    { value: 'pending', label: 'Pending', icon: 'hourglass-outline' },
     { value: 'completed', label: 'Completed', icon: 'checkmark-done-outline' },
+    { value: 'pending', label: 'Pending', icon: 'hourglass-outline' },
   ];
 
   // ── Loading State ──────────────────────────────────────────────────────────
@@ -1021,6 +1261,21 @@ const ui = StyleSheet.create({
     fontSize: 9,
     color: TEXT_LIGHT,
   },
+  feedbackPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  feedbackPreviewText: {
+    fontSize: 10,
+    color: TEXT_MUTED,
+    flex: 1,
+    fontStyle: 'italic',
+  },
 });
 
 const hc = StyleSheet.create({
@@ -1037,6 +1292,10 @@ const hc = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
+  completedCard: {
+    borderColor: GREEN + '40',
+    backgroundColor: GREEN + '02',
+  },
   topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   avatarImg: { width: 48, height: 48, borderRadius: 24 },
@@ -1046,7 +1305,9 @@ const hc = StyleSheet.create({
   role: { fontSize: 11, color: TEXT_MUTED, marginBottom: 2 },
   jobTitle: { fontSize: 12, color: BLUE, fontWeight: '600' },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: GREEN + '30', backgroundColor: GREEN + '0D', flexShrink: 0 },
+  completedStatusBadge: { borderColor: GREEN + '50', backgroundColor: GREEN + '15' },
   statusText: { fontSize: 10, fontWeight: '700', color: GREEN },
+  completedStatusText: { color: GREEN },
   detailsRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' },
   detailItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   detailText: { fontSize: 11, color: TEXT_LIGHT },
@@ -1057,6 +1318,11 @@ const hc = StyleSheet.create({
   progressValue: { fontSize: 10, fontWeight: '700', color: TEXT_MAIN },
   progressTrack: { height: 5, backgroundColor: BORDER, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
+  completedSection: { marginBottom: 12, backgroundColor: GREEN + '08', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: GREEN + '20' },
+  completedHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  completedLabel: { fontSize: 12, fontWeight: '700', color: GREEN },
+  feedbackCard: { gap: 4 },
+  feedbackComment: { fontSize: 12, color: TEXT_MUTED, fontStyle: 'italic', lineHeight: 16 },
   updatesSection: { marginTop: 8, marginBottom: 12 },
   updatesHeader: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6 },
   updatesLabel: { fontSize: 11, fontWeight: '600', color: TEXT_MUTED },
