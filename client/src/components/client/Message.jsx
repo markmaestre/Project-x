@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput,
-  FlatList, KeyboardAvoidingView, Platform,
+  FlatList, KeyboardAvoidingView, Platform, BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -164,6 +164,16 @@ function ChatDetailScreen({ conversation, onBack, userRole }) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState(CHAT_MESSAGES[conversation.id] || []);
 
+  // Handle hardware back button in chat detail
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      onBack();
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, [onBack]);
+
   const sendMessage = () => {
     if (message.trim()) {
       const newMessage = {
@@ -284,6 +294,24 @@ export default function MessagesScreen({ onNavigate, userRole = 'client' }) {
   const [selectedChat, setSelectedChat] = useState(null);
   const [activeBottomTab, setActiveBottomTab] = useState('Message');
 
+  // Handle hardware back button - goes back to where it came from
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (onNavigate) {
+        // Go back to the appropriate dashboard based on user role
+        if (userRole === 'freelancer') {
+          onNavigate('FreelancerDashboard');
+        } else {
+          onNavigate('ClientDashboard');
+        }
+        return true;
+      }
+      return false;
+    });
+
+    return () => backHandler.remove();
+  }, [onNavigate, userRole]);
+
   // Select mock data based on user role
   const getConversations = () => {
     if (userRole === 'freelancer') {
@@ -342,13 +370,6 @@ export default function MessagesScreen({ onNavigate, userRole = 'client' }) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.root}>
         <View style={styles.topbar}>
-          <TouchableOpacity 
-            style={styles.backBtn} 
-            onPress={() => onNavigate(userRole === 'freelancer' ? 'FreelancerDashboard' : 'ClientDashboard')} 
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={20} color={WHITE} />
-          </TouchableOpacity>
           <Text style={styles.topbarTitle}>
             Messages
           </Text>

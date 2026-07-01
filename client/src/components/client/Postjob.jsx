@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, TextInput, Alert, ActivityIndicator,
-  Switch, BackHandler,
+  Switch, BackHandler, Platform, Modal, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { createJob } from '../../Redux/slices/jobSlice';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const NAVY       = '#071A3E';
@@ -18,19 +19,19 @@ const BLUE_LT    = '#1E90FF';
 const GOLD       = '#C89520';
 const GOLD_LT    = '#E8B84B';
 const GOLD_DK    = '#8A6410';
-const SILVER     = '#8899B0';
-const SILVER2    = '#B8C8D8';
 const WHITE      = '#FFFFFF';
 const BG         = '#F0F4FA';
 const CARD       = '#FFFFFF';
 const TEXT_MAIN  = '#071A3E';
 const TEXT_MUTED = '#3A5070';
 const TEXT_LIGHT = '#7A90A8';
-const BORDER     = '#C8D8E8';
+const BORDER     = '#DCE6F2';
+const BORDER_SOFT= '#EAF0F8';
 const GREEN      = '#059669';
 const GREEN_SOFT = '#D1FAE5';
 const GREEN_MID  = '#86EFAC';
 const GREEN_DARK = '#059669';
+const RED        = '#EF4444';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -63,7 +64,6 @@ const URGENCY_LEVELS = [
   { label: 'Immediate', value: 'immediate', icon: 'alert-circle-outline', color: '#DC2626' },
 ];
 
-// Updated experience levels with lowercase values for API
 const EXPERIENCE_LEVELS = [
   { label: 'Entry',        value: 'entry',        icon: 'star-outline'     },
   { label: 'Intermediate', value: 'intermediate', icon: 'star-half-outline'},
@@ -79,19 +79,19 @@ const BUDGET_TYPES = [
 ];
 
 const PAYMENT_FREQUENCIES = [
-  { label: 'Hourly',    value: 'hourly'    },
-  { label: 'Daily',     value: 'daily'     },
-  { label: 'Weekly',    value: 'weekly'    },
-  { label: 'Bi-Weekly', value: 'bi-weekly' },
-  { label: 'Monthly',   value: 'monthly'   },
-  { label: 'One-Time',  value: 'one-time'  },
+  { label: 'Hourly',    value: 'hourly',    icon: 'time-outline'     },
+  { label: 'Daily',     value: 'daily',     icon: 'sunny-outline'    },
+  { label: 'Weekly',    value: 'weekly',    icon: 'calendar-outline' },
+  { label: 'Bi-Weekly', value: 'bi-weekly', icon: 'calendar-outline' },
+  { label: 'Monthly',   value: 'monthly',   icon: 'calendar-outline' },
+  { label: 'One-Time',  value: 'one-time',  icon: 'flash-outline'    },
 ];
 
 const CURRENCIES = [
-  { label: 'PHP', value: 'PHP', symbol: '₱' },
-  { label: 'USD', value: 'USD', symbol: '$' },
-  { label: 'EUR', value: 'EUR', symbol: '€' },
-  { label: 'GBP', value: 'GBP', symbol: '£' },
+  { label: 'PHP · Philippine Peso', value: 'PHP', symbol: '₱' },
+  { label: 'USD · US Dollar',       value: 'USD', symbol: '$' },
+  { label: 'EUR · Euro',            value: 'EUR', symbol: '€' },
+  { label: 'GBP · British Pound',   value: 'GBP', symbol: '£' },
 ];
 
 const CONTACT_PREFERENCES = [
@@ -111,12 +111,53 @@ const BENEFITS_OPTIONS = [
 ];
 
 const DEGREE_LEVELS = [
-  { label: 'None',       value: 'none'        },
-  { label: 'High School',value: 'high_school' },
-  { label: 'Associate',  value: 'associate'   },
-  { label: 'Bachelor',   value: 'bachelor'    },
-  { label: 'Master',     value: 'master'      },
-  { label: 'Doctorate',  value: 'doctorate'   },
+  { label: 'None',        value: 'none',        icon: 'close-circle-outline' },
+  { label: 'High School', value: 'high_school', icon: 'book-outline'         },
+  { label: 'Associate',   value: 'associate',   icon: 'ribbon-outline'       },
+  { label: 'Bachelor',    value: 'bachelor',    icon: 'school-outline'       },
+  { label: 'Master',      value: 'master',      icon: 'school-outline'       },
+  { label: 'Doctorate',   value: 'doctorate',   icon: 'trophy-outline'       },
+];
+
+const SUGGESTED_TITLES = [
+  'Senior React Native Developer',
+  'Full Stack Developer',
+  'UI/UX Designer',
+  'Mobile App Developer',
+  'Web Developer',
+  'Data Analyst',
+  'Project Manager',
+  'Product Designer',
+  'DevOps Engineer',
+  'Quality Assurance Tester',
+  'Backend Developer',
+  'Frontend Developer',
+  'iOS Developer',
+  'Android Developer',
+  'Machine Learning Engineer',
+  'Cloud Architect',
+  'Business Analyst',
+  'Content Writer',
+  'Digital Marketing Specialist',
+  'Sales Representative',
+];
+
+const SUGGESTED_CATEGORIES = [
+  'Technology',
+  'Design',
+  'Marketing',
+  'Business',
+  'Finance',
+  'Healthcare',
+  'Education',
+  'Engineering',
+  'Sales',
+  'Customer Service',
+  'Human Resources',
+  'Legal',
+  'Media',
+  'Real Estate',
+  'Consulting',
 ];
 
 const SKILLS_SUGGESTIONS = [
@@ -154,7 +195,7 @@ function StepBar({ currentStep }) {
                     </Text>
                 }
               </View>
-              <Text style={[sb.label, active && sb.labelActive, done && sb.labelDone]}>
+              <Text style={[sb.label, active && sb.labelActive, done && sb.labelDone]} numberOfLines={1}>
                 {step.label}
               </Text>
             </View>
@@ -171,37 +212,44 @@ function StepBar({ currentStep }) {
 const sb = StyleSheet.create({
   container: {
     flexDirection: 'row', alignItems: 'flex-start',
-    paddingHorizontal: 20, paddingVertical: 16,
+    paddingHorizontal: 20, paddingVertical: 18,
     backgroundColor: WHITE,
-    borderBottomWidth: 1, borderBottomColor: BORDER,
+    borderBottomWidth: 1, borderBottomColor: BORDER_SOFT,
   },
-  stepWrap: { alignItems: 'center', gap: 6, width: 72 },
+  stepWrap: { alignItems: 'center', gap: 7, width: 72 },
   circle: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: BG, borderWidth: 2, borderColor: BORDER,
     alignItems: 'center', justifyContent: 'center',
   },
-  circleActive: { borderColor: BLUE, backgroundColor: BLUE },
+  circleActive: {
+    borderColor: BLUE, backgroundColor: BLUE,
+    shadowColor: BLUE, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 6, elevation: 3,
+  },
   circleDone:   { borderColor: GREEN, backgroundColor: GREEN },
   num:      { fontSize: 13, fontWeight: '700', color: TEXT_LIGHT },
   numActive:{ color: WHITE },
   numDone:  { color: WHITE },
-  label:      { fontSize: 10, fontWeight: '500', color: TEXT_LIGHT, textAlign: 'center' },
+  label:      { fontSize: 10, fontWeight: '600', color: TEXT_LIGHT, textAlign: 'center' },
   labelActive:{ color: BLUE,  fontWeight: '700' },
   labelDone:  { color: GREEN, fontWeight: '600' },
   line: {
     flex: 1, height: 2, backgroundColor: BORDER,
-    marginTop: 15, marginHorizontal: -4,
+    marginTop: 15, marginHorizontal: -4, borderRadius: 1,
   },
   lineDone: { backgroundColor: GREEN },
 });
 
 // ── Reusable Field Components ─────────────────────────────────────────────────
-function FieldLabel({ label, required }) {
+function FieldLabel({ label, required, hint }) {
   return (
-    <Text style={f.label}>
-      {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
-    </Text>
+    <View style={{ marginBottom: 8 }}>
+      <Text style={f.label}>
+        {label}{required && <Text style={{ color: RED }}> *</Text>}
+      </Text>
+      {hint ? <Text style={f.hint}>{hint}</Text> : null}
+    </View>
   );
 }
 
@@ -217,6 +265,7 @@ function ChipRow({ options, selected, onSelect, isMulti = false }) {
             key={opt.value}
             style={[f.chip, active && f.chipActive]}
             onPress={() => onSelect(opt.value)}
+            activeOpacity={0.75}
           >
             {opt.icon && (
               <Ionicons
@@ -235,6 +284,178 @@ function ChipRow({ options, selected, onSelect, isMulti = false }) {
   );
 }
 
+// ── Dropdown / Select ──────────────────────────────────────────────────────────
+function Dropdown({ icon, options, value, onSelect, placeholder = 'Select an option' }) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find(o => o.value === value);
+
+  return (
+    <View>
+      <TouchableOpacity
+        style={[dd.trigger, open && dd.triggerOpen]}
+        onPress={() => setOpen(true)}
+        activeOpacity={0.75}
+      >
+        {icon && (
+          <Ionicons name={icon} size={16} color={selected ? BLUE : TEXT_LIGHT} style={{ marginRight: 10 }} />
+        )}
+        <Text style={[dd.triggerText, !selected && dd.placeholderText]} numberOfLines={1}>
+          {selected ? selected.label : placeholder}
+        </Text>
+        <Ionicons name="chevron-down" size={16} color={TEXT_LIGHT} />
+      </TouchableOpacity>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={dd.overlay} onPress={() => setOpen(false)}>
+          <Pressable style={dd.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={dd.sheetHandle} />
+            <Text style={dd.sheetTitle}>{placeholder}</Text>
+            <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+              {options.map((opt) => {
+                const active = opt.value === value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[dd.item, active && dd.itemActive]}
+                    onPress={() => { onSelect(opt.value); setOpen(false); }}
+                    activeOpacity={0.7}
+                  >
+                    {opt.icon && (
+                      <View style={[dd.itemIconBox, active && dd.itemIconBoxActive]}>
+                        <Ionicons name={opt.icon} size={15} color={active ? WHITE : TEXT_MUTED} />
+                      </View>
+                    )}
+                    <Text style={[dd.itemText, active && dd.itemTextActive]}>{opt.label}</Text>
+                    {active && <Ionicons name="checkmark-circle" size={18} color={BLUE} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={dd.cancelBtn} onPress={() => setOpen(false)} activeOpacity={0.75}>
+              <Text style={dd.cancelBtnTxt}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+const dd = StyleSheet.create({
+  trigger: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: WHITE, borderRadius: 12,
+    borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, paddingVertical: 13,
+  },
+  triggerOpen: { borderColor: BLUE, backgroundColor: 'rgba(0,85,165,0.04)' },
+  triggerText: { flex: 1, fontSize: 14, color: TEXT_MAIN, fontWeight: '500' },
+  placeholderText: { color: TEXT_LIGHT, fontWeight: '400' },
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(7,26,62,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    paddingHorizontal: 18, paddingTop: 10, paddingBottom: 24,
+    shadowColor: NAVY, shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15, shadowRadius: 16, elevation: 12,
+  },
+  sheetHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: BORDER, alignSelf: 'center', marginBottom: 14,
+  },
+  sheetTitle: {
+    fontSize: 13, fontWeight: '700', color: TEXT_LIGHT,
+    textTransform: 'uppercase', letterSpacing: 0.6,
+    marginBottom: 10, paddingHorizontal: 4,
+  },
+  item: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 12, paddingHorizontal: 8,
+    borderRadius: 12, marginBottom: 2,
+  },
+  itemActive: { backgroundColor: 'rgba(0,85,165,0.07)' },
+  itemIconBox: {
+    width: 28, height: 28, borderRadius: 8,
+    backgroundColor: BG, alignItems: 'center', justifyContent: 'center',
+  },
+  itemIconBoxActive: { backgroundColor: BLUE },
+  itemText: { flex: 1, fontSize: 14, color: TEXT_MAIN, fontWeight: '500' },
+  itemTextActive: { color: BLUE, fontWeight: '700' },
+  cancelBtn: {
+    marginTop: 8, paddingVertical: 13, borderRadius: 12,
+    alignItems: 'center', backgroundColor: BG,
+  },
+  cancelBtnTxt: { fontSize: 14, fontWeight: '700', color: TEXT_MUTED },
+});
+
+// ── Autocomplete text field ───────────────────────────────────────────────────
+function AutocompleteField({ icon, placeholder, value, onChange, suggestions }) {
+  const [focused, setFocused] = useState(false);
+  const blurTimeout = useRef(null);
+
+  const isExactMatch = suggestions.some(s => s.toLowerCase() === value.toLowerCase());
+  const filtered = value.length > 0
+    ? suggestions.filter(sug => sug.toLowerCase().includes(value.toLowerCase()))
+    : suggestions;
+  
+  const showList = focused && !isExactMatch && filtered.length > 0;
+
+  return (
+    <View>
+      <View style={[f.inputBox, focused && f.inputBoxFocused]}>
+        {icon && <Ionicons name={icon} size={16} color={focused ? BLUE : TEXT_LIGHT} style={{ marginRight: 8 }} />}
+        <TextInput
+          style={f.inputText}
+          placeholder={placeholder}
+          placeholderTextColor={TEXT_LIGHT}
+          value={value}
+          onChangeText={onChange}
+          onFocus={() => {
+            if (blurTimeout.current) clearTimeout(blurTimeout.current);
+            setFocused(true);
+          }}
+          onBlur={() => {
+            blurTimeout.current = setTimeout(() => setFocused(false), 300);
+          }}
+        />
+        {value.length > 0 && (
+          <TouchableOpacity onPress={() => onChange('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={TEXT_LIGHT} />
+          </TouchableOpacity>
+        )}
+      </View>
+      {showList && (
+        <View style={s.suggestionContainer}>
+          <ScrollView
+            style={{ maxHeight: 176 }}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+          >
+            {filtered.slice(0, 10).map((suggestion) => (
+              <TouchableOpacity
+                key={suggestion}
+                style={s.suggestionItem}
+                onPress={() => {
+                  onChange(suggestion);
+                  setFocused(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="bulb-outline" size={15} color={GOLD} />
+                <Text style={s.suggestionText}>{suggestion}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function TagInput({ tags, onAdd, onRemove, placeholder, value, onChange, icon }) {
   return (
     <View style={{ gap: 10 }}>
@@ -248,9 +469,10 @@ function TagInput({ tags, onAdd, onRemove, placeholder, value, onChange, icon })
             value={value}
             onChangeText={onChange}
             onSubmitEditing={onAdd}
+            returnKeyType="done"
           />
         </View>
-        <TouchableOpacity style={f.addBtn} onPress={onAdd}>
+        <TouchableOpacity style={f.addBtn} onPress={onAdd} activeOpacity={0.8}>
           <Ionicons name="add" size={18} color={WHITE} />
         </TouchableOpacity>
       </View>
@@ -262,7 +484,7 @@ function TagInput({ tags, onAdd, onRemove, placeholder, value, onChange, icon })
             return (
               <View key={i} style={f.tag}>
                 <Text style={f.tagTxt}>{tagLabel}</Text>
-                <TouchableOpacity onPress={() => onRemove(tagValue)}>
+                <TouchableOpacity onPress={() => onRemove(tagValue)} hitSlop={6}>
                   <Ionicons name="close" size={13} color={BLUE} />
                 </TouchableOpacity>
               </View>
@@ -274,18 +496,36 @@ function TagInput({ tags, onAdd, onRemove, placeholder, value, onChange, icon })
   );
 }
 
-function InputBox({ icon, placeholder, value, onChange, multiline, keyboardType }) {
+// ── FIXED InputBox component ───────────────────────────────────────────────────
+function InputBox({ icon, placeholder, value, onChange, multiline, keyboardType, onFocus, onBlur }) {
+  const [focused, setFocused] = useState(false);
   return (
-    <View style={[f.inputBox, multiline && { alignItems: 'flex-start', height: 110 }]}>
-      {icon && <Ionicons name={icon} size={16} color={TEXT_LIGHT} style={[{ marginRight: 8 }, multiline && { marginTop: 14 }]} />}
+    <View style={[
+      f.inputBox,
+      multiline && { alignItems: 'flex-start', minHeight: 120, paddingVertical: 6 },
+      focused && f.inputBoxFocused,
+    ]}>
+      {icon && <Ionicons name={icon} size={16} color={focused ? BLUE : TEXT_LIGHT} style={[{ marginRight: 8 }, multiline && { marginTop: 6 }]} />}
       <TextInput
-        style={[f.inputText, multiline && { textAlignVertical: 'top', paddingTop: 14, height: 90 }]}
+        style={[
+          f.inputText, 
+          multiline && { 
+            textAlignVertical: 'top', 
+            paddingTop: 8, 
+            paddingBottom: 8,
+            minHeight: 80,
+            flex: 1,
+            height: '100%',
+          }
+        ]}
         placeholder={placeholder}
         placeholderTextColor={TEXT_LIGHT}
         value={value}
         onChangeText={onChange}
         multiline={multiline}
         keyboardType={keyboardType}
+        onFocus={(e) => { setFocused(true); onFocus && onFocus(e); }}
+        onBlur={(e) => { setFocused(false); onBlur && onBlur(e); }}
       />
     </View>
   );
@@ -294,6 +534,7 @@ function InputBox({ icon, placeholder, value, onChange, multiline, keyboardType 
 function SectionCard({ title, icon, children }) {
   return (
     <View style={f.sectionCard}>
+      <View style={f.sectionAccent} />
       <View style={f.sectionHeader}>
         <View style={f.sectionIconBox}>
           <Ionicons name={icon} size={16} color={BLUE} />
@@ -306,7 +547,8 @@ function SectionCard({ title, icon, children }) {
 }
 
 const f = StyleSheet.create({
-  label:   { fontSize: 12, fontWeight: '700', color: TEXT_MUTED, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  label:   { fontSize: 12, fontWeight: '700', color: TEXT_MUTED, textTransform: 'uppercase', letterSpacing: 0.6 },
+  hint:    { fontSize: 11, color: TEXT_LIGHT, marginTop: 2, fontWeight: '400' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -314,19 +556,43 @@ const f = StyleSheet.create({
     borderRadius: 10, borderWidth: 1.5, borderColor: BORDER,
     backgroundColor: WHITE,
   },
-  chipActive:   { borderColor: BLUE, backgroundColor: 'rgba(0,85,165,0.07)' },
+  chipActive:   {
+    borderColor: BLUE, backgroundColor: 'rgba(0,85,165,0.07)',
+    shadowColor: BLUE, shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12, shadowRadius: 3, elevation: 1,
+  },
   chipTxt:      { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
   tagInputRow:  { flexDirection: 'row', gap: 8, alignItems: 'center' },
   inputBox: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: WHITE, borderRadius: 12,
-    borderWidth: 1.5, borderColor: BORDER,
+    flex: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    backgroundColor: WHITE, 
+    borderRadius: 12,
+    borderWidth: 1.5, 
+    borderColor: BORDER,
     paddingHorizontal: 14,
+    paddingVertical: 2,
   },
-  inputText:    { flex: 1, fontSize: 14, color: TEXT_MAIN, paddingVertical: 12 },
+  inputBoxFocused: {
+    borderColor: BLUE,
+    shadowColor: BLUE, 
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.12, 
+    shadowRadius: 5, 
+    elevation: 1,
+  },
+  inputText: { 
+    flex: 1, 
+    fontSize: 14, 
+    color: TEXT_MAIN, 
+    paddingVertical: 10,
+  },
   addBtn: {
     width: 44, height: 44, borderRadius: 12,
     backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center',
+    shadowColor: BLUE, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2, shadowRadius: 5, elevation: 2,
   },
   tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tag: {
@@ -338,9 +604,14 @@ const f = StyleSheet.create({
   tagTxt: { fontSize: 12, color: BLUE, fontWeight: '600' },
   sectionCard: {
     backgroundColor: WHITE, borderRadius: 16, padding: 18,
-    marginBottom: 16, borderWidth: 1, borderColor: BORDER,
-    shadowColor: NAVY, shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 8, elevation: 1,
+    marginBottom: 16, borderWidth: 1, borderColor: BORDER_SOFT,
+    shadowColor: NAVY, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 10, elevation: 2,
+    overflow: 'hidden',
+  },
+  sectionAccent: {
+    position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+    backgroundColor: BLUE, opacity: 0.85,
   },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
   sectionIconBox: {
@@ -348,7 +619,7 @@ const f = StyleSheet.create({
     backgroundColor: 'rgba(0,85,165,0.08)',
     alignItems: 'center', justifyContent: 'center',
   },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: TEXT_MAIN },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: TEXT_MAIN, letterSpacing: -0.1 },
 });
 
 // ── Step 1: Job Details ───────────────────────────────────────────────────────
@@ -368,24 +639,28 @@ function Step1({
         <View style={{ gap: 16 }}>
           <View>
             <FieldLabel label="Job Title" required />
-            <InputBox
+            <AutocompleteField
               icon="briefcase-outline"
               placeholder="e.g. Senior React Native Developer"
               value={title}
               onChange={setTitle}
+              suggestions={SUGGESTED_TITLES}
             />
           </View>
+
           <View>
             <FieldLabel label="Category" required />
-            <InputBox
+            <AutocompleteField
               icon="grid-outline"
               placeholder="e.g. Technology, Design, Marketing"
               value={category}
               onChange={setCategory}
+              suggestions={SUGGESTED_CATEGORIES}
             />
           </View>
+
           <View>
-            <FieldLabel label="Description" required />
+            <FieldLabel label="Description" required hint="Responsibilities, deliverables, and expectations" />
             <InputBox
               icon="document-text-outline"
               placeholder="Describe responsibilities, deliverables, and expectations..."
@@ -414,7 +689,7 @@ function Step1({
             icon="add-circle-outline"
           />
           <View>
-            <Text style={{ fontSize: 11, color: TEXT_LIGHT, marginBottom: 8, fontWeight: '500' }}>SUGGESTED</Text>
+            <Text style={{ fontSize: 11, color: TEXT_LIGHT, marginBottom: 8, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>Suggested</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
               {SKILLS_SUGGESTIONS.slice(0, 10).map(s => (
                 <TouchableOpacity
@@ -423,8 +698,9 @@ function Step1({
                   onPress={() => {
                     if (!requiredSkills.includes(s)) setRequiredSkills([...requiredSkills, s]);
                   }}
+                  activeOpacity={0.75}
                 >
-                  <Text style={[{ fontSize: 11, color: TEXT_LIGHT }, requiredSkills.includes(s) && { color: BLUE }]}>{s}</Text>
+                  <Text style={[{ fontSize: 11, color: TEXT_LIGHT }, requiredSkills.includes(s) && { color: BLUE, fontWeight: '700' }]}>{s}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -436,7 +712,13 @@ function Step1({
         <View style={{ gap: 16 }}>
           <View>
             <FieldLabel label="Employment Type" />
-            <ChipRow options={JOB_TYPES} selected={jobType} onSelect={setJobType} />
+            <Dropdown
+              icon="briefcase-outline"
+              options={JOB_TYPES}
+              value={jobType}
+              onSelect={setJobType}
+              placeholder="Select employment type"
+            />
           </View>
           <View>
             <FieldLabel label="Work Setup" />
@@ -470,6 +752,7 @@ function Step2({
   languageInput, setLanguageInput,
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showDeadlineDate, setShowDeadlineDate] = useState(false);
 
   const toggleBenefit = (b) => {
     setPayInformation({
@@ -478,6 +761,11 @@ function Step2({
         ? payInformation.benefits.filter(x => x !== b)
         : [...payInformation.benefits, b],
     });
+  };
+
+  const formatDateDisplay = (date) => {
+    if (!date) return 'Select date';
+    return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   return (
@@ -518,7 +806,13 @@ function Step2({
           </View>
           <View>
             <FieldLabel label="Experience Level" />
-            <ChipRow options={EXPERIENCE_LEVELS} selected={experienceLevel} onSelect={setExperienceLevel} />
+            <Dropdown
+              icon="trophy-outline"
+              options={EXPERIENCE_LEVELS}
+              value={experienceLevel}
+              onSelect={setExperienceLevel}
+              placeholder="Select experience level"
+            />
           </View>
         </View>
       </SectionCard>
@@ -527,9 +821,12 @@ function Step2({
       <TouchableOpacity
         style={adv.toggle}
         onPress={() => setShowAdvanced(!showAdvanced)}
-        activeOpacity={0.7}
+        activeOpacity={0.75}
       >
-        <Text style={adv.toggleTxt}>Advanced Options</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="options-outline" size={16} color={BLUE} />
+          <Text style={adv.toggleTxt}>Advanced Options</Text>
+        </View>
         <View style={[adv.badge, showAdvanced && adv.badgeOpen]}>
           <Ionicons name={showAdvanced ? 'chevron-up' : 'chevron-down'} size={14} color={showAdvanced ? WHITE : BLUE} />
         </View>
@@ -557,15 +854,23 @@ function Step2({
               </View>
               <View>
                 <FieldLabel label="Currency" />
-                <ChipRow options={CURRENCIES.map(c => ({ ...c, icon: undefined }))}
-                  selected={payInformation.salary_range.currency}
-                  onSelect={(v) => setPayInformation({ ...payInformation, salary_range: { ...payInformation.salary_range, currency: v } })} />
+                <Dropdown
+                  icon="cash-outline"
+                  options={CURRENCIES}
+                  value={payInformation.salary_range.currency}
+                  onSelect={(v) => setPayInformation({ ...payInformation, salary_range: { ...payInformation.salary_range, currency: v } })}
+                  placeholder="Select currency"
+                />
               </View>
               <View>
                 <FieldLabel label="Payment Frequency" />
-                <ChipRow options={PAYMENT_FREQUENCIES.map(p => ({ ...p, icon: undefined }))}
-                  selected={payInformation.payment_frequency}
-                  onSelect={(v) => setPayInformation({ ...payInformation, payment_frequency: v })} />
+                <Dropdown
+                  icon="repeat-outline"
+                  options={PAYMENT_FREQUENCIES}
+                  value={payInformation.payment_frequency}
+                  onSelect={(v) => setPayInformation({ ...payInformation, payment_frequency: v })}
+                  placeholder="Select payment frequency"
+                />
               </View>
               <View>
                 <FieldLabel label="Benefits" />
@@ -577,7 +882,7 @@ function Step2({
                   value={payInformation.negotiable}
                   onValueChange={(v) => setPayInformation({ ...payInformation, negotiable: v })}
                   trackColor={{ false: BORDER, true: GREEN_MID }}
-                  thumbColor={payInformation.negotiable ? BLUE : TEXT_LIGHT}
+                  thumbColor={payInformation.negotiable ? BLUE : WHITE}
                 />
               </View>
             </View>
@@ -642,7 +947,7 @@ function Step2({
                       setRequirements({ ...requirements, languages_required: [...requirements.languages_required, { ...languageInput }] });
                       setLanguageInput({ language: '', proficiency: 'professional' });
                     }
-                  }}>
+                  }} activeOpacity={0.8}>
                     <Ionicons name="add" size={18} color={WHITE} />
                   </TouchableOpacity>
                 </View>
@@ -655,7 +960,7 @@ function Step2({
                         <TouchableOpacity onPress={() => {
                           const arr = [...requirements.languages_required]; arr.splice(idx, 1);
                           setRequirements({ ...requirements, languages_required: arr });
-                        }}>
+                        }} hitSlop={6}>
                           <Ionicons name="close" size={13} color={BLUE} />
                         </TouchableOpacity>
                       </View>
@@ -678,9 +983,13 @@ function Step2({
             <View style={{ gap: 16 }}>
               <View>
                 <FieldLabel label="Minimum Degree" />
-                <ChipRow options={DEGREE_LEVELS.map(d => ({ ...d, icon: undefined }))}
-                  selected={educationRequirements.minimum_degree}
-                  onSelect={(v) => setEducationRequirements({ ...educationRequirements, minimum_degree: v })} />
+                <Dropdown
+                  icon="school-outline"
+                  options={DEGREE_LEVELS}
+                  value={educationRequirements.minimum_degree}
+                  onSelect={(v) => setEducationRequirements({ ...educationRequirements, minimum_degree: v })}
+                  placeholder="Select minimum degree"
+                />
               </View>
               <View>
                 <FieldLabel label="Preferred Field of Study" />
@@ -723,7 +1032,7 @@ function Step2({
                   value={applicationSettings.auto_accept}
                   onValueChange={(v) => setApplicationSettings({ ...applicationSettings, auto_accept: v })}
                   trackColor={{ false: BORDER, true: GREEN_MID }}
-                  thumbColor={applicationSettings.auto_accept ? BLUE : TEXT_LIGHT}
+                  thumbColor={applicationSettings.auto_accept ? BLUE : WHITE}
                 />
               </View>
               <View>
@@ -735,9 +1044,36 @@ function Step2({
               </View>
               <View>
                 <FieldLabel label="Application Deadline (Optional)" />
-                <InputBox icon="calendar-outline" placeholder="YYYY-MM-DD"
-                  value={applicationSettings.application_deadline}
-                  onChange={(t) => setApplicationSettings({ ...applicationSettings, application_deadline: t })} />
+                <TouchableOpacity
+                  style={s.datePickerBtn}
+                  onPress={() => setShowDeadlineDate(true)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="calendar-outline" size={18} color={BLUE} />
+                  <Text style={s.datePickerText}>
+                    {applicationSettings.application_deadline
+                      ? formatDateDisplay(applicationSettings.application_deadline)
+                      : 'Select deadline date'}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={TEXT_LIGHT} />
+                </TouchableOpacity>
+                {showDeadlineDate && (
+                  <DateTimePicker
+                    value={applicationSettings.application_deadline ? new Date(applicationSettings.application_deadline) : new Date()}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(event, selectedDate) => {
+                      setShowDeadlineDate(false);
+                      if (selectedDate) {
+                        setApplicationSettings({
+                          ...applicationSettings,
+                          application_deadline: selectedDate.toISOString()
+                        });
+                      }
+                    }}
+                    minimumDate={new Date()}
+                  />
+                )}
               </View>
             </View>
           </SectionCard>
@@ -754,7 +1090,7 @@ const adv = StyleSheet.create({
     borderWidth: 1, borderColor: BORDER, marginBottom: 16,
     borderStyle: 'dashed',
   },
-  toggleTxt: { fontSize: 14, fontWeight: '600', color: BLUE },
+  toggleTxt: { fontSize: 14, fontWeight: '700', color: BLUE },
   badge: {
     width: 28, height: 28, borderRadius: 8,
     backgroundColor: 'rgba(0,85,165,0.08)',
@@ -789,17 +1125,17 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
 
   const urgency = URGENCY_LEVELS.find(u => u.value === urgencyLevel);
   const experience = EXPERIENCE_LEVELS.find(e => e.value === experienceLevel);
+  const currencySymbol = CURRENCIES.find(c => c.value === payInformation.salary_range.currency)?.symbol || '';
 
   return (
     <View>
-      {/* Hero summary */}
       <View style={rv.hero}>
         <View style={rv.heroIcon}>
           <Ionicons name="briefcase" size={24} color={WHITE} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={rv.heroTitle}>{title || 'Untitled Job'}</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
             {category && (
               <View style={rv.badge}>
                 <Text style={rv.badgeTxt}>{category}</Text>
@@ -816,8 +1152,8 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
               </View>
             )}
             {urgencyLevel && (
-              <View style={[rv.badge, { backgroundColor: `${urgency?.color}18`, borderColor: `${urgency?.color}40` }]}>
-                <Text style={[rv.badgeTxt, { color: urgency?.color }]}>{urgency?.label}</Text>
+              <View style={[rv.badge, { backgroundColor: `${urgency?.color}22`, borderColor: `${urgency?.color}55` }]}>
+                <Text style={[rv.badgeTxt, { color: WHITE }]}>{urgency?.label}</Text>
               </View>
             )}
             {experienceLevel && (
@@ -855,11 +1191,11 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
 
       <SectionCard title="Budget & Payment" icon="cash-outline">
         <View style={{ gap: 12 }}>
-          <ReviewRow icon="wallet-outline" label="Budget" value={budgetAmount ? `${payInformation.salary_range.currency} ${budgetAmount} (${BUDGET_TYPES.find(b => b.value === budgetType)?.label})` : null} />
+          <ReviewRow icon="wallet-outline" label="Budget" value={budgetAmount ? `${currencySymbol}${budgetAmount} · ${BUDGET_TYPES.find(b => b.value === budgetType)?.label}` : null} />
           <ReviewRow icon="hourglass-outline" label="Duration" value={estimatedDuration} />
           {(payInformation.salary_range.min || payInformation.salary_range.max) && (
             <ReviewRow icon="receipt-outline" label="Salary Range"
-              value={`${payInformation.salary_range.currency} ${payInformation.salary_range.min || '?'} – ${payInformation.salary_range.max || '?'} / ${payInformation.payment_frequency}`} />
+              value={`${currencySymbol}${payInformation.salary_range.min || '?'} – ${currencySymbol}${payInformation.salary_range.max || '?'} / ${payInformation.payment_frequency}`} />
           )}
           {payInformation.benefits?.length > 0 && (
             <ReviewRow icon="gift-outline" label="Benefits" value={payInformation.benefits.length + ' benefit(s) included'} />
@@ -894,17 +1230,16 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
         </SectionCard>
       )}
 
-      <SectionCard title="Application Settings" icon="settings-outline">
-        <View style={{ gap: 12 }}>
-          <ReviewRow icon="people-outline" label="Max Applicants" value={applicationSettings.max_applicants} />
-          <ReviewRow icon="checkmark-circle-outline" label="Auto Accept" value={applicationSettings.auto_accept ? 'Yes' : 'No'} />
-          {applicationSettings.application_deadline && (
-            <ReviewRow icon="calendar-outline" label="Deadline" value={applicationSettings.application_deadline} />
-          )}
-        </View>
-      </SectionCard>
+      {applicationSettings.application_deadline && (
+        <SectionCard title="Application Settings" icon="settings-outline">
+          <View style={{ gap: 12 }}>
+            <ReviewRow icon="people-outline" label="Max Applicants" value={applicationSettings.max_applicants} />
+            <ReviewRow icon="checkmark-circle-outline" label="Auto Accept" value={applicationSettings.auto_accept ? 'Yes' : 'No'} />
+            <ReviewRow icon="calendar-outline" label="Deadline" value={new Date(applicationSettings.application_deadline).toLocaleDateString()} />
+          </View>
+        </SectionCard>
+      )}
 
-      {/* Confirmation Banner */}
       <View style={rv.confirmBanner}>
         <Ionicons name="information-circle" size={18} color={BLUE} />
         <Text style={rv.confirmTxt}>
@@ -918,26 +1253,29 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
 const rv = StyleSheet.create({
   hero: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 14,
-    backgroundColor: NAVY, borderRadius: 16, padding: 18, marginBottom: 16,
+    backgroundColor: NAVY, borderRadius: 18, padding: 20, marginBottom: 16,
+    shadowColor: NAVY, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25, shadowRadius: 14, elevation: 5,
   },
   heroIcon: {
     width: 48, height: 48, borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)',
   },
-  heroTitle: { fontSize: 18, fontWeight: '800', color: WHITE, lineHeight: 24 },
+  heroTitle: { fontSize: 18, fontWeight: '800', color: WHITE, lineHeight: 24, letterSpacing: -0.2 },
   badge: {
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 9, paddingVertical: 4,
+    borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
-  badgeTxt: { fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: '600', textTransform: 'uppercase' },
+  badgeTxt: { fontSize: 10, color: 'rgba(255,255,255,0.9)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   iconBox: {
     width: 28, height: 28, borderRadius: 7,
     backgroundColor: BG, alignItems: 'center', justifyContent: 'center', marginTop: 1,
   },
-  rowLabel: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
+  rowLabel: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
   rowValue: { fontSize: 13, color: TEXT_MAIN, fontWeight: '500', marginTop: 2, lineHeight: 18 },
   confirmBanner: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 10,
@@ -1010,12 +1348,15 @@ export default function PostJobScreen({ onNavigate }) {
   // Handle Android hardware back button
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleBack();
-      return true;
+      if (onNavigate) {
+        onNavigate('ClientDashboard');
+        return true;
+      }
+      return false;
     });
 
     return () => backHandler.remove();
-  }, [currentStep]);
+  }, [onNavigate]);
 
   const handleTabPress = (key) => {
     setActiveTab(key);
@@ -1071,12 +1412,11 @@ export default function PostJobScreen({ onNavigate }) {
   };
 
   const handlePost = async () => {
-    if (!token) { 
-      Alert.alert('Error', 'You must be logged in to post a job'); 
-      return; 
+    if (!token) {
+      Alert.alert('Error', 'You must be logged in to post a job');
+      return;
     }
 
-    // Build the job data object matching the API schema
     const jobData = {
       title: title.trim(),
       description: description.trim(),
@@ -1133,7 +1473,7 @@ export default function PostJobScreen({ onNavigate }) {
 
     try {
       const result = await dispatch(createJob(jobData)).unwrap();
-      
+
       if (result && result.job) {
         Alert.alert('Posted!', 'Your job is now live.', [
           { text: 'View My Postings', onPress: () => { resetForm(); onNavigate('Mypostings'); } },
@@ -1182,18 +1522,15 @@ export default function PostJobScreen({ onNavigate }) {
         {/* TOP BAR */}
         <View style={s.topbar}>
           <View style={s.topbarLeft}>
-            <TouchableOpacity onPress={handleBack} style={s.backBtn}>
-              <Ionicons name="arrow-back" size={22} color={WHITE} />
-            </TouchableOpacity>
             <View style={s.logoBox}>
-              <Ionicons name="flash-outline" size={15} color={NAVY} />
+              <Ionicons name="flash-outline" size={16} color={NAVY} />
             </View>
             <View>
               <Text style={s.topbarBrand}>Taskra</Text>
               <Text style={s.topbarTagline}>Client Portal</Text>
             </View>
           </View>
-          <TouchableOpacity style={s.postingsBtn} onPress={() => onNavigate('Mypostings')}>
+          <TouchableOpacity style={s.postingsBtn} onPress={() => onNavigate('Mypostings')} activeOpacity={0.8}>
             <Ionicons name="document-text-outline" size={16} color={WHITE} />
             <Text style={s.postingsBtnText}>My Posts</Text>
           </TouchableOpacity>
@@ -1226,7 +1563,7 @@ export default function PostJobScreen({ onNavigate }) {
           {/* Navigation Buttons */}
           <View style={s.navRow}>
             {currentStep > 1 ? (
-              <TouchableOpacity style={s.backNavBtn} onPress={handleBack}>
+              <TouchableOpacity style={s.backNavBtn} onPress={handleBack} activeOpacity={0.8}>
                 <Ionicons name="arrow-back" size={18} color={BLUE} />
                 <Text style={s.backNavBtnTxt}>Back</Text>
               </TouchableOpacity>
@@ -1260,13 +1597,13 @@ export default function PostJobScreen({ onNavigate }) {
           {/* Show error if any */}
           {error && (
             <View style={s.errorContainer}>
-              <Ionicons name="alert-circle-outline" size={18} color="#EF4444" />
+              <Ionicons name="alert-circle-outline" size={18} color={RED} />
               <Text style={s.errorText}>{typeof error === 'string' ? error : error.message || 'An error occurred'}</Text>
             </View>
           )}
         </ScrollView>
 
-        {/* BOTTOM TAB BAR */}
+        {/* BOTTOM TAB BAR - Fixed position */}
         <SafeAreaView edges={['bottom']} style={s.tabSafe}>
           <View style={s.tabBar}>
             {TABS.map(tab => {
@@ -1308,29 +1645,32 @@ const s = StyleSheet.create({
 
   topbar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 12, backgroundColor: NAVY,
+    paddingHorizontal: 20, paddingVertical: 14, backgroundColor: NAVY,
+    shadowColor: NAVY, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
   },
   topbarLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  backBtn: { padding: 4 },
   logoBox: {
-    width: 32, height: 32, backgroundColor: GOLD, borderRadius: 9,
+    width: 34, height: 34, backgroundColor: GOLD, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center',
+    shadowColor: GOLD_DK, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35, shadowRadius: 4, elevation: 2,
   },
-  topbarBrand: { fontSize: 15, fontWeight: '800', color: WHITE, letterSpacing: -0.2 },
-  topbarTagline: { fontSize: 9, fontWeight: '500', color: GOLD_LT, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 1 },
+  topbarBrand: { fontSize: 16, fontWeight: '800', color: WHITE, letterSpacing: -0.3 },
+  topbarTagline: { fontSize: 9, fontWeight: '600', color: GOLD_LT, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 1 },
   postingsBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 12, paddingVertical: 7,
+    paddingHorizontal: 13, paddingVertical: 8,
     borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.1)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
   },
-  postingsBtnText: { fontSize: 12, fontWeight: '600', color: WHITE },
+  postingsBtnText: { fontSize: 12, fontWeight: '700', color: WHITE },
 
-  scroll: { padding: 16, paddingBottom: 40 },
+  scroll: { padding: 16, paddingBottom: 20 },
 
   stepHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   stepHeaderIcon: {
     width: 40, height: 40, borderRadius: 12,
@@ -1338,8 +1678,8 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: 'rgba(0,85,165,0.15)',
   },
-  stepHeaderNum:   { fontSize: 11, color: TEXT_LIGHT, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  stepHeaderTitle: { fontSize: 20, fontWeight: '800', color: TEXT_MAIN, marginTop: 1 },
+  stepHeaderNum:   { fontSize: 11, color: TEXT_LIGHT, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
+  stepHeaderTitle: { fontSize: 20, fontWeight: '800', color: TEXT_MAIN, marginTop: 1, letterSpacing: -0.3 },
 
   navRow: { flexDirection: 'row', gap: 12, marginTop: 24, alignItems: 'center' },
   backNavBtn: {
@@ -1347,13 +1687,13 @@ const s = StyleSheet.create({
     paddingVertical: 14, borderRadius: 12,
     borderWidth: 1.5, borderColor: BORDER, backgroundColor: WHITE,
   },
-  backNavBtnTxt: { fontSize: 15, fontWeight: '600', color: BLUE },
+  backNavBtnTxt: { fontSize: 15, fontWeight: '700', color: BLUE },
   nextBtn: {
     flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     paddingVertical: 14, borderRadius: 12,
     backgroundColor: BLUE,
     shadowColor: BLUE, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 12, elevation: 4,
+    shadowOpacity: 0.28, shadowRadius: 12, elevation: 4,
   },
   nextBtnTxt: { fontSize: 15, fontWeight: '700', color: WHITE },
   postBtn: {
@@ -1372,33 +1712,115 @@ const s = StyleSheet.create({
   },
   errorText: { flex: 1, fontSize: 13, color: '#991B1B', lineHeight: 18 },
 
-  tabSafe: { backgroundColor: WHITE },
+  suggestionContainer: {
+    backgroundColor: WHITE,
+    borderWidth: 1.5,
+    borderColor: BLUE,
+    borderRadius: 12,
+    marginTop: 6,
+    maxHeight: 180,
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    zIndex: 999,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER_SOFT,
+    backgroundColor: WHITE,
+  },
+  suggestionText: {
+    fontSize: 13,
+    color: TEXT_MAIN,
+    fontWeight: '500',
+    flex: 1,
+  },
+  datePickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: WHITE,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  datePickerText: {
+    flex: 1,
+    fontSize: 14,
+    color: TEXT_MAIN,
+  },
+
+  tabSafe: { 
+    backgroundColor: WHITE,
+    borderTopWidth: 1.5,
+    borderTopColor: BORDER_SOFT,
+  },
   tabBar: {
-    flexDirection: 'row', backgroundColor: WHITE,
-    borderTopWidth: 1.5, borderTopColor: BORDER,
-    paddingTop: 6, paddingBottom: 4, paddingHorizontal: 8,
+    flexDirection: 'row',
+    backgroundColor: WHITE,
+    paddingTop: 6,
+    paddingBottom: 4,
+    paddingHorizontal: 8,
   },
   tabItem: {
-    flex: 1, alignItems: 'center', justifyContent: 'flex-start',
-    paddingVertical: 4, position: 'relative',
+    flex: 1, 
+    alignItems: 'center', 
+    justifyContent: 'flex-start',
+    paddingVertical: 4, 
+    position: 'relative',
   },
   tabActiveBar: {
-    position: 'absolute', top: 0,
-    width: 24, height: 3,
-    backgroundColor: BLUE, borderRadius: 999,
+    position: 'absolute', 
+    top: 0,
+    width: 24, 
+    height: 3,
+    backgroundColor: BLUE, 
+    borderRadius: 999,
   },
-  tabIconWrap: { position: 'relative', marginBottom: 3, marginTop: 6 },
+  tabIconWrap: { 
+    position: 'relative', 
+    marginBottom: 3, 
+    marginTop: 6 
+  },
   tabFab: {
-    width: 44, height: 36, borderRadius: 12,
+    width: 44, 
+    height: 36, 
+    borderRadius: 12,
     backgroundColor: GOLD,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 3, marginTop: 2,
+    alignItems: 'center', 
+    justifyContent: 'center',
+    marginBottom: 3, 
+    marginTop: 2,
     shadowColor: GOLD_DK,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.28, shadowRadius: 5, elevation: 3,
-    borderWidth: 1, borderColor: GOLD_LT,
+    shadowOpacity: 0.28, 
+    shadowRadius: 5, 
+    elevation: 3,
+    borderWidth: 1, 
+    borderColor: GOLD_LT,
   },
-  tabLabel:     { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500' },
-  tabLabelActive: { color: BLUE, fontWeight: '700' },
-  tabLabelPost: { color: GOLD, fontWeight: '700' },
+  tabLabel: { 
+    fontSize: 10, 
+    color: TEXT_LIGHT, 
+    fontWeight: '600' 
+  },
+  tabLabelActive: { 
+    color: BLUE, 
+    fontWeight: '700' 
+  },
+  tabLabelPost: { 
+    color: GOLD, 
+    fontWeight: '700' 
+  },
 });

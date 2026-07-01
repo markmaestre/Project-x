@@ -13,14 +13,14 @@ import FreelancerRegistration from './components/freelancer/FreelancerRegistrati
 import ClientScreen from './components/client/ClientScreen';
 import PostJob from './components/client/Postjob';
 import Mypostings from './components/client/Mypostings';
-import Sentoffers from './components/client/Sentoffers';
 import Hiredtalents from './components/client/Hiredtalents';
 import ClientProfile from './components/client/ClientProfile';
 import ClientMessagesScreen from './components/client/Message';
 import ClientEditProfile from './components/client/ClientEditProfile';
 import RatingClient from './components/client/RatingClient';
-import Settings from './components/client/Settings';
+import Contract from './components/client/Contract';
 import Notif from './components/client/Notif';
+import Applications from './components/client/Applicants';
 
 // ── Freelancer Screens ──────────────────────────────────
 import FreelancerScreen from './components/freelancer/FreelancerScreen';
@@ -145,8 +145,8 @@ export default function AppNavigator() {
       return <PostJob onNavigate={handleNavigate} />;
     case 'Mypostings':
       return <Mypostings onNavigate={handleNavigate} />;
-    case 'Sentoffers':
-      return <Sentoffers onNavigate={handleNavigate} />;
+    case 'Applications':
+      return <Applications onNavigate={handleNavigate} />;
     case 'Hiredtalents':
       return <Hiredtalents onNavigate={handleNavigate} />;
     case 'ClientProfile':
@@ -155,8 +155,8 @@ export default function AppNavigator() {
       return <ClientEditProfile onNavigate={handleNavigate} />;
     case 'RatingClient':
       return <RatingClient onNavigate={handleNavigate} />;
-    case 'Settings':
-      return <Settings onNavigate={handleNavigate} />;
+    case 'Contract':
+      return <Contract onNavigate={handleNavigate} />;
     case 'Notif':
       return <Settings onNavigate={handleNavigate} />;
 

@@ -40,10 +40,41 @@ export const createProjectUpdate = createAsyncThunk(
         return rejectWithValue({ message: 'No token found' });
       }
 
-      const formData = createUpdateFormData(updateData);
-      const response = await api.post('/project-updates', formData, {
+      // Map frontend field names to backend expected field names
+      const payload = {
+        contract_id: updateData.contract_id || updateData.contractId,
+        job_id: updateData.job_id || updateData.jobId,
+        client_id: updateData.client_id || updateData.clientId,
+        freelancer_id: updateData.freelancer_id || updateData.freelancerId,
+        title: updateData.title,
+        description: updateData.description || '',
+        update_type: updateData.update_type || updateData.updateType || 'progress',
+        status: updateData.status || 'pending',
+        delivery_status: updateData.delivery_status || updateData.deliveryStatus || 'not_submitted',
+        progress: updateData.progress || 0,
+        priority: updateData.priority || 'normal',
+        freelancer_comment: updateData.freelancer_comment || updateData.freelancerComment || null,
+        client_comment: updateData.client_comment || updateData.clientComment || null,
+        due_date: updateData.due_date || updateData.dueDate || null,
+        completed_at: updateData.completed_at || updateData.completedAt || null,
+        created_by: updateData.created_by || updateData.createdBy || updateData.client_id || updateData.clientId,
+        created_by_role: updateData.created_by_role || updateData.createdByRole || 'client',
+        last_updated_by: updateData.last_updated_by || updateData.lastUpdatedBy || null,
+      };
+
+      // Remove undefined or null values
+      Object.keys(payload).forEach(key => {
+        if (payload[key] === undefined || payload[key] === null) {
+          delete payload[key];
+        }
+      });
+
+      console.log('Creating project update with payload:', payload);
+
+      const response = await api.post('/project-updates', payload, {
         headers: {
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
       
@@ -432,10 +463,12 @@ const projectUpdateSlice = createSlice({
       .addCase(createProjectUpdate.fulfilled, (state, action) => {
         state.updates.isLoading = false;
         state.createSuccess = true;
-        const update = action.payload.projectUpdate;
-        state.updates.list.unshift(update);
-        state.updates.contractUpdates.unshift(update);
-        state.updates.totalCount += 1;
+        const update = action.payload.projectUpdate || action.payload;
+        if (update) {
+          state.updates.list.unshift(update);
+          state.updates.contractUpdates.unshift(update);
+          state.updates.totalCount += 1;
+        }
       })
       .addCase(createProjectUpdate.rejected, (state, action) => {
         state.updates.isLoading = false;
@@ -450,10 +483,10 @@ const projectUpdateSlice = createSlice({
       })
       .addCase(getContractUpdates.fulfilled, (state, action) => {
         state.updates.isLoading = false;
-        state.updates.contractUpdates = action.payload.projectUpdates;
-        state.updates.totalCount = action.payload.totalUpdates;
-        state.updates.totalPages = action.payload.totalPages;
-        state.updates.currentPage = action.payload.currentPage;
+        state.updates.contractUpdates = action.payload.projectUpdates || action.payload.updates || [];
+        state.updates.totalCount = action.payload.totalUpdates || action.payload.total || 0;
+        state.updates.totalPages = action.payload.totalPages || 1;
+        state.updates.currentPage = action.payload.currentPage || 1;
       })
       .addCase(getContractUpdates.rejected, (state, action) => {
         state.updates.isLoading = false;
@@ -467,10 +500,10 @@ const projectUpdateSlice = createSlice({
       })
       .addCase(getJobUpdates.fulfilled, (state, action) => {
         state.updates.isLoading = false;
-        state.updates.jobUpdates = action.payload.projectUpdates;
-        state.updates.totalCount = action.payload.totalUpdates;
-        state.updates.totalPages = action.payload.totalPages;
-        state.updates.currentPage = action.payload.currentPage;
+        state.updates.jobUpdates = action.payload.projectUpdates || action.payload.updates || [];
+        state.updates.totalCount = action.payload.totalUpdates || action.payload.total || 0;
+        state.updates.totalPages = action.payload.totalPages || 1;
+        state.updates.currentPage = action.payload.currentPage || 1;
       })
       .addCase(getJobUpdates.rejected, (state, action) => {
         state.updates.isLoading = false;
@@ -484,10 +517,10 @@ const projectUpdateSlice = createSlice({
       })
       .addCase(getFreelancerUpdates.fulfilled, (state, action) => {
         state.updates.isLoading = false;
-        state.updates.freelancerUpdates = action.payload.projectUpdates;
-        state.updates.totalCount = action.payload.totalUpdates;
-        state.updates.totalPages = action.payload.totalPages;
-        state.updates.currentPage = action.payload.currentPage;
+        state.updates.freelancerUpdates = action.payload.projectUpdates || action.payload.updates || [];
+        state.updates.totalCount = action.payload.totalUpdates || action.payload.total || 0;
+        state.updates.totalPages = action.payload.totalPages || 1;
+        state.updates.currentPage = action.payload.currentPage || 1;
       })
       .addCase(getFreelancerUpdates.rejected, (state, action) => {
         state.updates.isLoading = false;
@@ -501,10 +534,10 @@ const projectUpdateSlice = createSlice({
       })
       .addCase(getClientUpdates.fulfilled, (state, action) => {
         state.updates.isLoading = false;
-        state.updates.clientUpdates = action.payload.projectUpdates;
-        state.updates.totalCount = action.payload.totalUpdates;
-        state.updates.totalPages = action.payload.totalPages;
-        state.updates.currentPage = action.payload.currentPage;
+        state.updates.clientUpdates = action.payload.projectUpdates || action.payload.updates || [];
+        state.updates.totalCount = action.payload.totalUpdates || action.payload.total || 0;
+        state.updates.totalPages = action.payload.totalPages || 1;
+        state.updates.currentPage = action.payload.currentPage || 1;
       })
       .addCase(getClientUpdates.rejected, (state, action) => {
         state.updates.isLoading = false;
@@ -518,7 +551,7 @@ const projectUpdateSlice = createSlice({
       })
       .addCase(getProjectUpdateById.fulfilled, (state, action) => {
         state.updates.isLoading = false;
-        state.updates.selectedUpdate = action.payload.projectUpdate;
+        state.updates.selectedUpdate = action.payload.projectUpdate || action.payload;
       })
       .addCase(getProjectUpdateById.rejected, (state, action) => {
         state.updates.isLoading = false;
@@ -534,7 +567,7 @@ const projectUpdateSlice = createSlice({
       .addCase(updateProjectUpdate.fulfilled, (state, action) => {
         state.updates.isLoading = false;
         state.updateSuccess = true;
-        const update = action.payload.projectUpdate;
+        const update = action.payload.projectUpdate || action.payload;
         state.updates.selectedUpdate = update;
         
         const updateList = (list) => {
@@ -565,7 +598,7 @@ const projectUpdateSlice = createSlice({
       .addCase(updateProjectUpdateStatus.fulfilled, (state, action) => {
         state.updates.isLoading = false;
         state.statusUpdateSuccess = true;
-        const update = action.payload.projectUpdate;
+        const update = action.payload.projectUpdate || action.payload;
         state.updates.selectedUpdate = update;
         
         const updateList = (list) => {
@@ -597,7 +630,7 @@ const projectUpdateSlice = createSlice({
       .addCase(updateDeliveryStatus.fulfilled, (state, action) => {
         state.updates.isLoading = false;
         state.deliveryUpdateSuccess = true;
-        const update = action.payload.projectUpdate;
+        const update = action.payload.projectUpdate || action.payload;
         state.updates.selectedUpdate = update;
         
         const updateList = (list) => {

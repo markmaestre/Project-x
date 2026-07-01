@@ -31,7 +31,7 @@ const attachmentSchema = new mongoose.Schema(
 
     uploaded_by: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Client",  // Changed from "User" to "Client"
       required: true,
     },
 
@@ -59,28 +59,24 @@ const projectUpdateSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Contract",
       required: true,
-      // REMOVED: index: true
     },
 
     job_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Job",
       required: true,
-      // REMOVED: index: true
     },
 
     client_id: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Client",
+      ref: "Client",  // Changed from "User" to "Client"
       required: true,
-      // REMOVED: index: true
     },
 
     freelancer_id: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Freelancer",
+      ref: "Freelancer",  // Changed from "User" to "Freelancer"
       required: true,
-      // REMOVED: index: true
     },
 
     // =====================
@@ -195,7 +191,7 @@ const projectUpdateSchema = new mongoose.Schema(
 
     created_by: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Client",  // Changed from "User" to "Client" (you might want to make this dynamic)
       required: true,
     },
 
@@ -207,7 +203,7 @@ const projectUpdateSchema = new mongoose.Schema(
 
     last_updated_by: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Client",  // Changed from "User" to "Client"
       default: null,
     },
   },

@@ -746,7 +746,7 @@ export default function ClientScreen({ onNavigate }) {
                       </Text>
                     </View>
                     <View style={styles.viewDetailChip}>
-                      <Text style={styles.viewDetailText}>View details</Text>
+                      <Text style={styles.viewDetailText}>View Applicants</Text>
                       <Ionicons name="arrow-forward" size={12} color={BLUE} />
                     </View>
                   </View>
@@ -818,7 +818,7 @@ export default function ClientScreen({ onNavigate }) {
           visible={sheetVisible}
           onClose={() => setSheetVisible(false)}
           onEditJob={(job) => onNavigate('PostJob', { jobId: job._id })}
-          onViewApplicants={(job) => onNavigate('Mypostings', { jobId: job._id })}
+          onViewApplicants={(job) => onNavigate('Applications', { jobId: job._id })}
           applications={applications}
         />
       </View>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Animated,
   RefreshControl,
   Pressable,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -91,6 +92,26 @@ export default function ClientProfile({ onNavigate }) {
 
   const slideAnim   = useRef(new Animated.Value(0)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
+
+  // ── Handle hardware back button ──────────────────────────────────────────
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // If drawer is open, close it first
+      if (drawerOpen) {
+        closeDrawer();
+        return true;
+      }
+      
+      // Otherwise navigate back to dashboard
+      if (onNavigate) {
+        onNavigate('ClientDashboard');
+        return true;
+      }
+      return false;
+    });
+
+    return () => backHandler.remove();
+  }, [drawerOpen, onNavigate]);
 
   // ── Drawer ─────────────────────────────────────────────────────────────────
   const openDrawer = () => {
