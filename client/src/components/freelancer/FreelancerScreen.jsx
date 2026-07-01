@@ -9,18 +9,19 @@ import {
   Image,
   RefreshControl,
   ActivityIndicator,
-  TextInput,
   Modal,
   Dimensions,
   FlatList,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import * as DocumentPicker from 'expo-document-picker';
-import { Directory, Paths } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system';
+import { File, Directory } from 'expo-file-system';
 import { logout } from '../../Redux/slices/authSlice';
-import { getFreelancerJobs } from '../../Redux/slices/jobSlice';
+import { getFreelancerJobs, getJobById } from '../../Redux/slices/jobSlice';
 import { getFreelancerApplications, applyForJob } from '../../Redux/slices/applicationSlice';
 
 // ── Vantara Design tokens ──────────────────────────────────────────────────────────
@@ -29,9 +30,12 @@ const NAVY2      = '#0D2151';
 const BLUE       = '#0055A5';
 const BLUE_MD    = '#0073CF';
 const BLUE_LT    = '#1E90FF';
+const BLUE_SOFT  = '#E2EAF4';
 const GOLD       = '#C89520';
 const GOLD_LT    = '#E8B84B';
 const GOLD_DK    = '#8A6410';
+const GOLD_SOFT  = '#FDF3D7';
+const GOLD_MID   = '#E6C56A';
 const SILVER     = '#8899B0';
 const SILVER2    = '#B8C8D8';
 const WHITE      = '#FFFFFF';
@@ -50,32 +54,7 @@ const ORANGE     = '#F97316';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-// ── CONSTANTS (MUST BE DEFINED BEFORE COMPONENTS THAT USE THEM) ──────────────
-const PHILIPPINE_LOCATIONS = [
-  'Manila', 'Quezon City', 'Makati', 'Taguig', 'Pasig', 'Mandaluyong', 'Parañaque',
-  'Las Piñas', 'Muntinlupa', 'Marikina', 'Pasay', 'Caloocan', 'Malabon', 'Navotas',
-  'Valenzuela', 'San Juan', 'Pateros',
-  'Angeles City', 'Baguio City', 'Olongapo City', 'San Fernando (Pampanga)', 'Tarlac City',
-  'Cabanatuan City', 'Batangas City', 'Lipa City', 'Lucena City', 'Antipolo', 'Cainta',
-  'Binangonan', 'Santa Rosa', 'Biñan', 'Cabuyao', 'San Pedro', 'Calamba', 'Los Baños',
-  'Dagupan City', 'Urdaneta City', 'San Carlos (Pangasinan)', 'Vigan City', 'Laoag City',
-  'Naga City', 'Legazpi City', 'Tabaco City', 'Sorsogon City', 'Baler', 'Tuguegarao',
-  'Santiago City', 'Cauayan City', 'Ilagan City', 'Puerto Princesa City', 'Calapan City',
-  'Nasugbu', 'Taal', 'Tagaytay City', 'Silang', 'Dasmariñas', 'Imus', 'Bacoor',
-  'General Trias', 'Trece Martires City', 'Tanauan', 'Santo Tomas',
-  'Cebu City', 'Mandaue City', 'Lapu-Lapu City', 'Toledo City', 'Danao City', 'Talisay (Cebu)',
-  'Bacolod City', 'Silay City', 'Talisay (Negros Occidental)', 'Kabankalan City',
-  'Iloilo City', 'Passi City', 'Roxas City', 'Kalibo', 'San Jose (Antique)',
-  'Tacloban City', 'Ormoc City', 'Baybay City', 'Catbalogan City', 'Calbayog City',
-  'Tagbilaran City', 'Dumaguete City', 'Bais City', 'Bayawan City', 'Siquijor',
-  'Davao City', 'Tagum City', 'Panabo City', 'Digos City', 'Mati City', 'Samal Island',
-  'General Santos City', 'Koronadal City', 'Tacurong City', 'Kidapawan City',
-  'Cagayan de Oro City', 'Iligan City', 'Oroquieta City', 'Ozamiz City', 'Tangub City',
-  'Zamboanga City', 'Pagadian City', 'Dipolog City', 'Dapitan City',
-  'Butuan City', 'Surigao City', 'Tandag City', 'Bislig City', 'Bayugan City',
-  'Cotabato City', 'Marawi City', 'Jolo', 'Bongao',
-];
-
+// ── CONSTANTS ──────────────────────────────────────────────────────────────────
 const EDUCATION_LEVELS = [
   'High School Diploma',
   'Associate Degree',
@@ -92,57 +71,129 @@ const formatLocation = (location) => {
   if (!location) return null;
   if (typeof location === 'string') return location;
   const parts = [];
-  if (location.specific_area) parts.push(location.specific_area);
   if (location.city) parts.push(location.city);
-  if (location.state) parts.push(location.state);
+  if (location.province) parts.push(location.province);
   if (location.country && location.country !== 'Philippines') parts.push(location.country);
   return parts.length > 0 ? parts.join(', ') : null;
 };
 
-const formatJobType = (type) => ({
-  full_time: 'Full Time', part_time: 'Part Time', contract: 'Contract',
-  one_time: 'One Time', internship: 'Internship', freelance: 'Freelance'
-}[type] || type);
+const formatJobType = (type) => {
+  const types = {
+    full_time: 'Full Time', 
+    part_time: 'Part Time', 
+    project: 'Project',
+    one_time: 'One Time', 
+    long_term: 'Long Term',
+  };
+  return types[type] || type;
+};
 
-const formatWorkSetup = (setup) => ({ remote: 'Remote', onsite: 'Onsite', hybrid: 'Hybrid' }[setup] || setup);
+const formatWorkSetup = (setup) => {
+  const setups = { remote: 'Remote', onsite: 'Onsite', hybrid: 'Hybrid' };
+  return setups[setup] || setup;
+};
 
-const formatPayInformation = (payInfo, budgetAmount) => {
-  if (payInfo?.salary_range?.min || payInfo?.salary_range?.max) {
-    const { min, max, currency = 'PHP' } = payInfo.salary_range;
-    const freq = payInfo.payment_frequency === 'one-time' ? 'one-time' : `per ${payInfo.payment_frequency || 'month'}`;
-    if (min && max) return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()} ${freq}`;
-    if (min) return `${currency} ${min.toLocaleString()}+ ${freq}`;
+const formatExperienceLevel = (level) => {
+  const levels = {
+    entry: 'Entry',
+    intermediate: 'Intermediate',
+    expert: 'Expert',
+    senior: 'Senior',
+  };
+  return levels[level] || level;
+};
+
+const formatBudget = (budget) => {
+  if (!budget) return null;
+  const { min, max, currency = 'PHP', type } = budget;
+  if (min && max) {
+    return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()} (${type === 'hourly' ? 'per hour' : 'fixed'})`;
   }
-  if (budgetAmount) return `₱${budgetAmount.toLocaleString()}`;
+  if (min) {
+    return `${currency} ${min.toLocaleString()}+ (${type === 'hourly' ? 'per hour' : 'fixed'})`;
+  }
+  return null;
+};
+
+const formatDuration = (timeline) => {
+  if (!timeline) return null;
+  const { duration_value, duration_unit } = timeline;
+  if (duration_value && duration_unit) {
+    return `${duration_value} ${duration_unit}`;
+  }
   return null;
 };
 
 const formatBudgetForCard = (job) => {
-  if (job.pay_information?.salary_range) {
-    const { min, max, currency = 'PHP' } = job.pay_information.salary_range;
+  if (job.budget) {
+    const { min, max, currency = 'PHP' } = job.budget;
     if (min && max) return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()}`;
     if (min) return `${currency} ${min.toLocaleString()}+`;
   }
-  if (job.budget_amount) return `₱${job.budget_amount.toLocaleString()}`;
   return null;
+};
+
+const formatFullDate = (date) => {
+  if (!date) return null;
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('en-PH', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch (error) {
+    return null;
+  }
+};
+
+const getTimeAgo = (date) => {
+  if (!date) return null;
+  try {
+    const now = new Date();
+    const past = new Date(date);
+    if (isNaN(past.getTime())) return null;
+    const diffInSeconds = Math.floor((now - past) / 1000);
+    if (diffInSeconds < 60) return 'Just now';
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays}d ago`;
+    const diffInWeeks = Math.floor(diffInDays / 7);
+    if (diffInWeeks < 4) return `${diffInWeeks}w ago`;
+    const diffInMonths = Math.floor(diffInDays / 30);
+    if (diffInMonths < 12) return `${diffInMonths}mo ago`;
+    const diffInYears = Math.floor(diffInDays / 365);
+    return `${diffInYears}y ago`;
+  } catch (error) {
+    return null;
+  }
 };
 
 // ── Skeleton Card ──────────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
     <View style={styles.jobCard}>
-      <View style={styles.jobCardTop}>
-        <View style={[styles.skeletonLine, { width: 60, height: 22, borderRadius: 999 }]} />
-        <View style={[styles.skeletonLine, { width: 20, height: 20, borderRadius: 6 }]} />
+      <View style={styles.jobCardContent}>
+        <View style={styles.jobCardTop}>
+          <View style={[styles.skeletonLine, { width: 60, height: 22, borderRadius: 999 }]} />
+          <View style={[styles.skeletonLine, { width: 20, height: 20, borderRadius: 6 }]} />
+        </View>
+        <View style={[styles.skeletonLine, { width: '75%', height: 17, marginBottom: 8 }]} />
+        <View style={[styles.skeletonLine, { width: '50%', height: 13, marginBottom: 10 }]} />
+        <View style={[styles.skeletonLine, { width: '40%', height: 12, marginBottom: 12 }]} />
+        <View style={[styles.skeletonLine, { width: 110, height: 28, borderRadius: 20, marginBottom: 12 }]} />
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <View style={[styles.skeletonLine, { width: 64, height: 28, borderRadius: 999 }]} />
+          <View style={[styles.skeletonLine, { width: 72, height: 28, borderRadius: 999 }]} />
+          <View style={[styles.skeletonLine, { width: 56, height: 28, borderRadius: 999 }]} />
+        </View>
       </View>
-      <View style={[styles.skeletonLine, { width: '75%', height: 17, marginBottom: 8 }]} />
-      <View style={[styles.skeletonLine, { width: '50%', height: 13, marginBottom: 10 }]} />
-      <View style={[styles.skeletonLine, { width: '40%', height: 12, marginBottom: 12 }]} />
-      <View style={[styles.skeletonLine, { width: 110, height: 28, borderRadius: 20, marginBottom: 12 }]} />
-      <View style={{ flexDirection: 'row', gap: 6 }}>
-        <View style={[styles.skeletonLine, { width: 64, height: 28, borderRadius: 999 }]} />
-        <View style={[styles.skeletonLine, { width: 72, height: 28, borderRadius: 999 }]} />
-        <View style={[styles.skeletonLine, { width: 56, height: 28, borderRadius: 999 }]} />
+      <View style={styles.saveButton}>
+        <View style={[styles.skeletonLine, { width: 24, height: 24, borderRadius: 6 }]} />
       </View>
     </View>
   );
@@ -153,22 +204,35 @@ function ClientProfileModal({ visible, client, onClose }) {
   if (!client) return null;
 
   const getInitials = () => {
-    const first = client.first_name?.[0] || '';
-    const last = client.last_name?.[0] || '';
-    return `${first}${last}`.toUpperCase() || 'C';
+    if (client.first_name && client.last_name) {
+      return `${client.first_name[0]}${client.last_name[0]}`.toUpperCase();
+    }
+    if (client.company_name) {
+      return client.company_name.substring(0, 2).toUpperCase();
+    }
+    if (client.business_name) {
+      return client.business_name.substring(0, 2).toUpperCase();
+    }
+    if (client.name) {
+      return client.name.substring(0, 2).toUpperCase();
+    }
+    return 'C';
   };
 
   const getFullName = () => {
-    const first = client.first_name || '';
-    const last = client.last_name || '';
-    return `${first} ${last}`.trim() || client.company_name || client.name || 'Client';
+    if (client.first_name && client.last_name) {
+      return `${client.first_name} ${client.last_name}`;
+    }
+    if (client.company_name) return client.company_name;
+    if (client.business_name) return client.business_name;
+    if (client.name) return client.name;
+    return 'Client';
   };
 
   const getCompanyName = () => {
     return client.company_name || client.business_name || client.name || 'Independent Client';
   };
 
-  // Safe rating display - check if rating exists and is a number
   const renderRating = () => {
     const rating = client.rating;
     if (!rating || typeof rating !== 'number') return null;
@@ -183,7 +247,6 @@ function ClientProfileModal({ visible, client, onClose }) {
     if (hasHalfStar) {
       stars.push(<Ionicons key="half-star" name="star-half" size={16} color={GOLD} />);
     }
-    // Fill remaining stars
     const remaining = 5 - Math.ceil(rating);
     for (let i = 0; i < remaining; i++) {
       stars.push(<Ionicons key={`star-empty-${i}`} name="star-outline" size={16} color={GOLD} />);
@@ -197,8 +260,62 @@ function ClientProfileModal({ visible, client, onClose }) {
     );
   };
 
-  // Check if we have any client details to show
-  const hasDetails = client.email_address || client.phone_number || client.location || client.industry || client.jobs_posted !== undefined || client.bio_about_me || (client.skills && client.skills.length > 0);
+  const hasDetails = 
+    client.email_address || 
+    client.email ||
+    client.phone_number || 
+    client.contact_number ||
+    client.location || 
+    client.industry || 
+    client.bio_about_me || 
+    client.about ||
+    client.bio ||
+    client.description ||
+    (client.skills && client.skills.length > 0) ||
+    client.website ||
+    client.address ||
+    client.city ||
+    client.province ||
+    client.country;
+
+  const getLocationDisplay = () => {
+    if (typeof client.location === 'string') return client.location;
+    if (client.location?.city) {
+      const parts = [];
+      if (client.location.city) parts.push(client.location.city);
+      if (client.location.province) parts.push(client.location.province);
+      if (client.location.country) parts.push(client.location.country);
+      return parts.join(', ');
+    }
+    if (client.city || client.province || client.country) {
+      const parts = [];
+      if (client.city) parts.push(client.city);
+      if (client.province) parts.push(client.province);
+      if (client.country) parts.push(client.country);
+      return parts.join(', ');
+    }
+    return null;
+  };
+
+  const locationDisplay = getLocationDisplay();
+  const getEmail = () => client.email_address || client.email || null;
+  const getPhone = () => client.phone_number || client.contact_number || client.phone || null;
+  const getBio = () => client.bio_about_me || client.about || client.bio || client.description || null;
+  
+  const getMemberSince = () => {
+    const date = client.member_since || client.createdAt || client.created_at || client.join_date;
+    if (date) {
+      try {
+        return new Date(date).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' });
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const getIndustry = () => client.industry || client.industry_type || client.business_type || null;
+  const getWebsite = () => client.website || client.website_url || client.web_url || null;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -224,72 +341,77 @@ function ClientProfileModal({ visible, client, onClose }) {
           </View>
 
           <ScrollView style={clientProfileStyles.body} showsVerticalScrollIndicator={false}>
-            {client.bio_about_me && (
+            {getBio() && (
               <View style={clientProfileStyles.section}>
                 <Text style={clientProfileStyles.sectionLabel}>About</Text>
-                <Text style={clientProfileStyles.bioText}>{client.bio_about_me}</Text>
+                <Text style={clientProfileStyles.bioText}>{getBio()}</Text>
               </View>
             )}
 
             <View style={clientProfileStyles.section}>
               <Text style={clientProfileStyles.sectionLabel}>Contact & Details</Text>
               <View style={clientProfileStyles.detailGrid}>
-                {client.email_address && (
+                {getEmail() && (
                   <View style={clientProfileStyles.detailItem}>
                     <Ionicons name="mail-outline" size={16} color={BLUE} />
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={clientProfileStyles.detailLabel}>Email</Text>
-                      <Text style={clientProfileStyles.detailValue}>{client.email_address}</Text>
+                      <Text style={clientProfileStyles.detailValue}>{getEmail()}</Text>
                     </View>
                   </View>
                 )}
-                {client.phone_number && (
+                {getPhone() && (
                   <View style={clientProfileStyles.detailItem}>
                     <Ionicons name="call-outline" size={16} color={BLUE} />
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={clientProfileStyles.detailLabel}>Phone</Text>
-                      <Text style={clientProfileStyles.detailValue}>{client.phone_number}</Text>
+                      <Text style={clientProfileStyles.detailValue}>{getPhone()}</Text>
                     </View>
                   </View>
                 )}
-                {client.location && (
+                {locationDisplay && (
                   <View style={clientProfileStyles.detailItem}>
                     <Ionicons name="location-outline" size={16} color={BLUE} />
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={clientProfileStyles.detailLabel}>Location</Text>
-                      <Text style={clientProfileStyles.detailValue}>
-                        {typeof client.location === 'string' 
-                          ? client.location 
-                          : client.location?.city || 'Not specified'}
-                      </Text>
+                      <Text style={clientProfileStyles.detailValue}>{locationDisplay}</Text>
                     </View>
                   </View>
                 )}
-                {client.industry && (
+                {getIndustry() && (
                   <View style={clientProfileStyles.detailItem}>
                     <Ionicons name="business-outline" size={16} color={BLUE} />
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={clientProfileStyles.detailLabel}>Industry</Text>
-                      <Text style={clientProfileStyles.detailValue}>{client.industry}</Text>
+                      <Text style={clientProfileStyles.detailValue}>{getIndustry()}</Text>
                     </View>
                   </View>
                 )}
-                {client.jobs_posted !== undefined && (
+                {getWebsite() && (
                   <View style={clientProfileStyles.detailItem}>
-                    <Ionicons name="briefcase-outline" size={16} color={BLUE} />
-                    <View>
-                      <Text style={clientProfileStyles.detailLabel}>Jobs Posted</Text>
-                      <Text style={clientProfileStyles.detailValue}>{client.jobs_posted || 0}</Text>
+                    <Ionicons name="globe-outline" size={16} color={BLUE} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={clientProfileStyles.detailLabel}>Website</Text>
+                      <Text style={clientProfileStyles.detailValue}>{getWebsite()}</Text>
                     </View>
                   </View>
                 )}
-                {client.member_since && (
+                {getMemberSince() && (
                   <View style={clientProfileStyles.detailItem}>
                     <Ionicons name="calendar-outline" size={16} color={BLUE} />
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={clientProfileStyles.detailLabel}>Member Since</Text>
-                      <Text style={clientProfileStyles.detailValue}>
-                        {new Date(client.member_since).toLocaleDateString('en-PH', { month: 'short', year: 'numeric' })}
+                      <Text style={clientProfileStyles.detailValue}>{getMemberSince()}</Text>
+                    </View>
+                  </View>
+                )}
+                {client.verification_status && (
+                  <View style={clientProfileStyles.detailItem}>
+                    <Ionicons name="shield-checkmark-outline" size={16} color={GREEN} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={clientProfileStyles.detailLabel}>Verification</Text>
+                      <Text style={[clientProfileStyles.detailValue, { color: GREEN }]}>
+                        {client.verification_status === 'verified' ? 'Verified ✓' : 'Unverified'}
                       </Text>
                     </View>
                   </View>
@@ -304,6 +426,20 @@ function ClientProfileModal({ visible, client, onClose }) {
                   {client.skills.map((skill, index) => (
                     <View key={index} style={clientProfileStyles.skillTag}>
                       <Text style={clientProfileStyles.skillTagText}>{skill}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {client.recent_projects && client.recent_projects.length > 0 && (
+              <View style={clientProfileStyles.section}>
+                <Text style={clientProfileStyles.sectionLabel}>Recent Projects</Text>
+                <View style={clientProfileStyles.projectContainer}>
+                  {client.recent_projects.slice(0, 3).map((project, index) => (
+                    <View key={index} style={clientProfileStyles.projectItem}>
+                      <Ionicons name="folder-outline" size={16} color={BLUE} />
+                      <Text style={clientProfileStyles.projectText}>{project}</Text>
                     </View>
                   ))}
                 </View>
@@ -326,65 +462,7 @@ function ClientProfileModal({ visible, client, onClose }) {
   );
 }
 
-// ── Bottom Tab Bar ─────────────────────────────────────────────────────────────────
-function BottomTabBar({ activeTab, onTabPress }) {
-  const tabs = [
-    { key: 'Home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
-    { key: 'Messages', label: 'Messages', icon: 'chatbubble-outline', activeIcon: 'chatbubble' },
-    { key: 'MyJobs', label: 'My Jobs', icon: 'briefcase-outline', activeIcon: 'briefcase' },
-    { key: 'MyApplications', label: 'Applications', icon: 'checkmark-circle-outline', activeIcon: 'checkmark-circle' },
-    { key: 'Profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
-  ];
-
-  return (
-    <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
-      <View style={styles.tabBar}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.key;
-          const isMyJobs = tab.key === 'MyJobs';
-          
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={[
-                styles.tabItem,
-                isMyJobs && styles.tabItemCenter,
-              ]}
-              onPress={() => onTabPress(tab.key)}
-              activeOpacity={0.7}
-            >
-              {isMyJobs ? (
-                <View style={[styles.centerButton, isActive && styles.centerButtonActive]}>
-                  <Ionicons
-                    name={isActive ? tab.activeIcon : tab.icon}
-                    size={26}
-                    color={isActive ? WHITE : BLUE}
-                  />
-                </View>
-              ) : (
-                <>
-                  <View style={styles.tabIconWrap}>
-                    <Ionicons
-                      name={isActive ? tab.activeIcon : tab.icon}
-                      size={22}
-                      color={isActive ? BLUE : TEXT_LIGHT}
-                    />
-                  </View>
-                  <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-                    {tab.label}
-                  </Text>
-                  {isActive && <View style={styles.tabIndicator} />}
-                </>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </SafeAreaView>
-  );
-}
-
-// ── Status Modals ─────────────────────────────────────────────────────────────────
+// ── Application Status Modal ─────────────────────────────────────────────────────
 function ApplicationStatusModal({ visible, jobTitle, onClose }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -464,25 +542,44 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
   });
   const [showExperienceForm, setShowExperienceForm] = useState(false);
   const [editingExperienceIndex, setEditingExperienceIndex] = useState(null);
+  const [isCheckingCV, setIsCheckingCV] = useState(false);
 
+  // Updated useEffect with proper URI handling
   useEffect(() => {
     if (visible && job) {
       const checkExistingCV = async () => {
+        setIsCheckingCV(true);
         try {
-          const cvDirectory = new Directory(Paths.document, 'cvs');
-          if (cvDirectory.exists) {
-            const files = cvDirectory.list();
+          // Use FileSystem.documentDirectory which returns a proper URI
+          const cvDirPath = FileSystem.documentDirectory + 'cvs/';
+          
+          // Create directory with proper URI
+          const cvDir = new Directory(cvDirPath);
+          
+          // Check if directory exists
+          const dirExists = await cvDir.exists();
+          
+          if (dirExists) {
+            // List files in directory
+            const files = await cvDir.list();
             const cvFiles = files.filter(file => 
               file.name.endsWith('.pdf') || 
               file.name.endsWith('.doc') || 
               file.name.endsWith('.docx')
             );
+            
             if (cvFiles.length > 0) {
               const latestCV = cvFiles[0];
+              const filePath = cvDirPath + latestCV.name;
+              
+              // Create file with proper URI
+              const file = new File(filePath);
+              const fileInfo = await file.getInfo();
+              
               setExistingCVInfo({
                 name: latestCV.name,
-                uri: latestCV.uri,
-                size: latestCV.size
+                uri: filePath,
+                size: fileInfo.size || 0
               });
               setUseExistingCV(true);
               setResumeFile(null);
@@ -498,11 +595,20 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
           console.error('Error checking existing CV:', error);
           setExistingCVInfo(null);
           setUseExistingCV(false);
+        } finally {
+          setIsCheckingCV(false);
         }
       };
       
       checkExistingCV();
-      setProposedRate(job.budget_amount?.toString() || '');
+      
+      // Set proposed rate from job budget
+      if (job.budget?.min) {
+        setProposedRate(job.budget.min.toString());
+      } else if (job.budget_amount) {
+        setProposedRate(job.budget_amount.toString());
+      }
+      
       setCurrentStep(1);
       setCoverLetter('');
       setEducationLevel('');
@@ -632,7 +738,7 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
       formData.append('proposed_rate', parseFloat(proposedRate).toString());
     }
     
-    // Handle resume upload properly for database storage
+    // Handle resume upload
     if (useExistingCV && existingCVInfo) {
       const fileExt = existingCVInfo.name.split('.').pop().toLowerCase();
       let mimeType = 'application/pdf';
@@ -714,14 +820,19 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
           <View style={applyStyles.modalContentWrapper}>
             <View style={applyStyles.jobInfoHeader}>
               <Text style={applyStyles.applyJobTitle}>{job?.title}</Text>
-              <Text style={applyStyles.applyJobCompany}>{job?.client_id?.company_name || 'Client'}</Text>
+              <Text style={applyStyles.applyJobCompany}>{job?.client_id?.company_name || job?.client_id?.name || 'Client'}</Text>
             </View>
             
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={applyStyles.stepContent}>
               {currentStep === 1 && (
                 <>
                   <Text style={applyStyles.applyLabel}>Resume/CV *</Text>
-                  {existingCVInfo && !resumeFile && (
+                  {isCheckingCV ? (
+                    <View style={applyStyles.uploadBtn}>
+                      <ActivityIndicator size="small" color={BLUE} />
+                      <Text style={applyStyles.uploadBtnText}>Checking for existing CV...</Text>
+                    </View>
+                  ) : existingCVInfo && !resumeFile ? (
                     <View style={applyStyles.existingCVContainer}>
                       <TouchableOpacity 
                         style={[applyStyles.existingCVOption, useExistingCV && applyStyles.existingCVOptionActive]}
@@ -743,8 +854,7 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
                         {!useExistingCV && <Ionicons name="checkmark-circle" size={20} color={BLUE} />}
                       </TouchableOpacity>
                     </View>
-                  )}
-                  {(!existingCVInfo || !useExistingCV) && (
+                  ) : (!existingCVInfo || !useExistingCV) && (
                     <>
                       {!resumeFile ? (
                         <TouchableOpacity style={applyStyles.uploadBtn} onPress={pickResume}>
@@ -918,249 +1028,486 @@ function ApplicationModal({ visible, job, onClose, onSubmit, submitting, userPro
   );
 }
 
-// ── Location Search ────────────────────────────────────────────────────────────
-function LocationSearchInput({ value, onChangeText, onSelectLocation, placeholder }) {
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
+// ── Job Detail Modal ──────────────────────────────────────────────────────────
+function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onApply, hasApplied }) {
+  if (!job && !isLoading) return null;
 
-  const handleTextChange = (text) => {
-    onChangeText(text);
-    if (text.length > 1) {
-      const filtered = PHILIPPINE_LOCATIONS.filter(loc =>
-        loc.toLowerCase().includes(text.toLowerCase())
-      ).slice(0, 5);
-      setSuggestions(filtered);
-      setShowSuggestions(true);
-    } else {
-      setSuggestions([]);
-      setShowSuggestions(false);
+  const locationText = formatLocation(job?.location);
+  const budgetText = formatBudget(job?.budget);
+  const durationText = formatDuration(job?.timeline);
+  const experienceText = formatExperienceLevel(job?.experience_level);
+  const skills = job?.required_skills || [];
+  const tags = job?.tags || [];
+  const client = job?.client_id || {};
+  const timeAgo = getTimeAgo(job?.createdAt);
+  const fullDate = formatFullDate(job?.createdAt);
+
+  const getClientName = () => {
+    if (client.company_name) return client.company_name;
+    if (client.business_name) return client.business_name;
+    if (client.first_name && client.last_name) {
+      return `${client.first_name} ${client.last_name}`;
+    }
+    if (client.name) return client.name;
+    return 'Client';
+  };
+
+  const getClientInitials = () => {
+    if (client.first_name && client.last_name) {
+      return `${client.first_name[0]}${client.last_name[0]}`.toUpperCase();
+    }
+    if (client.company_name) {
+      return client.company_name.substring(0, 2).toUpperCase();
+    }
+    if (client.business_name) {
+      return client.business_name.substring(0, 2).toUpperCase();
+    }
+    return 'C';
+  };
+
+  const getClientEmail = () => {
+    return client.email_address || client.email || null;
+  };
+
+  const getClientLocation = () => {
+    if (typeof client.location === 'string') return client.location;
+    if (client.location?.city) {
+      const parts = [];
+      if (client.location.city) parts.push(client.location.city);
+      if (client.location.province) parts.push(client.location.province);
+      if (client.location.country) parts.push(client.location.country);
+      return parts.join(', ');
+    }
+    if (client.city || client.province || client.country) {
+      const parts = [];
+      if (client.city) parts.push(client.city);
+      if (client.province) parts.push(client.province);
+      if (client.country) parts.push(client.country);
+      return parts.join(', ');
+    }
+    return null;
+  };
+
+  const handleApply = () => {
+    if (onApply && !hasApplied) {
+      onApply(job);
     }
   };
 
-  const selectLocation = (location) => {
-    onChangeText(location);
-    onSelectLocation(location);
-    setShowSuggestions(false);
-  };
-
-  return (
-    <View style={styles.locationInputContainer}>
-      <View style={styles.searchSide}>
-        <Ionicons name="location-outline" size={18} color={TEXT_MUTED} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder={placeholder || "City or area..."}
-          placeholderTextColor={TEXT_LIGHT}
-          value={value}
-          onChangeText={handleTextChange}
-          returnKeyType="search"
-          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-          onFocus={() => value.length > 1 && setShowSuggestions(true)}
-        />
-        {value !== '' && (
-          <TouchableOpacity onPress={() => { onChangeText(''); onSelectLocation(''); setShowSuggestions(false); }}>
-            <Ionicons name="close-circle" size={16} color={TEXT_LIGHT} />
-          </TouchableOpacity>
-        )}
-      </View>
-      {showSuggestions && suggestions.length > 0 && (
-        <View style={styles.suggestionsContainer}>
-          <FlatList
-            data={suggestions}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.suggestionItem} onPress={() => selectLocation(item)} activeOpacity={0.7}>
-                <Ionicons name="location-outline" size={16} color={BLUE} />
-                <Text style={styles.suggestionText}>{item}</Text>
-                <Ionicons name="arrow-forward" size={14} color={TEXT_LIGHT} />
-              </TouchableOpacity>
-            )}
-            style={styles.suggestionsList}
-            nestedScrollEnabled
-          />
-        </View>
-      )}
-    </View>
-  );
-}
-
-// ── Job Detail Bottom Sheet ────────────────────────────────────────────────────
-function JobDetailSheet({ job, visible, onClose, onApply, hasApplied, onViewClient }) {
-  if (!job) return null;
-
-  const locationText = formatLocation(job.location);
-  const payText = formatPayInformation(job.pay_information, job.budget_amount);
-  const skills = job.required_skills || job.skills || [];
-  const client = job.client_id || {};
-
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={sheet.overlay}>
-        <TouchableOpacity style={sheet.backdrop} activeOpacity={1} onPress={onClose} />
-        <View style={sheet.container}>
-          <View style={sheet.handle} />
-          <View style={sheet.header}>
-            <View style={sheet.companyLogo}>
-              <Ionicons name="briefcase-outline" size={22} color={BLUE} />
+      <View style={detailStyles.overlay}>
+        <TouchableOpacity style={detailStyles.backdrop} activeOpacity={1} onPress={onClose} />
+        <View style={detailStyles.container}>
+          <View style={detailStyles.handle} />
+          
+          {isLoading ? (
+            <View style={detailStyles.loadingContainer}>
+              <ActivityIndicator size="large" color={BLUE} />
+              <Text style={detailStyles.loadingText}>Loading job details...</Text>
             </View>
-            <View style={sheet.headerInfo}>
-              <Text style={sheet.jobTitle} numberOfLines={2}>{job.title || 'Job Title'}</Text>
+          ) : job ? (
+            <>
+              <View style={detailStyles.header}>
+                <View style={detailStyles.companyLogo}>
+                  <Ionicons name="briefcase-outline" size={24} color={BLUE} />
+                </View>
+                <View style={detailStyles.headerInfo}>
+                  <Text style={detailStyles.jobTitle} numberOfLines={2}>{job.title || 'Job Title'}</Text>
+                  <TouchableOpacity 
+                    style={detailStyles.clientNameLink} 
+                    onPress={() => onViewClient && onViewClient(client)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={detailStyles.jobCompany}>{getClientName()}</Text>
+                    <Ionicons name="chevron-forward" size={14} color={BLUE} />
+                  </TouchableOpacity>
+                  {timeAgo && (
+                    <View style={detailStyles.timeBadge}>
+                      <Ionicons name="time-outline" size={12} color={TEXT_LIGHT} />
+                      <Text style={detailStyles.timeText}>Posted {timeAgo}</Text>
+                    </View>
+                  )}
+                </View>
+                <TouchableOpacity style={detailStyles.closeBtn} onPress={onClose}>
+                  <Ionicons name="close" size={20} color={TEXT_MUTED} />
+                </TouchableOpacity>
+              </View>
+
               <TouchableOpacity 
-                style={sheet.clientInfoRow} 
+                style={detailStyles.clientInfoCard} 
                 onPress={() => onViewClient && onViewClient(client)}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
-                <Text style={sheet.jobCompany}>{client.company_name || client.name || 'Company'}</Text>
-                <Ionicons name="chevron-forward" size={14} color={BLUE} />
+                <View style={detailStyles.clientAvatar}>
+                  {client.profile_picture ? (
+                    <Image source={{ uri: client.profile_picture }} style={detailStyles.clientAvatarImg} />
+                  ) : (
+                    <Text style={detailStyles.clientAvatarText}>{getClientInitials()}</Text>
+                  )}
+                </View>
+                <View style={detailStyles.clientInfo}>
+                  <Text style={detailStyles.clientName}>{getClientName()}</Text>
+                  {getClientEmail() && (
+                    <Text style={detailStyles.clientDetail}>{getClientEmail()}</Text>
+                  )}
+                  {getClientLocation() && (
+                    <Text style={detailStyles.clientDetail}>{getClientLocation()}</Text>
+                  )}
+                  {client.rating && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                      <Ionicons name="star" size={12} color={GOLD} />
+                      <Text style={[detailStyles.clientDetail, { fontWeight: '600' }]}>
+                        {client.rating.toFixed(1)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={TEXT_LIGHT} />
               </TouchableOpacity>
-            </View>
-            <TouchableOpacity style={sheet.closeBtn} onPress={onClose}>
-              <Ionicons name="close" size={20} color={TEXT_MUTED} />
-            </TouchableOpacity>
-          </View>
 
-          {/* Client Quick Info */}
-          {client && Object.keys(client).length > 0 && (
-            <TouchableOpacity 
-              style={sheet.clientQuickInfo}
-              onPress={() => onViewClient && onViewClient(client)}
-              activeOpacity={0.7}
-            >
-              <View style={sheet.clientQuickAvatar}>
-                {client.profile_picture ? (
-                  <Image source={{ uri: client.profile_picture }} style={sheet.clientQuickAvatarImg} />
-                ) : (
-                  <Text style={sheet.clientQuickInitials}>
-                    {client.first_name?.[0] || ''}{client.last_name?.[0] || ''}
+              <View style={detailStyles.metaRow}>
+                {locationText && (
+                  <View style={detailStyles.metaChip}>
+                    <Ionicons name="location-outline" size={13} color={TEXT_MUTED} />
+                    <Text style={detailStyles.metaText}>{locationText}</Text>
+                  </View>
+                )}
+                {job.job_type && (
+                  <View style={detailStyles.metaChip}>
+                    <Ionicons name="briefcase-outline" size={13} color={TEXT_MUTED} />
+                    <Text style={detailStyles.metaText}>{formatJobType(job.job_type)}</Text>
+                  </View>
+                )}
+                {job.work_setup && (
+                  <View style={detailStyles.metaChip}>
+                    <Ionicons name="wifi-outline" size={13} color={TEXT_MUTED} />
+                    <Text style={detailStyles.metaText}>{formatWorkSetup(job.work_setup)}</Text>
+                  </View>
+                )}
+                {budgetText && (
+                  <View style={[detailStyles.metaChip, detailStyles.metaChipGold]}>
+                    <Ionicons name="cash-outline" size={13} color={GOLD_DK} />
+                    <Text style={[detailStyles.metaText, { color: GOLD_DK, fontWeight: '600' }]}>{budgetText}</Text>
+                  </View>
+                )}
+                {job.urgent && (
+                  <View style={[detailStyles.metaChip, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
+                    <Ionicons name="flame-outline" size={13} color={RED} />
+                    <Text style={[detailStyles.metaText, { color: RED, fontWeight: '600' }]}>Urgent</Text>
+                  </View>
+                )}
+                {job.featured && (
+                  <View style={[detailStyles.metaChip, { backgroundColor: GOLD_SOFT, borderColor: GOLD_MID }]}>
+                    <Ionicons name="star-outline" size={13} color={GOLD} />
+                    <Text style={[detailStyles.metaText, { color: GOLD_DK, fontWeight: '600' }]}>Featured</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={detailStyles.divider} />
+
+              <ScrollView style={detailStyles.body} showsVerticalScrollIndicator={false}>
+                <View style={detailStyles.section}>
+                  <Text style={detailStyles.sectionLabel}>Job Description</Text>
+                  <Text style={detailStyles.descText}>{job.description || 'No description provided.'}</Text>
+                </View>
+
+                {skills.length > 0 && (
+                  <View style={detailStyles.section}>
+                    <Text style={detailStyles.sectionLabel}>Required Skills</Text>
+                    <View style={detailStyles.tagRow}>
+                      {skills.map((s, i) => (
+                        <View key={i} style={detailStyles.tag}>
+                          <Text style={detailStyles.tagText}>{s}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {tags.length > 0 && (
+                  <View style={detailStyles.section}>
+                    <Text style={detailStyles.sectionLabel}>Tags</Text>
+                    <View style={detailStyles.tagRow}>
+                      {tags.map((tag, i) => (
+                        <View key={i} style={[detailStyles.tag, { backgroundColor: GOLD_SOFT, borderColor: GOLD_MID }]}>
+                          <Text style={[detailStyles.tagText, { color: GOLD_DK }]}>#{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {job.requirements && (
+                  <View style={detailStyles.section}>
+                    <Text style={detailStyles.sectionLabel}>Requirements</Text>
+                    <View style={{ gap: 6 }}>
+                      {job.requirements.education && job.requirements.education !== 'none' && (
+                        <Text style={detailStyles.descText}>• Education: {job.requirements.education.replace('_', ' ').toUpperCase()}</Text>
+                      )}
+                      {job.requirements.portfolio_required && (
+                        <Text style={detailStyles.descText}>• Portfolio required</Text>
+                      )}
+                      {job.requirements.resume_required && (
+                        <Text style={detailStyles.descText}>• Resume required</Text>
+                      )}
+                      {job.requirements.cover_letter_required && (
+                        <Text style={detailStyles.descText}>• Cover letter required</Text>
+                      )}
+                      {job.requirements.preferred_languages?.length > 0 && (
+                        <Text style={detailStyles.descText}>• Languages: {job.requirements.preferred_languages.join(', ')}</Text>
+                      )}
+                      {job.requirements.preferred_certifications?.length > 0 && (
+                        <Text style={detailStyles.descText}>• Certifications: {job.requirements.preferred_certifications.join(', ')}</Text>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                {job.screening_questions?.length > 0 && (
+                  <View style={detailStyles.section}>
+                    <Text style={detailStyles.sectionLabel}>Screening Questions</Text>
+                    {job.screening_questions.map((q, i) => (
+                      <View key={i} style={detailStyles.questionItem}>
+                        <Text style={detailStyles.questionNumber}>{i + 1}.</Text>
+                        <Text style={detailStyles.questionText}>{q.question}</Text>
+                        {q.required && (
+                          <View style={detailStyles.requiredBadge}>
+                            <Text style={detailStyles.requiredBadgeText}>Required</Text>
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {job.timeline && (job.timeline.duration_value || job.timeline.estimated_hours || job.timeline.weekly_limit) && (
+                  <View style={detailStyles.section}>
+                    <Text style={detailStyles.sectionLabel}>Timeline</Text>
+                    <View style={detailStyles.timelineGrid}>
+                      {job.timeline.duration_value && job.timeline.duration_unit && (
+                        <View style={detailStyles.timelineItem}>
+                          <Ionicons name="hourglass-outline" size={16} color={BLUE} />
+                          <View>
+                            <Text style={detailStyles.timelineLabel}>Duration</Text>
+                            <Text style={detailStyles.timelineValue}>
+                              {job.timeline.duration_value} {job.timeline.duration_unit}
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                      {job.timeline.estimated_hours && (
+                        <View style={detailStyles.timelineItem}>
+                          <Ionicons name="time-outline" size={16} color={BLUE} />
+                          <View>
+                            <Text style={detailStyles.timelineLabel}>Estimated Hours</Text>
+                            <Text style={detailStyles.timelineValue}>{job.timeline.estimated_hours} hrs</Text>
+                          </View>
+                        </View>
+                      )}
+                      {job.timeline.weekly_limit && (
+                        <View style={detailStyles.timelineItem}>
+                          <Ionicons name="calendar-outline" size={16} color={BLUE} />
+                          <View>
+                            <Text style={detailStyles.timelineLabel}>Weekly Limit</Text>
+                            <Text style={detailStyles.timelineValue}>{job.timeline.weekly_limit} hrs/week</Text>
+                          </View>
+                        </View>
+                      )}
+                      {job.timeline.start_date && (
+                        <View style={detailStyles.timelineItem}>
+                          <Ionicons name="calendar-outline" size={16} color={BLUE} />
+                          <View>
+                            <Text style={detailStyles.timelineLabel}>Start Date</Text>
+                            <Text style={detailStyles.timelineValue}>{formatFullDate(job.timeline.start_date)}</Text>
+                          </View>
+                        </View>
+                      )}
+                      {job.timeline.end_date && (
+                        <View style={detailStyles.timelineItem}>
+                          <Ionicons name="calendar-outline" size={16} color={BLUE} />
+                          <View>
+                            <Text style={detailStyles.timelineLabel}>End Date</Text>
+                            <Text style={detailStyles.timelineValue}>{formatFullDate(job.timeline.end_date)}</Text>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                <View style={detailStyles.detailGrid}>
+                  {experienceText && (
+                    <View style={detailStyles.detailItem}>
+                      <Ionicons name="bar-chart-outline" size={16} color={BLUE} />
+                      <View>
+                        <Text style={detailStyles.detailLabel}>Experience Level</Text>
+                        <Text style={detailStyles.detailValue}>{experienceText}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {job.job_type && (
+                    <View style={detailStyles.detailItem}>
+                      <Ionicons name="briefcase-outline" size={16} color={BLUE} />
+                      <View>
+                        <Text style={detailStyles.detailLabel}>Job Type</Text>
+                        <Text style={detailStyles.detailValue}>{formatJobType(job.job_type)}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {job.work_setup && (
+                    <View style={detailStyles.detailItem}>
+                      <Ionicons name="wifi-outline" size={16} color={BLUE} />
+                      <View>
+                        <Text style={detailStyles.detailLabel}>Work Setup</Text>
+                        <Text style={detailStyles.detailValue}>{formatWorkSetup(job.work_setup)}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {job.vacancies && job.vacancies > 0 && (
+                    <View style={detailStyles.detailItem}>
+                      <Ionicons name="people-outline" size={16} color={BLUE} />
+                      <View>
+                        <Text style={detailStyles.detailLabel}>Vacancies</Text>
+                        <Text style={detailStyles.detailValue}>{job.vacancies}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {job.timezone && (
+                    <View style={detailStyles.detailItem}>
+                      <Ionicons name="time-outline" size={16} color={BLUE} />
+                      <View>
+                        <Text style={detailStyles.detailLabel}>Timezone</Text>
+                        <Text style={detailStyles.detailValue}>{job.timezone}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {job.nda_required && (
+                    <View style={detailStyles.detailItem}>
+                      <Ionicons name="document-text-outline" size={16} color={BLUE} />
+                      <View>
+                        <Text style={detailStyles.detailLabel}>NDA</Text>
+                        <Text style={detailStyles.detailValue}>Required</Text>
+                      </View>
+                    </View>
+                  )}
+                  {job.category && (
+                    <View style={detailStyles.detailItem}>
+                      <Ionicons name="pricetag-outline" size={16} color={BLUE} />
+                      <View>
+                        <Text style={detailStyles.detailLabel}>Category</Text>
+                        <Text style={detailStyles.detailValue}>{job.category}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {job.subcategory && (
+                    <View style={detailStyles.detailItem}>
+                      <Ionicons name="pricetag-outline" size={16} color={BLUE} />
+                      <View>
+                        <Text style={detailStyles.detailLabel}>Subcategory</Text>
+                        <Text style={detailStyles.detailValue}>{job.subcategory}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {fullDate && (
+                    <View style={detailStyles.detailItem}>
+                      <Ionicons name="calendar-outline" size={16} color={BLUE} />
+                      <View>
+                        <Text style={detailStyles.detailLabel}>Posted</Text>
+                        <Text style={detailStyles.detailValue}>{fullDate}</Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+
+                <View style={{ height: 80 }} />
+              </ScrollView>
+
+              <View style={detailStyles.applyContainer}>
+                <TouchableOpacity 
+                  style={[
+                    detailStyles.applyButton,
+                    hasApplied && detailStyles.applyButtonDisabled
+                  ]}
+                  onPress={handleApply}
+                  disabled={hasApplied}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons 
+                    name={hasApplied ? 'checkmark-circle' : 'paper-plane-outline'} 
+                    size={20} 
+                    color={WHITE} 
+                    style={detailStyles.applyIcon}
+                  />
+                  <Text style={detailStyles.applyButtonText}>
+                    {hasApplied ? 'Already Applied' : 'Apply Now'}
                   </Text>
-                )}
+                </TouchableOpacity>
               </View>
-              <View style={sheet.clientQuickInfoText}>
-                <Text style={sheet.clientQuickName}>
-                  {client.first_name || 'Client'} {client.last_name || ''}
-                </Text>
-                <Text style={sheet.clientQuickCompany}>{client.company_name || 'Independent Client'}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={TEXT_LIGHT} />
-            </TouchableOpacity>
-          )}
-
-          <View style={sheet.metaRow}>
-            {locationText && (
-              <View style={sheet.metaChip}>
-                <Ionicons name="location-outline" size={13} color={TEXT_MUTED} />
-                <Text style={sheet.metaText}>{locationText}</Text>
-              </View>
-            )}
-            {job.job_type && (
-              <View style={sheet.metaChip}>
-                <Ionicons name="briefcase-outline" size={13} color={TEXT_MUTED} />
-                <Text style={sheet.metaText}>{formatJobType(job.job_type)}</Text>
-              </View>
-            )}
-            {job.work_setup && (
-              <View style={sheet.metaChip}>
-                <Ionicons name="wifi-outline" size={13} color={TEXT_MUTED} />
-                <Text style={sheet.metaText}>{formatWorkSetup(job.work_setup)}</Text>
-              </View>
-            )}
-            {payText && (
-              <View style={[sheet.metaChip, sheet.metaChipBlue]}>
-                <Ionicons name="cash-outline" size={13} color={GOLD_DK} />
-                <Text style={[sheet.metaText, { color: GOLD_DK, fontWeight: '600' }]}>{payText}</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={sheet.divider} />
-
-          <ScrollView style={sheet.body} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-            {skills.length > 0 && (
-              <View style={sheet.section}>
-                <Text style={sheet.sectionLabel}>Required Skills</Text>
-                <View style={sheet.tagRow}>
-                  {skills.map((s, i) => (
-                    <View key={i} style={sheet.tag}><Text style={sheet.tagText}>{s}</Text></View>
-                  ))}
-                </View>
-              </View>
-            )}
-            
-            <View style={sheet.section}>
-              <Text style={sheet.sectionLabel}>Job Description</Text>
-              <Text style={sheet.descText}>{job.description || 'No description provided.'}</Text>
-            </View>
-            
-            {job.requirements && (
-              <View style={sheet.section}>
-                <Text style={sheet.sectionLabel}>Requirements & Qualifications</Text>
-                {typeof job.requirements === 'object' ? (
-                  <View>
-                    {job.requirements.min_years_experience > 0 && (
-                      <Text style={sheet.descText}>• {job.requirements.min_years_experience}+ years of experience</Text>
-                    )}
-                    {job.requirements.preferred_tools?.length > 0 && (
-                      <Text style={sheet.descText}>• Preferred tools: {job.requirements.preferred_tools.join(', ')}</Text>
-                    )}
-                    {job.requirements.additional_requirements && (
-                      <Text style={sheet.descText}>• {job.requirements.additional_requirements}</Text>
-                    )}
-                  </View>
-                ) : (
-                  <Text style={sheet.descText}>{job.requirements}</Text>
-                )}
-              </View>
-            )}
-            
-            <View style={sheet.detailGrid}>
-              {job.experience_level && (
-                <View style={sheet.detailItem}>
-                  <Ionicons name="bar-chart-outline" size={16} color={BLUE} />
-                  <View><Text style={sheet.detailLabel}>Experience Level</Text><Text style={sheet.detailValue}>{job.experience_level}</Text></View>
-                </View>
-              )}
-              {job.urgency_level && (
-                <View style={sheet.detailItem}>
-                  <Ionicons name="flame-outline" size={16} color={BLUE} />
-                  <View><Text style={sheet.detailLabel}>Urgency</Text><Text style={sheet.detailValue}>{job.urgency_level?.toUpperCase()}</Text></View>
-                </View>
-              )}
-              {job.estimated_duration && (
-                <View style={sheet.detailItem}>
-                  <Ionicons name="calendar-outline" size={16} color={BLUE} />
-                  <View><Text style={sheet.detailLabel}>Duration</Text><Text style={sheet.detailValue}>{job.estimated_duration}</Text></View>
-                </View>
-              )}
-              {job.created_at && (
-                <View style={sheet.detailItem}>
-                  <Ionicons name="time-outline" size={16} color={BLUE} />
-                  <View>
-                    <Text style={sheet.detailLabel}>Posted</Text>
-                    <Text style={sheet.detailValue}>{new Date(job.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
-                  </View>
-                </View>
-              )}
-            </View>
-          </ScrollView>
-
-          <View style={sheet.footer}>
-            <TouchableOpacity style={sheet.saveBtn} activeOpacity={0.7}>
-              <Ionicons name="bookmark-outline" size={20} color={BLUE} />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[sheet.applyBtn, hasApplied && sheet.applyBtnDisabled]}
-              onPress={() => !hasApplied && onApply(job)} 
-              activeOpacity={0.85}
-              disabled={hasApplied}
-            >
-              <Text style={sheet.applyBtnText}>
-                {hasApplied ? 'Already Applied' : 'Apply Now'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+            </>
+          ) : null}
         </View>
       </View>
     </Modal>
+  );
+}
+
+// ── Bottom Tab Bar ─────────────────────────────────────────────────────────────────
+function BottomTabBar({ activeTab, onTabPress }) {
+  const tabs = [
+    { key: 'Home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
+    { key: 'Messages', label: 'Messages', icon: 'chatbubble-outline', activeIcon: 'chatbubble' },
+    { key: 'MyJobs', label: 'My Jobs', icon: 'briefcase-outline', activeIcon: 'briefcase' },
+    { key: 'MyApplications', label: 'Applications', icon: 'checkmark-circle-outline', activeIcon: 'checkmark-circle' },
+    { key: 'Profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
+  ];
+
+  return (
+    <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
+      <View style={styles.tabBar}>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.key;
+          const isMyJobs = tab.key === 'MyJobs';
+          
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.tabItem,
+                isMyJobs && styles.tabItemCenter,
+              ]}
+              onPress={() => onTabPress(tab.key)}
+              activeOpacity={0.7}
+            >
+              {isMyJobs ? (
+                <View style={[styles.centerButton, isActive && styles.centerButtonActive]}>
+                  <Ionicons
+                    name={isActive ? tab.activeIcon : tab.icon}
+                    size={26}
+                    color={isActive ? WHITE : BLUE}
+                  />
+                </View>
+              ) : (
+                <>
+                  <View style={styles.tabIconWrap}>
+                    <Ionicons
+                      name={isActive ? tab.activeIcon : tab.icon}
+                      size={22}
+                      color={isActive ? BLUE : TEXT_LIGHT}
+                    />
+                  </View>
+                  <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+                    {tab.label}
+                  </Text>
+                  {isActive && <View style={styles.tabIndicator} />}
+                </>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -1170,22 +1517,21 @@ export default function FreelancerScreen({ onNavigate, route }) {
   const { user } = useSelector(s => s.auth);
   const { list: jobs, isLoading: jobsLoading } = useSelector(s => s.jobs.jobs);
   const { applications, isLoading: appsLoading, applySuccess } = useSelector(s => s.applications);
-
+  
   const [activeTab, setActiveTab] = useState('Home');
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [locationQuery, setLocationQuery] = useState('');
-  const [filteredJobs, setFilteredJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
-  const [sheetVisible, setSheetVisible] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [loadingJobDetail, setLoadingJobDetail] = useState(false);
+  const [showClientProfile, setShowClientProfile] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [savedJobs, setSavedJobs] = useState([]);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showAlreadyAppliedModal, setShowAlreadyAppliedModal] = useState(false);
-  const [showClientProfileModal, setShowClientProfileModal] = useState(false);
-  const [selectedClient, setSelectedClient] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [appliedJobIds, setAppliedJobIds] = useState([]);
-  const [applicationStatus, setApplicationStatus] = useState({});
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
   const fullName = `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
@@ -1197,89 +1543,47 @@ export default function FreelancerScreen({ onNavigate, route }) {
     }
   }, [route?.params]);
 
-  // Fetch dashboard data
-  const fetchDashboardData = useCallback(async () => {
+  // Fetch jobs
+  const fetchJobs = useCallback(async () => {
     try {
-      await Promise.all([
-        dispatch(getFreelancerJobs({ limit: 20 })).unwrap(),
-        dispatch(getFreelancerApplications({})).unwrap(),
-      ]);
+      await dispatch(getFreelancerJobs({ limit: 20 })).unwrap();
     } catch (e) { 
-      console.error('Dashboard fetch error:', e); 
+      console.error('Fetch jobs error:', e); 
     }
   }, [dispatch]);
 
-  // Fetch applications and update local state
+  // Fetch applications
   const fetchApplications = useCallback(async () => {
     try {
       const result = await dispatch(getFreelancerApplications({})).unwrap();
       const list = result.applications || result.data || result || [];
-      
       const appliedIds = list.map(app => app.job_id?._id || app.job_id).filter(id => id);
       setAppliedJobIds(appliedIds);
-      
-      const statusMap = {};
-      list.forEach(app => {
-        const jobId = app.job_id?._id || app.job_id;
-        if (jobId) {
-          statusMap[jobId] = {
-            status: app.status || 'pending',
-            appliedAt: app.created_at,
-            message: app.message
-          };
-        }
-      });
-      setApplicationStatus(statusMap);
     } catch (e) { 
       console.error('Error fetching applications:', e); 
     }
   }, [dispatch]);
 
-  // Initial data fetch
+  // Initial fetch
   useEffect(() => {
-    fetchDashboardData();
+    fetchJobs();
     fetchApplications();
-  }, [fetchDashboardData, fetchApplications]);
+  }, [fetchJobs, fetchApplications]);
 
-  // Handle apply success from Redux
+  // Handle apply success
   useEffect(() => {
     if (applySuccess) {
       fetchApplications();
     }
   }, [applySuccess, fetchApplications]);
 
-  // Filter jobs based on search and location
-  useEffect(() => {
-    if (jobs && jobs.length > 0) {
-      let filtered = [...jobs];
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        filtered = filtered.filter(j =>
-          j.title?.toLowerCase().includes(q) ||
-          j.description?.toLowerCase().includes(q) ||
-          j.required_skills?.some(s => s.toLowerCase().includes(q))
-        );
-      }
-      if (locationQuery.trim()) {
-        const lq = locationQuery.toLowerCase();
-        filtered = filtered.filter(j =>
-          (formatLocation(j.location)?.toLowerCase() || '').includes(lq)
-        );
-      }
-      setFilteredJobs(filtered);
-    } else {
-      setFilteredJobs([]);
-    }
-  }, [jobs, searchQuery, locationQuery]);
-
   const isInitialLoading = jobsLoading && !refreshing && (!jobs || jobs.length === 0);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchDashboardData();
-    await fetchApplications();
+    await Promise.all([fetchJobs(), fetchApplications()]);
     setRefreshing(false);
-  }, [fetchDashboardData, fetchApplications]);
+  }, [fetchJobs, fetchApplications]);
 
   const handleTabPress = (key) => {
     if (key === 'Home') {
@@ -1307,27 +1611,37 @@ export default function FreelancerScreen({ onNavigate, route }) {
       } },
     ]);
 
-  const openJobDetail = (job) => { 
-    setSelectedJob(job); 
-    setSheetVisible(true); 
+  const openJobDetail = async (job) => {
+    setSelectedJob(job);
+    setModalVisible(true);
+    setLoadingJobDetail(true);
+    
+    try {
+      const result = await dispatch(getJobById(job._id)).unwrap();
+      setSelectedJob(result.job);
+    } catch (error) {
+      console.error('Error fetching job details:', error);
+    } finally {
+      setLoadingJobDetail(false);
+    }
   };
-  
+
   const handleViewClient = (client) => {
     if (client && Object.keys(client).length > 0) {
       setSelectedClient(client);
-      setShowClientProfileModal(true);
+      setShowClientProfile(true);
     }
   };
-  
-  const handleApply = (job) => { 
+
+  const handleApply = (job) => {
     if (appliedJobIds.includes(job._id)) {
       setSelectedJob(job);
       setShowAlreadyAppliedModal(true);
       return;
     }
-    setSheetVisible(false); 
-    setSelectedJob(job); 
-    setShowApplyModal(true); 
+    setModalVisible(false);
+    setSelectedJob(job);
+    setShowApplyModal(true);
   };
 
   const handleSubmitApplication = async (formData) => {
@@ -1356,148 +1670,194 @@ export default function FreelancerScreen({ onNavigate, route }) {
     }
   };
 
-  const displayJobs = filteredJobs.length > 0 ? filteredJobs : (jobs || []);
+  const toggleSaveJob = (jobId) => {
+    setSavedJobs(prev => {
+      if (prev.includes(jobId)) {
+        return prev.filter(id => id !== jobId);
+      } else {
+        return [...prev, jobId];
+      }
+    });
+  };
+
+  const isJobSaved = (jobId) => savedJobs.includes(jobId);
+
+  // Filter jobs based on search query
+  const filteredJobs = jobs?.filter(job => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase().trim();
+    const title = job.title?.toLowerCase() || '';
+    const description = job.description?.toLowerCase() || '';
+    const skills = job.required_skills?.join(' ').toLowerCase() || '';
+    const company = job.client_id?.company_name?.toLowerCase() || '';
+    const business = job.client_id?.business_name?.toLowerCase() || '';
+    
+    return title.includes(query) || 
+           description.includes(query) || 
+           skills.includes(query) ||
+           company.includes(query) ||
+           business.includes(query);
+  });
 
   const renderJobItem = useCallback(({ item: job }) => {
     const locationDisplay = formatLocation(job.location) || 'Remote';
     const budgetDisplay = formatBudgetForCard(job);
-    const skills = job.required_skills || job.skills || [];
+    const skills = job.required_skills || [];
     const workSetup = formatWorkSetup(job.work_setup);
-    const hasApplied = appliedJobIds.includes(job._id);
-    const appStatus = applicationStatus[job._id];
     const client = job.client_id || {};
+    const timeAgo = getTimeAgo(job.createdAt);
+    const isSaved = isJobSaved(job._id);
+    const hasApplied = appliedJobIds.includes(job._id);
+    
+    const getClientName = () => {
+      if (client.company_name) return client.company_name;
+      if (client.business_name) return client.business_name;
+      if (client.first_name && client.last_name) {
+        return `${client.first_name} ${client.last_name}`;
+      }
+      if (client.name) return client.name;
+      return 'Client';
+    };
+
+    const getClientInitials = () => {
+      if (client.first_name && client.last_name) {
+        return `${client.first_name[0]}${client.last_name[0]}`.toUpperCase();
+      }
+      if (client.company_name) {
+        return client.company_name.substring(0, 2).toUpperCase();
+      }
+      if (client.business_name) {
+        return client.business_name.substring(0, 2).toUpperCase();
+      }
+      return 'C';
+    };
 
     return (
-      <TouchableOpacity style={styles.jobCard} onPress={() => openJobDetail(job)} activeOpacity={0.85}>
-        <View style={styles.jobCardTop}>
-          {job.urgency_level === 'urgent' && (
-            <View style={styles.badgeUrgent}><Text style={styles.badgeUrgentText}>Urgent</Text></View>
-          )}
-          {workSetup && (
-            <View style={styles.badgeWorkSetup}>
-              <Ionicons name={job.work_setup === 'remote' ? 'wifi' : 'business'} size={10} color={BLUE} />
-              <Text style={styles.badgeWorkSetupText}>{workSetup}</Text>
-            </View>
-          )}
-          <TouchableOpacity style={styles.bookmarkBtn}>
-            <Ionicons name="bookmark-outline" size={20} color={TEXT_MUTED} />
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.jobTitle} numberOfLines={2}>{job.title || 'Job Title'}</Text>
-        
-        {/* Client info in job card */}
+      <View style={styles.jobCard}>
         <TouchableOpacity 
-          style={styles.clientInfoRow} 
-          onPress={() => handleViewClient(client)}
-          activeOpacity={0.7}
+          style={styles.jobCardContent}
+          onPress={() => openJobDetail(job)} 
+          activeOpacity={0.85}
         >
-          <View style={styles.clientAvatarSmall}>
-            {client.profile_picture ? (
-              <Image source={{ uri: client.profile_picture }} style={styles.clientAvatarSmallImg} />
-            ) : (
-              <Text style={styles.clientAvatarSmallText}>
-                {client.first_name?.[0] || ''}{client.last_name?.[0] || ''}
-              </Text>
+          <View style={styles.jobCardTop}>
+            {job.urgent && (
+              <View style={styles.badgeUrgent}>
+                <Ionicons name="flame" size={10} color="#D97706" />
+                <Text style={styles.badgeUrgentText}>Urgent</Text>
+              </View>
             )}
-          </View>
-          <Text style={styles.jobCompany}>
-            {client.company_name || client.name || 'Company'}
-          </Text>
-          <Ionicons name="chevron-forward" size={14} color={TEXT_LIGHT} />
-        </TouchableOpacity>
-
-        <View style={styles.jobMetaRow}>
-          <Ionicons name="location-outline" size={12} color={TEXT_MUTED} />
-          <Text style={styles.jobLocation}>{locationDisplay}</Text>
-        </View>
-
-        {budgetDisplay && (
-          <View style={styles.budgetChip}>
-            <Ionicons name="cash-outline" size={13} color={GOLD_DK} />
-            <Text style={styles.budgetText}>{budgetDisplay}</Text>
-          </View>
-        )}
-
-        {skills.length > 0 && (
-          <View style={styles.tagRow}>
-            {skills.slice(0, 3).map((s, i) => (
-              <View key={i} style={styles.tag}><Text style={styles.tagText}>{s}</Text></View>
-            ))}
-            {skills.length > 3 && (
-              <View style={styles.tag}><Text style={styles.tagText}>+{skills.length - 3}</Text></View>
+            {job.featured && (
+              <View style={styles.badgeFeatured}>
+                <Ionicons name="star" size={10} color={GOLD} />
+                <Text style={styles.badgeFeaturedText}>Featured</Text>
+              </View>
             )}
-          </View>
-        )}
-
-        {hasApplied && (
-          <View style={styles.appliedBadge}>
-            <Ionicons name="checkmark-circle" size={14} color={GREEN} />
-            <Text style={styles.appliedBadgeText}>Applied</Text>
-            {appStatus?.status === 'pending' && (
-              <View style={styles.pendingBadge}>
-                <Text style={styles.pendingBadgeText}>Pending</Text>
+            {job.status === 'open' && (
+              <View style={styles.badgeOpen}>
+                <Text style={styles.badgeOpenText}>Open</Text>
+              </View>
+            )}
+            {workSetup && (
+              <View style={styles.badgeWorkSetup}>
+                <Ionicons name={job.work_setup === 'remote' ? 'wifi' : 'business'} size={10} color={BLUE} />
+                <Text style={styles.badgeWorkSetupText}>{workSetup}</Text>
+              </View>
+            )}
+            {timeAgo && (
+              <View style={styles.badgeTime}>
+                <Ionicons name="time-outline" size={10} color={TEXT_LIGHT} />
+                <Text style={styles.badgeTimeText}>{timeAgo}</Text>
+              </View>
+            )}
+            {hasApplied && (
+              <View style={styles.badgeApplied}>
+                <Ionicons name="checkmark-circle" size={10} color={GREEN} />
+                <Text style={styles.badgeAppliedText}>Applied</Text>
               </View>
             )}
           </View>
-        )}
-      </TouchableOpacity>
+
+          <Text style={styles.jobTitle} numberOfLines={2}>{job.title || 'Job Title'}</Text>
+          
+          <TouchableOpacity 
+            style={styles.clientInfoRow} 
+            onPress={(e) => {
+              e.stopPropagation();
+              handleViewClient(client);
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.clientAvatarSmall}>
+              {client.profile_picture ? (
+                <Image source={{ uri: client.profile_picture }} style={styles.clientAvatarSmallImg} />
+              ) : (
+                <Text style={styles.clientAvatarSmallText}>{getClientInitials()}</Text>
+              )}
+            </View>
+            <Text style={styles.jobCompany} numberOfLines={1}>{getClientName()}</Text>
+            <Ionicons name="chevron-forward" size={14} color={TEXT_LIGHT} />
+          </TouchableOpacity>
+
+          <View style={styles.jobMetaRow}>
+            <Ionicons name="location-outline" size={12} color={TEXT_MUTED} />
+            <Text style={styles.jobLocation}>{locationDisplay}</Text>
+          </View>
+
+          {job.description && (
+            <Text style={styles.descriptionPreview} numberOfLines={2}>
+              {job.description}
+            </Text>
+          )}
+
+          {budgetDisplay && (
+            <View style={styles.budgetChip}>
+              <Ionicons name="cash-outline" size={13} color={GOLD_DK} />
+              <Text style={styles.budgetText}>{budgetDisplay}</Text>
+            </View>
+          )}
+
+          {skills.length > 0 && (
+            <View style={styles.tagRow}>
+              {skills.slice(0, 3).map((s, i) => (
+                <View key={i} style={styles.tag}>
+                  <Text style={styles.tagText}>{s}</Text>
+                </View>
+              ))}
+              {skills.length > 3 && (
+                <View style={styles.tag}>
+                  <Text style={styles.tagText}>+{skills.length - 3}</Text>
+                </View>
+              )}
+            </View>
+          )}
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.saveButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            toggleSaveJob(job._id);
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons 
+            name={isSaved ? 'bookmark' : 'bookmark-outline'} 
+            size={24} 
+            color={isSaved ? BLUE : TEXT_LIGHT} 
+          />
+        </TouchableOpacity>
+      </View>
     );
-  }, [appliedJobIds, applicationStatus]);
+  }, [savedJobs, appliedJobIds]);
 
   const ListHeader = (
     <>
-      <View style={styles.searchSection}>
-        <View style={styles.searchPill}>
-          <View style={styles.searchSide}>
-            <Ionicons name="search-outline" size={18} color={TEXT_MUTED} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search jobs "
-              placeholderTextColor={TEXT_LIGHT}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-            />
-            {searchQuery !== '' && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={16} color={TEXT_LIGHT} />
-              </TouchableOpacity>
-            )}
-          </View>
-          <View style={styles.pillDivider} />
-          <LocationSearchInput
-            value={locationQuery}
-            onChangeText={setLocationQuery}
-            onSelectLocation={setLocationQuery}
-            placeholder="City or area.."
-          />
-        </View>
-
-        {(searchQuery || locationQuery) && (
-          <View style={styles.activeFilters}>
-            <Text style={styles.activeFiltersLabel}>Filters:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {searchQuery && (
-                <TouchableOpacity style={styles.filterChip} onPress={() => setSearchQuery('')}>
-                  <Text style={styles.filterChipText}>"{searchQuery}"</Text>
-                  <Ionicons name="close-circle" size={14} color={TEXT_MUTED} />
-                </TouchableOpacity>
-              )}
-              {locationQuery && (
-                <TouchableOpacity style={styles.filterChip} onPress={() => setLocationQuery('')}>
-                  <Text style={styles.filterChipText}>📍 {locationQuery}</Text>
-                  <Ionicons name="close-circle" size={14} color={TEXT_MUTED} />
-                </TouchableOpacity>
-              )}
-            </ScrollView>
-          </View>
-        )}
-      </View>
-
       <Text style={styles.welcomeBack}>Welcome back</Text>
       <View style={styles.welcomeRow}>
-        <Text style={styles.welcomeName}>{fullName || 'Freelancer'}</Text>
+        <View style={styles.userInfoContainer}>
+          <Text style={styles.welcomeName}>{fullName || 'Freelancer'}</Text>
+          <Text style={styles.userEmail}>{user?.email || ''}</Text>
+        </View>
         <TouchableOpacity onPress={handleLogout} style={styles.avatarBtn}>
           {user?.profile_picture
             ? <Image source={{ uri: user.profile_picture }} style={styles.avatarImg} />
@@ -1506,16 +1866,36 @@ export default function FreelancerScreen({ onNavigate, route }) {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={20} color={TEXT_LIGHT} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search jobs by title, skills, or company..."
+            placeholderTextColor={TEXT_LIGHT}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
+              <Ionicons name="close-circle" size={18} color={TEXT_LIGHT} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
-          Recommended Jobs
-          {!isInitialLoading && displayJobs.length > 0 && (
-            <Text style={styles.sectionCount}> ({displayJobs.length})</Text>
+          Available Jobs
+          {!isInitialLoading && filteredJobs?.length > 0 && (
+            <Text style={styles.sectionCount}> ({filteredJobs.length})</Text>
+          )}
+          {searchQuery.length > 0 && (
+            <Text style={styles.searchResultText}> • Results for "{searchQuery}"</Text>
           )}
         </Text>
-        <TouchableOpacity onPress={() => onNavigate('BrowseJobs')}>
-          <Text style={styles.sectionLink}>See all </Text>
-        </TouchableOpacity>
       </View>
     </>
   );
@@ -1529,8 +1909,14 @@ export default function FreelancerScreen({ onNavigate, route }) {
   const EmptyComponent = (
     <View style={styles.emptyCard}>
       <Ionicons name="briefcase-outline" size={40} color={SILVER2} />
-      <Text style={styles.emptyTitle}>No jobs found</Text>
-      <Text style={styles.emptySub}>Try adjusting your search or check back later</Text>
+      <Text style={styles.emptyTitle}>
+        {searchQuery.length > 0 ? 'No matching jobs found' : 'No jobs available'}
+      </Text>
+      <Text style={styles.emptySub}>
+        {searchQuery.length > 0 
+          ? `Try adjusting your search for "${searchQuery}"` 
+          : 'Check back later for new opportunities'}
+      </Text>
     </View>
   );
 
@@ -1559,7 +1945,7 @@ export default function FreelancerScreen({ onNavigate, route }) {
           </ScrollView>
         ) : (
           <FlatList
-            data={displayJobs}
+            data={filteredJobs || []}
             keyExtractor={(item, index) => item._id || index.toString()}
             renderItem={renderJobItem}
             ListHeaderComponent={ListHeader}
@@ -1570,26 +1956,32 @@ export default function FreelancerScreen({ onNavigate, route }) {
           />
         )}
 
-        {/* Bottom Tab Bar */}
         <BottomTabBar 
           activeTab={activeTab} 
           onTabPress={handleTabPress}
         />
       </View>
 
-      <JobDetailSheet
+      <JobDetailModal
+        visible={modalVisible}
         job={selectedJob}
-        visible={sheetVisible}
-        onClose={() => setSheetVisible(false)}
+        onClose={() => {
+          setModalVisible(false);
+          setSelectedJob(null);
+        }}
+        isLoading={loadingJobDetail}
+        onViewClient={handleViewClient}
         onApply={handleApply}
         hasApplied={selectedJob ? appliedJobIds.includes(selectedJob._id) : false}
-        onViewClient={handleViewClient}
       />
 
       <ClientProfileModal
-        visible={showClientProfileModal}
+        visible={showClientProfile}
         client={selectedClient}
-        onClose={() => { setShowClientProfileModal(false); setSelectedClient(null); }}
+        onClose={() => {
+          setShowClientProfile(false);
+          setSelectedClient(null);
+        }}
       />
 
       <ApplicationModal
@@ -1632,85 +2024,361 @@ const styles = StyleSheet.create({
   topbarTagline: { fontSize: 9, fontWeight: '500', color: GOLD_LT, letterSpacing: 1.44, textTransform: 'uppercase', marginTop: 1 },
   notifBtn: { position: 'relative', padding: 4 },
 
-  searchSection: { paddingHorizontal: 16, marginTop: 16, marginBottom: 20 },
-  searchPill: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: CARD, borderRadius: 28,
-    borderWidth: 1.5, borderColor: BORDER,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
-    overflow: 'visible',
-    zIndex: 10,
+  welcomeBack: { 
+    fontSize: 22, 
+    fontWeight: '700', 
+    color: TEXT_MAIN, 
+    paddingHorizontal: 20,
+    marginBottom: 2 
   },
-  searchSide: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 4, gap: 8 },
-  pillDivider: { width: 1, height: 28, backgroundColor: BORDER },
-  searchInput: { flex: 1, fontSize: 14, color: TEXT_MAIN, paddingVertical: 10 },
-  locationInputContainer: { flex: 1, position: 'relative', zIndex: 20 },
-  suggestionsContainer: {
-    position: 'absolute', top: '100%', left: 0, right: 0,
-    backgroundColor: WHITE, borderRadius: 12, borderWidth: 1, borderColor: BORDER,
-    marginTop: 8, zIndex: 1000,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 10,
+  
+  welcomeRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
   },
-  suggestionsList: { maxHeight: 200 },
-  suggestionItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
-  suggestionText: { fontSize: 14, color: TEXT_MAIN, flex: 1 },
-  activeFilters: { marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  activeFiltersLabel: { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
-  filterChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: `${BLUE}10`, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1, borderColor: `${BLUE}25`, marginRight: 8 },
-  filterChipText: { fontSize: 11, color: BLUE },
+  
+  userInfoContainer: {
+    flex: 1,
+  },
+  
+  welcomeName: { 
+    fontSize: 22, 
+    fontWeight: '700', 
+    color: TEXT_MAIN 
+  },
+  
+  userEmail: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    marginTop: 2,
+  },
+  
+  avatarBtn: { 
+    width: 42, 
+    height: 42, 
+    borderRadius: 21, 
+    backgroundColor: GOLD, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    borderWidth: 2, 
+    borderColor: GOLD_LT 
+  },
+  
+  avatarImg: { 
+    width: 42, 
+    height: 42, 
+    borderRadius: 21 
+  },
+  
+  avatarInitials: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: NAVY 
+  },
 
-  welcomeBack: { fontSize: 22, fontWeight: '700', color: TEXT_MAIN, paddingHorizontal: 20, marginBottom: 2 },
-  welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 22 },
-  welcomeName: { fontSize: 22, fontWeight: '700', color: TEXT_MAIN },
-  avatarBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: GOLD, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: GOLD_LT },
-  avatarImg: { width: 38, height: 38, borderRadius: 19 },
-  avatarInitials: { fontSize: 13, fontWeight: '700', color: NAVY },
+  searchContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: WHITE,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    paddingHorizontal: 14,
+    paddingVertical: 2,
+    height: 46,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: TEXT_MAIN,
+    paddingVertical: 10,
+  },
+  clearSearchBtn: {
+    padding: 4,
+  },
+  searchResultText: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: TEXT_MUTED,
+  },
 
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: TEXT_MAIN },
-  sectionCount: { fontSize: 14, fontWeight: '500', color: TEXT_MUTED },
-  sectionLink: { fontSize: 13, color: BLUE, fontWeight: '600' },
+  sectionHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    marginBottom: 12 
+  },
+  sectionTitle: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: TEXT_MAIN 
+  },
+  sectionCount: { 
+    fontSize: 14, 
+    fontWeight: '500', 
+    color: TEXT_MUTED 
+  },
 
-  jobsListContainer: { paddingHorizontal: 16, paddingBottom: 80 },
+  jobsListContainer: { 
+    paddingHorizontal: 16, 
+    paddingBottom: 80 
+  },
 
   jobCard: {
-    backgroundColor: CARD, marginBottom: 12, borderRadius: 18, padding: 16,
-    borderWidth: 1.5, borderColor: BORDER,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+    backgroundColor: CARD, 
+    marginBottom: 12, 
+    borderRadius: 18, 
+    borderWidth: 1.5, 
+    borderColor: BORDER,
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 4, 
+    elevation: 1,
+    flexDirection: 'row',
+    overflow: 'hidden',
   },
-  jobCardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' },
-  badgeUrgent: { backgroundColor: '#FEF3C7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-  badgeUrgentText: { fontSize: 11, fontWeight: '600', color: '#D97706' },
-  badgeWorkSetup: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${BLUE}10`, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
-  badgeWorkSetupText: { fontSize: 10, fontWeight: '600', color: BLUE },
-  bookmarkBtn: { marginLeft: 'auto', padding: 2 },
-  jobTitle: { fontSize: 17, fontWeight: '700', color: TEXT_MAIN, marginBottom: 4, lineHeight: 23 },
+  jobCardContent: {
+    flex: 1,
+    padding: 16,
+  },
+  saveButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderLeftWidth: 1,
+    borderLeftColor: BORDER,
+  },
+  jobCardTop: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 10, 
+    gap: 6, 
+    flexWrap: 'wrap' 
+  },
+  badgeUrgent: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7', 
+    paddingHorizontal: 10, 
+    paddingVertical: 4, 
+    borderRadius: 999 
+  },
+  badgeUrgentText: { 
+    fontSize: 11, 
+    fontWeight: '600', 
+    color: '#D97706' 
+  },
+  badgeFeatured: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: GOLD_SOFT,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: GOLD_MID,
+  },
+  badgeFeaturedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: GOLD_DK,
+  },
+  badgeOpen: {
+    backgroundColor: `${GREEN}15`,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  badgeOpenText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: GREEN,
+  },
+  badgeWorkSetup: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4, 
+    backgroundColor: `${BLUE}10`, 
+    paddingHorizontal: 8, 
+    paddingVertical: 4, 
+    borderRadius: 999 
+  },
+  badgeWorkSetupText: { 
+    fontSize: 10, 
+    fontWeight: '600', 
+    color: BLUE 
+  },
+  badgeTime: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: BG,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  badgeTimeText: {
+    fontSize: 10,
+    color: TEXT_LIGHT,
+    fontWeight: '500',
+  },
+  badgeApplied: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: `${GREEN}15`,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  badgeAppliedText: {
+    fontSize: 10,
+    color: GREEN,
+    fontWeight: '600',
+  },
+  jobTitle: { 
+    fontSize: 17, 
+    fontWeight: '700', 
+    color: TEXT_MAIN, 
+    marginBottom: 4, 
+    lineHeight: 23 
+  },
   
-  // Client info in job card
-  clientInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  clientAvatarSmall: { width: 20, height: 20, borderRadius: 10, backgroundColor: `${BLUE}15`, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  clientAvatarSmallImg: { width: 20, height: 20, borderRadius: 10 },
-  clientAvatarSmallText: { fontSize: 8, fontWeight: '700', color: BLUE },
-  jobCompany: { fontSize: 13, color: BLUE, fontWeight: '500', flex: 1 },
+  clientInfoRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    marginBottom: 6 
+  },
+  clientAvatarSmall: { 
+    width: 20, 
+    height: 20, 
+    borderRadius: 10, 
+    backgroundColor: `${BLUE}15`, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    overflow: 'hidden' 
+  },
+  clientAvatarSmallImg: { 
+    width: 20, 
+    height: 20, 
+    borderRadius: 10 
+  },
+  clientAvatarSmallText: { 
+    fontSize: 8, 
+    fontWeight: '700', 
+    color: BLUE 
+  },
+  jobCompany: { 
+    fontSize: 13, 
+    color: BLUE, 
+    fontWeight: '500', 
+    flex: 1 
+  },
   
-  jobMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
-  jobLocation: { fontSize: 12, color: TEXT_MUTED },
-  budgetChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(200,149,32,0.08)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(200,149,32,0.2)', marginBottom: 10 },
-  budgetText: { fontSize: 12, color: GOLD_DK, fontWeight: '600' },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  tag: { paddingVertical: 5, paddingHorizontal: 12, backgroundColor: BG, borderRadius: 999, borderWidth: 1.5, borderColor: BORDER },
-  tagText: { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
-  appliedBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, backgroundColor: `${GREEN}10`, borderRadius: 6, alignSelf: 'flex-start' },
-  appliedBadgeText: { fontSize: 11, color: GREEN, fontWeight: '600' },
-  pendingBadge: { backgroundColor: `${ORANGE}15`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 },
-  pendingBadgeText: { fontSize: 9, color: ORANGE, fontWeight: '500' },
+  jobMetaRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 5, 
+    marginBottom: 8 
+  },
+  jobLocation: { 
+    fontSize: 12, 
+    color: TEXT_MUTED 
+  },
+  
+  descriptionPreview: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  
+  budgetChip: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 5, 
+    backgroundColor: 'rgba(200,149,32,0.08)', 
+    alignSelf: 'flex-start', 
+    paddingHorizontal: 10, 
+    paddingVertical: 5, 
+    borderRadius: 20, 
+    borderWidth: 1, 
+    borderColor: 'rgba(200,149,32,0.2)', 
+    marginBottom: 10 
+  },
+  budgetText: { 
+    fontSize: 12, 
+    color: GOLD_DK, 
+    fontWeight: '600' 
+  },
+  tagRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 6 
+  },
+  tag: { 
+    paddingVertical: 5, 
+    paddingHorizontal: 12, 
+    backgroundColor: BG, 
+    borderRadius: 999, 
+    borderWidth: 1.5, 
+    borderColor: BORDER 
+  },
+  tagText: { 
+    fontSize: 12, 
+    color: TEXT_MUTED, 
+    fontWeight: '500' 
+  },
 
-  skeletonLine: { backgroundColor: BORDER, borderRadius: 6, marginBottom: 6, opacity: 0.6 },
+  skeletonLine: { 
+    backgroundColor: BORDER, 
+    borderRadius: 6, 
+    marginBottom: 6, 
+    opacity: 0.6 
+  },
 
-  emptyCard: { backgroundColor: CARD, marginHorizontal: 0, borderRadius: 18, borderWidth: 1.5, borderColor: BORDER, padding: 36, alignItems: 'center', marginBottom: 20 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: TEXT_MAIN, marginTop: 14, marginBottom: 6 },
-  emptySub: { fontSize: 13, color: TEXT_MUTED, textAlign: 'center', paddingHorizontal: 20 },
+  emptyCard: { 
+    backgroundColor: CARD, 
+    marginHorizontal: 0, 
+    borderRadius: 18, 
+    borderWidth: 1.5, 
+    borderColor: BORDER, 
+    padding: 36, 
+    alignItems: 'center', 
+    marginBottom: 20 
+  },
+  emptyTitle: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: TEXT_MAIN, 
+    marginTop: 14, 
+    marginBottom: 6 
+  },
+  emptySub: { 
+    fontSize: 13, 
+    color: TEXT_MUTED, 
+    textAlign: 'center', 
+    paddingHorizontal: 20 
+  },
 
   tabSafe: { 
     backgroundColor: CARD,
@@ -1781,22 +2449,95 @@ const styles = StyleSheet.create({
   },
 });
 
-// ── Bottom sheet styles ────────────────────────────────────────────────────────
-const sheet = StyleSheet.create({
+// ── Detail Modal Styles ────────────────────────────────────────────────────────
+const detailStyles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(7,26,62,0.55)' },
-  container: { backgroundColor: WHITE, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: SCREEN_H * 0.88, paddingTop: 12 },
-  handle: { width: 40, height: 4, borderRadius: 999, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 16 },
-  header: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, marginBottom: 14, gap: 12 },
-  companyLogo: { width: 48, height: 48, borderRadius: 14, backgroundColor: `${BLUE}10`, borderWidth: 1.5, borderColor: `${BLUE}18`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  headerInfo: { flex: 1 },
-  jobTitle: { fontSize: 17, fontWeight: '700', color: TEXT_MAIN, lineHeight: 23, marginBottom: 3 },
-  clientInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  jobCompany: { fontSize: 13, color: BLUE, fontWeight: '500' },
-  closeBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: BG, alignItems: 'center', justifyContent: 'center' },
+  container: { 
+    backgroundColor: WHITE, 
+    borderTopLeftRadius: 24, 
+    borderTopRightRadius: 24, 
+    maxHeight: SCREEN_H * 0.92, 
+    paddingTop: 12,
+    position: 'relative',
+  },
+  handle: { 
+    width: 40, 
+    height: 4, 
+    borderRadius: 999, 
+    backgroundColor: BORDER, 
+    alignSelf: 'center', 
+    marginBottom: 16 
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: TEXT_MUTED,
+  },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    paddingHorizontal: 20, 
+    marginBottom: 14, 
+    gap: 12 
+  },
+  companyLogo: { 
+    width: 48, 
+    height: 48, 
+    borderRadius: 14, 
+    backgroundColor: `${BLUE}10`, 
+    borderWidth: 1.5, 
+    borderColor: `${BLUE}18`, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    flexShrink: 0 
+  },
+  headerInfo: { 
+    flex: 1 
+  },
+  jobTitle: { 
+    fontSize: 17, 
+    fontWeight: '700', 
+    color: TEXT_MAIN, 
+    lineHeight: 23, 
+    marginBottom: 3 
+  },
+  clientNameLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  jobCompany: { 
+    fontSize: 13, 
+    color: BLUE, 
+    fontWeight: '500' 
+  },
+  timeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  timeText: {
+    fontSize: 11,
+    color: TEXT_LIGHT,
+    fontWeight: '500',
+  },
+  closeBtn: { 
+    width: 32, 
+    height: 32, 
+    borderRadius: 10, 
+    backgroundColor: BG, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
   
-  // Client quick info
-  clientQuickInfo: {
+  clientInfoCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -1808,50 +2549,437 @@ const sheet = StyleSheet.create({
     borderWidth: 1,
     borderColor: `${BLUE}15`,
   },
-  clientQuickAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  clientAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: `${BLUE}15`,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  clientQuickAvatarImg: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  clientAvatarImg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
-  clientQuickInitials: {
-    fontSize: 14,
+  clientAvatarText: {
+    fontSize: 16,
     fontWeight: '700',
     color: BLUE,
   },
-  clientQuickInfoText: { flex: 1 },
-  clientQuickName: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN },
-  clientQuickCompany: { fontSize: 11, color: TEXT_MUTED },
+  clientInfo: {
+    flex: 1,
+  },
+  clientName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    marginBottom: 2,
+  },
+  clientDetail: {
+    fontSize: 12,
+    color: TEXT_MUTED,
+    lineHeight: 16,
+  },
   
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 20, marginBottom: 16 },
-  metaChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BG, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1.5, borderColor: BORDER },
-  metaChipBlue: { backgroundColor: 'rgba(200,149,32,0.08)', borderColor: 'rgba(200,149,32,0.2)' },
-  metaText: { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
-  divider: { height: 1.5, backgroundColor: BORDER, marginHorizontal: 20, marginBottom: 16 },
-  body: { paddingHorizontal: 20 },
-  section: { marginBottom: 20 },
-  sectionLabel: { fontSize: 11, fontWeight: '700', color: BLUE, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  tag: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: `${BLUE}10`, borderRadius: 999, borderWidth: 1.5, borderColor: `${BLUE}22` },
-  tagText: { fontSize: 12, color: BLUE, fontWeight: '600' },
-  descText: { fontSize: 14, color: TEXT_MUTED, lineHeight: 22 },
-  detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, backgroundColor: BG, borderRadius: 16, padding: 16, borderWidth: 1.5, borderColor: BORDER },
-  detailItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, width: '45%' },
-  detailLabel: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500', marginBottom: 2 },
-  detailValue: { fontSize: 13, color: TEXT_MAIN, fontWeight: '600' },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1.5, borderTopColor: BORDER },
-  saveBtn: { width: 48, height: 48, borderRadius: 14, backgroundColor: `${BLUE}10`, borderWidth: 1.5, borderColor: `${BLUE}22`, alignItems: 'center', justifyContent: 'center' },
-  applyBtn: { flex: 1, height: 48, borderRadius: 14, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center' },
-  applyBtnDisabled: { backgroundColor: `${BLUE}50` },
-  applyBtnText: { fontSize: 15, fontWeight: '700', color: WHITE },
+  metaRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 8, 
+    paddingHorizontal: 20, 
+    marginBottom: 16 
+  },
+  metaChip: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 5, 
+    backgroundColor: BG, 
+    paddingHorizontal: 10, 
+    paddingVertical: 6, 
+    borderRadius: 999, 
+    borderWidth: 1.5, 
+    borderColor: BORDER 
+  },
+  metaChipGold: { 
+    backgroundColor: 'rgba(200,149,32,0.08)', 
+    borderColor: 'rgba(200,149,32,0.2)' 
+  },
+  metaText: { 
+    fontSize: 12, 
+    color: TEXT_MUTED, 
+    fontWeight: '500' 
+  },
+  divider: { 
+    height: 1.5, 
+    backgroundColor: BORDER, 
+    marginHorizontal: 20, 
+    marginBottom: 16 
+  },
+  body: { 
+    paddingHorizontal: 20,
+    maxHeight: SCREEN_H * 0.45,
+  },
+  section: { 
+    marginBottom: 20 
+  },
+  sectionLabel: { 
+    fontSize: 11, 
+    fontWeight: '700', 
+    color: BLUE, 
+    textTransform: 'uppercase', 
+    letterSpacing: 0.8, 
+    marginBottom: 10 
+  },
+  tagRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 6 
+  },
+  tag: { 
+    paddingVertical: 6, 
+    paddingHorizontal: 12, 
+    backgroundColor: `${BLUE}10`, 
+    borderRadius: 999, 
+    borderWidth: 1.5, 
+    borderColor: `${BLUE}22` 
+  },
+  tagText: { 
+    fontSize: 12, 
+    color: BLUE, 
+    fontWeight: '600' 
+  },
+  descText: { 
+    fontSize: 14, 
+    color: TEXT_MUTED, 
+    lineHeight: 22,
+  },
+  questionItem: { 
+    flexDirection: 'row', 
+    gap: 8, 
+    marginBottom: 8,
+    alignItems: 'flex-start',
+    backgroundColor: '#F5F7FA',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  questionNumber: { 
+    fontSize: 14, 
+    color: BLUE, 
+    fontWeight: '600', 
+    width: 24 
+  },
+  questionText: { 
+    fontSize: 14, 
+    color: TEXT_MAIN, 
+    flex: 1, 
+    lineHeight: 20 
+  },
+  requiredBadge: {
+    backgroundColor: BLUE_SOFT,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  requiredBadgeText: {
+    fontSize: 9,
+    color: BLUE,
+    fontWeight: '600',
+  },
+  timelineGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    backgroundColor: '#F5F7FA',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: '47%',
+  },
+  timelineLabel: {
+    fontSize: 10,
+    color: TEXT_LIGHT,
+    fontWeight: '500',
+    marginBottom: 1,
+  },
+  timelineValue: {
+    fontSize: 12,
+    color: TEXT_MAIN,
+    fontWeight: '600',
+  },
+  detailGrid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 12, 
+    backgroundColor: BG, 
+    borderRadius: 16, 
+    padding: 16, 
+    borderWidth: 1.5, 
+    borderColor: BORDER,
+    marginBottom: 20,
+  },
+  detailItem: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    gap: 10, 
+    width: '45%' 
+  },
+  detailLabel: { 
+    fontSize: 10, 
+    color: TEXT_LIGHT, 
+    fontWeight: '500', 
+    marginBottom: 2 
+  },
+  detailValue: { 
+    fontSize: 13, 
+    color: TEXT_MAIN, 
+    fontWeight: '600' 
+  },
+
+  applyContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: WHITE,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  applyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: BLUE,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    shadowColor: BLUE,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  applyButtonDisabled: {
+    backgroundColor: `${GREEN}80`,
+    shadowOpacity: 0.1,
+  },
+  applyIcon: {
+    marginRight: 10,
+  },
+  applyButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: WHITE,
+    letterSpacing: 0.3,
+  },
+});
+
+// ── Status Modal Styles ─────────────────────────────────────────────────────────
+const statusStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(7,26,62,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  container: { backgroundColor: WHITE, borderRadius: 24, padding: 24, alignItems: 'center', width: '100%', maxWidth: 320 },
+  iconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: `${GREEN}15`, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  title: { fontSize: 22, fontWeight: '700', color: GREEN, marginBottom: 12, textAlign: 'center' },
+  message: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center', marginBottom: 16, lineHeight: 20 },
+  infoBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: `${BLUE}10`, padding: 12, borderRadius: 12, marginBottom: 20 },
+  infoText: { fontSize: 12, color: BLUE, flex: 1, lineHeight: 16 },
+  button: { backgroundColor: GREEN, paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12, minWidth: 120, alignItems: 'center' },
+  buttonText: { fontSize: 16, fontWeight: '600', color: WHITE },
+});
+
+// ── Client Profile Modal Styles ──────────────────────────────────────────────────
+const clientProfileStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(7,26,62,0.55)' },
+  container: { 
+    backgroundColor: WHITE, 
+    borderTopLeftRadius: 24, 
+    borderTopRightRadius: 24, 
+    maxHeight: SCREEN_H * 0.85, 
+    paddingTop: 12 
+  },
+  handle: { 
+    width: 40, 
+    height: 4, 
+    borderRadius: 999, 
+    backgroundColor: BORDER, 
+    alignSelf: 'center', 
+    marginBottom: 16 
+  },
+  header: { 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingBottom: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: BORDER 
+  },
+  avatarLarge: { 
+    width: 72, 
+    height: 72, 
+    borderRadius: 36, 
+    backgroundColor: `${BLUE}15`, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginBottom: 12, 
+    overflow: 'hidden' 
+  },
+  avatarImage: { 
+    width: 72, 
+    height: 72, 
+    borderRadius: 36 
+  },
+  avatarInitials: { 
+    fontSize: 28, 
+    fontWeight: '700', 
+    color: BLUE 
+  },
+  clientName: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: TEXT_MAIN, 
+    marginBottom: 2 
+  },
+  companyName: { 
+    fontSize: 14, 
+    color: TEXT_MUTED, 
+    marginBottom: 6 
+  },
+  ratingRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 2, 
+    marginBottom: 4 
+  },
+  ratingText: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: TEXT_MAIN, 
+    marginLeft: 4 
+  },
+  closeBtn: { 
+    position: 'absolute', 
+    top: 0, 
+    right: 12, 
+    width: 32, 
+    height: 32, 
+    borderRadius: 10, 
+    backgroundColor: BG, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  body: { 
+    paddingHorizontal: 20, 
+    paddingTop: 16, 
+    paddingBottom: 20 
+  },
+  section: { 
+    marginBottom: 20 
+  },
+  sectionLabel: { 
+    fontSize: 11, 
+    fontWeight: '700', 
+    color: BLUE, 
+    textTransform: 'uppercase', 
+    letterSpacing: 0.8, 
+    marginBottom: 10 
+  },
+  bioText: { 
+    fontSize: 14, 
+    color: TEXT_MUTED, 
+    lineHeight: 22 
+  },
+  detailGrid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 12, 
+    backgroundColor: BG, 
+    borderRadius: 16, 
+    padding: 16, 
+    borderWidth: 1.5, 
+    borderColor: BORDER 
+  },
+  detailItem: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    gap: 10, 
+    width: '45%' 
+  },
+  detailLabel: { 
+    fontSize: 10, 
+    color: TEXT_LIGHT, 
+    fontWeight: '500', 
+    marginBottom: 2 
+  },
+  detailValue: { 
+    fontSize: 13, 
+    color: TEXT_MAIN, 
+    fontWeight: '500', 
+    flexShrink: 1 
+  },
+  skillRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    gap: 6 
+  },
+  skillTag: { 
+    paddingVertical: 6, 
+    paddingHorizontal: 12, 
+    backgroundColor: `${BLUE}10`, 
+    borderRadius: 999, 
+    borderWidth: 1.5, 
+    borderColor: `${BLUE}22` 
+  },
+  skillTagText: { 
+    fontSize: 12, 
+    color: BLUE, 
+    fontWeight: '500' 
+  },
+  projectContainer: {
+    backgroundColor: BG,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  projectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  projectText: {
+    fontSize: 13,
+    color: TEXT_MAIN,
+    flex: 1,
+  },
+  emptyState: { 
+    alignItems: 'center', 
+    paddingVertical: 40 
+  },
+  emptyStateTitle: { 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: TEXT_MUTED, 
+    marginTop: 12 
+  },
+  emptyStateText: { 
+    fontSize: 13, 
+    color: TEXT_LIGHT, 
+    textAlign: 'center', 
+    marginTop: 4, 
+    paddingHorizontal: 20 
+  },
 });
 
 // ── Application Modal Styles ─────────────────────────────────────────────────────
@@ -1929,48 +3057,4 @@ const applyStyles = StyleSheet.create({
   existingCVName: { fontSize: 13, fontWeight: '500', color: TEXT_MAIN },
   existingCVSize: { fontSize: 10, color: TEXT_MUTED, marginTop: 2 },
   uploadNewText: { flex: 1, fontSize: 13, color: TEXT_MAIN },
-});
-
-// ── Status Modal Styles ─────────────────────────────────────────────────────────
-const statusStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(7,26,62,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  container: { backgroundColor: WHITE, borderRadius: 24, padding: 24, alignItems: 'center', width: '100%', maxWidth: 320 },
-  iconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: `${GREEN}15`, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  title: { fontSize: 22, fontWeight: '700', color: GREEN, marginBottom: 12, textAlign: 'center' },
-  message: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center', marginBottom: 16, lineHeight: 20 },
-  infoBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: `${BLUE}10`, padding: 12, borderRadius: 12, marginBottom: 20 },
-  infoText: { fontSize: 12, color: BLUE, flex: 1, lineHeight: 16 },
-  button: { backgroundColor: GREEN, paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12, minWidth: 120, alignItems: 'center' },
-  buttonText: { fontSize: 16, fontWeight: '600', color: WHITE },
-});
-
-// ── Client Profile Modal Styles ──────────────────────────────────────────────────
-const clientProfileStyles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(7,26,62,0.55)' },
-  container: { backgroundColor: WHITE, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: SCREEN_H * 0.85, paddingTop: 12 },
-  handle: { width: 40, height: 4, borderRadius: 999, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 16 },
-  header: { alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: BORDER },
-  avatarLarge: { width: 72, height: 72, borderRadius: 36, backgroundColor: `${BLUE}15`, alignItems: 'center', justifyContent: 'center', marginBottom: 12, overflow: 'hidden' },
-  avatarImage: { width: 72, height: 72, borderRadius: 36 },
-  avatarInitials: { fontSize: 28, fontWeight: '700', color: BLUE },
-  clientName: { fontSize: 18, fontWeight: '700', color: TEXT_MAIN, marginBottom: 2 },
-  companyName: { fontSize: 14, color: TEXT_MUTED, marginBottom: 6 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 4 },
-  ratingText: { fontSize: 14, fontWeight: '600', color: TEXT_MAIN, marginLeft: 4 },
-  closeBtn: { position: 'absolute', top: 0, right: 12, width: 32, height: 32, borderRadius: 10, backgroundColor: BG, alignItems: 'center', justifyContent: 'center' },
-  body: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
-  section: { marginBottom: 20 },
-  sectionLabel: { fontSize: 11, fontWeight: '700', color: BLUE, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
-  bioText: { fontSize: 14, color: TEXT_MUTED, lineHeight: 22 },
-  detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, backgroundColor: BG, borderRadius: 16, padding: 16, borderWidth: 1.5, borderColor: BORDER },
-  detailItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, width: '45%' },
-  detailLabel: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500', marginBottom: 2 },
-  detailValue: { fontSize: 13, color: TEXT_MAIN, fontWeight: '500', flexShrink: 1 },
-  skillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  skillTag: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: `${BLUE}10`, borderRadius: 999, borderWidth: 1.5, borderColor: `${BLUE}22` },
-  skillTagText: { fontSize: 12, color: BLUE, fontWeight: '500' },
-  emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyStateTitle: { fontSize: 16, fontWeight: '600', color: TEXT_MUTED, marginTop: 12 },
-  emptyStateText: { fontSize: 13, color: TEXT_LIGHT, textAlign: 'center', marginTop: 4, paddingHorizontal: 20 },
 });

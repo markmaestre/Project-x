@@ -12,6 +12,7 @@ import {
   Modal,
   StatusBar,
   Linking,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -79,8 +80,8 @@ const getClientInitials = (job) => {
   return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase() || '?';
 };
 
-
-const StatusTimeline = ({ history, currentStatus, interviewDetails, contractDetails }) => {
+// ── Status Timeline Component ──
+const StatusTimeline = ({ history, currentStatus, interviewDetails }) => {
   const STATUS_ICONS = {
     pending: 'time-outline',
     reviewed: 'eye-outline',
@@ -131,7 +132,7 @@ const StatusTimeline = ({ history, currentStatus, interviewDetails, contractDeta
     }
   };
 
-  // If no history, show current status
+  // If no history, create a single entry with current status
   if (!history || history.length === 0) {
     const color = STATUS_COLORS[currentStatus] || '#0055A5';
     const label = STATUS_LABELS[currentStatus] || currentStatus || 'Pending';
@@ -152,13 +153,22 @@ const StatusTimeline = ({ history, currentStatus, interviewDetails, contractDeta
     );
   }
 
-  // Sort history by date (oldest first)
-  const sortedHistory = [...history].sort((a, b) => 
-    new Date(a.changed_at || a.created_at || a.updated_at) - new Date(b.changed_at || b.created_at || b.updated_at)
-  );
+  // Sort history by date (oldest first for chronological order)
+  const sortedHistory = [...history].sort((a, b) => {
+    const dateA = new Date(a.changed_at || a.created_at || a.updated_at || a.date);
+    const dateB = new Date(b.changed_at || b.created_at || b.updated_at || b.date);
+    return dateA - dateB; // Oldest first
+  });
 
-  // Check if hired to mark interview as completed
   const isHired = currentStatus === 'hired';
+
+  // Find interview data - check both root level and history
+  const interviewHistoryItem = sortedHistory.find(h => h.status === 'interview');
+  const interviewData = interviewDetails || interviewHistoryItem?.interview_details || null;
+
+  // Log for debugging
+  console.log('StatusTimeline - Interview Data:', interviewData);
+  console.log('StatusTimeline - History:', sortedHistory);
 
   return (
     <View style={tl.container}>
@@ -169,15 +179,11 @@ const StatusTimeline = ({ history, currentStatus, interviewDetails, contractDeta
         const icon = STATUS_ICONS[status] || 'ellipse-outline';
         const label = STATUS_LABELS[status] || status || 'Status Update';
         
-        const isInterview = status === 'interview' && (item.interview_details || interviewDetails);
+        const isInterview = status === 'interview';
         const isOffer = status === 'offered' && (item.offer_details || item.offer);
-        const isInterviewCompleted = isHired && status === 'interview';
+        const isInterviewCompleted = isHired && isInterview;
         
-        // Get the date from the history item
         const itemDate = item.changed_at || item.created_at || item.updated_at || item.date || new Date().toISOString();
-        
-        // Use interview details from item or from props
-        const interviewData = item.interview_details || interviewDetails;
 
         return (
           <View key={index} style={tl.timelineItem}>
@@ -201,7 +207,7 @@ const StatusTimeline = ({ history, currentStatus, interviewDetails, contractDeta
               </Text>
               <Text style={tl.statusDate}>{formatDate(itemDate)}</Text>
               
-              {/* Interview Details */}
+              {/* Show interview details when status is interview AND we have interview data */}
               {isInterview && interviewData && (
                 <View style={tl.detailBox}>
                   <View style={tl.detailRow}>
@@ -233,7 +239,7 @@ const StatusTimeline = ({ history, currentStatus, interviewDetails, contractDeta
                 </View>
               )}
               
-              {/* Interview Completed */}
+              {/* Show interview completed status */}
               {isInterviewCompleted && (
                 <View style={[tl.detailBox, { backgroundColor: GREEN_SOFT, borderColor: GREEN_MID }]}>
                   <View style={tl.detailRow}>
@@ -253,7 +259,7 @@ const StatusTimeline = ({ history, currentStatus, interviewDetails, contractDeta
                 </View>
               )}
               
-              {/* Offer Details */}
+              {/* Show offer details */}
               {isOffer && (item.offer_details || item.offer) && (
                 <View style={tl.detailBox}>
                   <View style={tl.detailRow}>
@@ -273,7 +279,7 @@ const StatusTimeline = ({ history, currentStatus, interviewDetails, contractDeta
                 </View>
               )}
               
-              {/* Additional notes */}
+              {/* Show additional notes */}
               {item.note && !isInterview && !isOffer && (
                 <Text style={tl.noteText}>{item.note}</Text>
               )}
@@ -439,7 +445,9 @@ const getCategoryIcon = (title = '') => {
 };
 
 const budget = (job) =>
-  job?.budget_amount
+  job?.budget?.min && job?.budget?.max
+    ? `₱${Number(job.budget.min).toLocaleString()} - ₱${Number(job.budget.max).toLocaleString()}`
+    : job?.budget_amount
     ? `₱${Number(job.budget_amount).toLocaleString()}${job.budget_type === 'hourly' ? '/hr' : ''}`
     : '—';
 
@@ -470,7 +478,7 @@ const pill = StyleSheet.create({
 
 const Divider = () => <View style={{ height: 1, backgroundColor: BORDER, marginVertical: 10 }} />;
 
-// Application Card - UPDATED with full status history
+// ── Application Card ──
 const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onViewTimeline, onViewContract }) => {
   const job = application.job_id;
   const st  = getStatus(application.status);
@@ -479,17 +487,14 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onVi
   const isHired = application.status === 'hired';
   const hasContract = !!application.contractId;
   
-  // Get interview details from application
+  // Get interview details - check both root and history
   const interviewDetails = application.interview_details || 
                           (application.status_history?.find(h => h.status === 'interview')?.interview_details);
 
-  // Check if there are interview details
   const hasInterview = (application.status === 'interview' || isHired) && interviewDetails;
   const isInterviewCompleted = isHired && hasInterview;
 
-  // Get client name
   const clientName = getClientName(job);
-  const clientInitials = getClientInitials(job);
 
   return (
     <TouchableOpacity 
@@ -517,10 +522,9 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onVi
       <View style={ac.pillRow}>
         <Pill icon="cash-outline"     label={budget(job)}                   color={GOLD_DK} />
         <Pill icon="location-outline" label={job?.work_setup || 'Remote'}             />
-        <Pill icon="calendar-outline" label={`Applied ${timeAgo(application.applied_at)}`} />
+        <Pill icon="calendar-outline" label={`Applied ${timeAgo(application.applied_at || application.created_at)}`} />
       </View>
 
-      {/* Show Interview Details */}
       {hasInterview && (
         <View style={[ac.interviewBanner, isInterviewCompleted && ac.interviewCompleted]}>
           <View style={ac.interviewHeader}>
@@ -567,7 +571,6 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onVi
         </View>
       )}
 
-      {/* Contract Button - Show when hired */}
       {hasContract && (
         <TouchableOpacity 
           style={ac.contractBtn}
@@ -580,7 +583,6 @@ const ApplicationCard = ({ application, onViewJob, onViewClient, onMessage, onVi
         </TouchableOpacity>
       )}
 
-      {/* View History Button */}
       <TouchableOpacity 
         style={ac.historyBtn} 
         onPress={() => onViewTimeline(application)}
@@ -702,8 +704,6 @@ const ac = StyleSheet.create({
     gap: 6, 
     marginBottom: 10 
   },
-  
-  // Interview Banner Styles
   interviewBanner: {
     backgroundColor: 'rgba(200,149,32,0.12)',
     borderRadius: 12,
@@ -762,7 +762,6 @@ const ac = StyleSheet.create({
     color: BLUE,
     textDecorationLine: 'underline',
   },
-  
   contractBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -781,7 +780,6 @@ const ac = StyleSheet.create({
     color: GREEN,
     flex: 1,
   },
-  
   historyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -861,7 +859,7 @@ const ac = StyleSheet.create({
   },
 });
 
-// Saved Job Card
+// ── Saved Job Card ──
 const SavedJobCard = ({ job, onViewJob, onViewClient, onUnsave, onApply }) => {
   const clientName = getClientName(job);
   
@@ -1035,43 +1033,6 @@ const sj = StyleSheet.create({
     fontSize: 12, 
     fontWeight: '700', 
     color: WHITE 
-  },
-});
-
-// Stat Card
-const StatCard = ({ label, count, color, icon, active, onPress }) => (
-  <TouchableOpacity
-    style={[sc.card, { borderColor: active ? color : BORDER }, active && { backgroundColor: `${color}14` }]}
-    onPress={onPress}
-    activeOpacity={0.75}
-  >
-    <Ionicons name={icon} size={16} color={color} />
-    <Text style={[sc.count, { color }]}>{count}</Text>
-    <Text style={sc.label}>{label}</Text>
-  </TouchableOpacity>
-);
-
-const sc = StyleSheet.create({
-  card: { 
-    minWidth: 76, 
-    backgroundColor: CARD, 
-    borderRadius: 12, 
-    padding: 10, 
-    alignItems: 'center', 
-    borderWidth: 1.5, 
-    gap: 3 
-  },
-  count: { 
-    fontSize: 22, 
-    fontWeight: '800', 
-    letterSpacing: -0.5 
-  },
-  label: { 
-    fontSize: 9, 
-    color: TEXT_LIGHT, 
-    fontWeight: '600', 
-    letterSpacing: 0.5, 
-    textTransform: 'uppercase' 
   },
 });
 
@@ -1312,7 +1273,7 @@ const cnt = StyleSheet.create({
   },
 });
 
-// ── Timeline Modal - UPDATED with full history and interview details ──
+// ── Timeline Modal ──
 const TimelineModal = ({ application, visible, onClose, onViewJob, onViewClient, onViewContract }) => {
   if (!application) return null;
   
@@ -1321,9 +1282,14 @@ const TimelineModal = ({ application, visible, onClose, onViewJob, onViewClient,
   const isHired = application.status === 'hired';
   const hasContract = !!application.contractId;
   
-  // Get interview details from application
+  // Get interview details - check both root and history
   const interviewDetails = application.interview_details || 
                           (application.status_history?.find(h => h.status === 'interview')?.interview_details);
+  
+  // Log for debugging
+  console.log('TimelineModal - Application:', application._id);
+  console.log('TimelineModal - Interview Details:', interviewDetails);
+  console.log('TimelineModal - Status History:', application.status_history);
   
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -1363,7 +1329,6 @@ const TimelineModal = ({ application, visible, onClose, onViewJob, onViewClient,
                 <Pill icon="briefcase-outline" label={job?.job_type || 'Contract'} />
               </View>
 
-              {/* Job Description */}
               {job?.description && (
                 <View style={tm.descSection}>
                   <Text style={tm.sectionLabel}>Job Description</Text>
@@ -1371,7 +1336,6 @@ const TimelineModal = ({ application, visible, onClose, onViewJob, onViewClient,
                 </View>
               )}
 
-              {/* Required Skills */}
               {job?.required_skills?.length > 0 && (
                 <View style={tm.skillsSection}>
                   <Text style={tm.sectionLabel}>Required Skills</Text>
@@ -1385,7 +1349,6 @@ const TimelineModal = ({ application, visible, onClose, onViewJob, onViewClient,
                 </View>
               )}
 
-              {/* Status Badge */}
               <View style={tm.statusSection}>
                 <Text style={tm.sectionLabel}>Current Status</Text>
                 <View style={tm.statusRow}>
@@ -1395,11 +1358,10 @@ const TimelineModal = ({ application, visible, onClose, onViewJob, onViewClient,
                       {getStatus(application.status).label}
                     </Text>
                   </View>
-                  <Text style={tm.appliedDate}>Applied {timeAgo(application.applied_at)}</Text>
+                  <Text style={tm.appliedDate}>Applied {timeAgo(application.applied_at || application.created_at)}</Text>
                 </View>
               </View>
 
-              {/* Contract Button */}
               {hasContract && (
                 <TouchableOpacity 
                   style={tm.contractBtn}
@@ -1415,7 +1377,7 @@ const TimelineModal = ({ application, visible, onClose, onViewJob, onViewClient,
               )}
             </View>
             
-            {/* Show Interview Details */}
+            {/* Interview Details Section */}
             {interviewDetails && (
               <View style={tm.interviewSection}>
                 <Text style={tm.sectionTitle}>
@@ -1456,18 +1418,16 @@ const TimelineModal = ({ application, visible, onClose, onViewJob, onViewClient,
               </View>
             )}
             
-            {/* Full Status History */}
+            {/* Full Status History - Chronological Order */}
             <View style={tm.timelineSection}>
               <Text style={tm.sectionTitle}>Full Status History</Text>
               <StatusTimeline 
                 history={application.status_history} 
                 currentStatus={application.status}
                 interviewDetails={interviewDetails}
-                contractDetails={application.contractDetails}
               />
             </View>
 
-            {/* Action Buttons */}
             <View style={tm.actionButtons}>
               <TouchableOpacity 
                 style={tm.viewJobBtn} 
@@ -1721,7 +1681,7 @@ const tm = StyleSheet.create({
   },
 });
 
-// Job Details Modal
+// ── Job Details Modal ──
 const JobModal = ({ job, visible, onClose, onViewClient }) => {
   if (!job) return null;
   
@@ -1796,7 +1756,7 @@ const JobModal = ({ job, visible, onClose, onViewClient }) => {
   );
 };
 
-// Client Profile Modal - FIXED to show client data
+// ── Client Profile Modal ──
 const ClientModal = ({ job, visible, onClose, onMessage }) => {
   if (!job) return null;
   
@@ -2200,29 +2160,39 @@ const cm = StyleSheet.create({
   },
 });
 
-// Main Screen
+// ── Main Screen ──
 export default function MyApplications({ onNavigate, route }) {
   const dispatch = useDispatch();
   const { applications, savedJobs, isLoading } = useSelector((s) => s.applications);
-  const { selectedContract } = useSelector((s) => s.contracts.contracts);
+  const { selectedContract } = useSelector((s) => s.contracts?.contracts || {});
 
-  const [activeTab,      setActiveTab]      = useState('Applied');
-  const [refreshing,     setRefreshing]     = useState(false);
+  const [activeTab, setActiveTab] = useState('Applied');
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState(null);
-  const [showJobModal,   setShowJobModal]   = useState(false);
-  const [showClientModal,setShowClientModal]= useState(false);
+  const [showJobModal, setShowJobModal] = useState(false);
+  const [showClientModal, setShowClientModal] = useState(false);
   const [showTimelineModal, setShowTimelineModal] = useState(false);
   const [showContractModal, setShowContractModal] = useState(false);
-  const [selectedJob,    setSelectedJob]    = useState(null);
+  const [selectedJob, setSelectedJob] = useState(null);
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [contractLoading, setContractLoading] = useState(false);
-  const [stats,          setStats]          = useState({ total: 0, pending: 0, reviewed: 0, interview: 0, offered: 0, accepted: 0, hired: 0, rejected: 0 });
 
   useEffect(() => {
     if (route?.params?.returnState?.activeTab) {
       setActiveTab(route.params.returnState.activeTab);
     }
   }, [route?.params]);
+
+  // ── Android Back Handler ──
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      const returnState = { activeTab };
+      onNavigate('FreelancerDashboard', { returnState });
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, [onNavigate, activeTab]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -2234,7 +2204,18 @@ export default function MyApplications({ onNavigate, route }) {
       ]);
       
       console.log('Applications loaded:', appsResult?.applications?.length || 0);
-      console.log('Saved jobs loaded:', savedResult?.savedJobs?.length || 0);
+      
+      // Debug: Check for interview details
+      appsResult?.applications?.forEach(app => {
+        if (app.status === 'interview' || app.status === 'hired') {
+          console.log(`🔍 App ${app._id} - Status: ${app.status}`);
+          console.log('  Root interview_details:', app.interview_details);
+          const historyInterview = app.status_history?.find(h => h.status === 'interview');
+          if (historyInterview?.interview_details) {
+            console.log('  History interview_details:', historyInterview.interview_details);
+          }
+        }
+      });
       
     } catch (e) { 
       console.error('Error fetching data:', e);
@@ -2242,19 +2223,6 @@ export default function MyApplications({ onNavigate, route }) {
   }, [dispatch]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  useEffect(() => {
-    setStats({
-      total:    applications.length,
-      pending:  applications.filter(a => a.status === 'pending').length,
-      reviewed: applications.filter(a => a.status === 'reviewed').length,
-      interview: applications.filter(a => a.status === 'interview').length,
-      offered:  applications.filter(a => a.status === 'offered').length,
-      accepted: applications.filter(a => a.status === 'accepted').length,
-      hired:    applications.filter(a => a.status === 'hired').length,
-      rejected: applications.filter(a => a.status === 'rejected').length,
-    });
-  }, [applications]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -2336,28 +2304,12 @@ export default function MyApplications({ onNavigate, route }) {
     ? applications.filter(a => a.status === selectedStatus)
     : applications;
 
-  const STAT_CARDS = [
-    { key: 'total',    label: 'Total',     count: stats.total,    color: BLUE,  icon: 'grid-outline' },
-    { key: 'pending',  label: 'Pending',   count: stats.pending,  color: BLUE,  icon: 'time-outline' },
-    { key: 'reviewed', label: 'Reviewed',  count: stats.reviewed, color: '#60a5fa',   icon: 'eye-outline' },
-    { key: 'interview', label: 'Interview', count: stats.interview, color: GOLD_DK,   icon: 'calendar-outline' },
-    { key: 'offered',  label: 'Offers',    count: stats.offered,  color: '#f59e0b',   icon: 'gift-outline' },
-    { key: 'accepted', label: 'Accepted',  count: stats.accepted, color: GREEN,   icon: 'checkmark-circle-outline' },
-    { key: 'hired',    label: 'Hired',     count: stats.hired,    color: '#10b981', icon: 'checkmark-done-circle-outline' },
-    { key: 'rejected', label: 'Rejected',  count: stats.rejected, color: '#f87171',   icon: 'close-circle-outline' },
-  ];
-
   if (isLoading && !refreshing) {
     return (
       <SafeAreaView style={s.safe} edges={['top']}>
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />
         <View style={s.root}>
           <View style={s.header}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => onNavigate('FreelancerDashboard')}>
-              <View style={s.iconWrap}>
-                <Ionicons name="arrow-back" size={18} color={WHITE} />
-              </View>
-            </TouchableOpacity>
             <Text style={s.headerTitle}>My <Text style={s.blue}>Applications</Text></Text>
             <View style={{ width: 36 }} />
           </View>
@@ -2380,48 +2332,14 @@ export default function MyApplications({ onNavigate, route }) {
 
       <View style={s.root}>
         <View style={s.header}>
-          <TouchableOpacity style={s.iconBtn} onPress={() => onNavigate('FreelancerDashboard')} activeOpacity={0.7}>
-            <View style={s.iconWrap}>
-              <Ionicons name="arrow-back" size={18} color={WHITE} />
-            </View>
-          </TouchableOpacity>
           <Text style={s.headerTitle}>My <Text style={s.blue}>Applications</Text></Text>
           <View style={{ width: 36 }} />
         </View>
 
-        <View style={s.statsBorder}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.statsScroll}>
-            {STAT_CARDS.map(sc => (
-              <StatCard
-                key={sc.key}
-                label={sc.label}
-                count={sc.count}
-                color={sc.color}
-                icon={sc.icon}
-                active={selectedStatus === sc.key}
-                onPress={() => {
-                  setSelectedStatus(selectedStatus === sc.key ? null : sc.key);
-                  setActiveTab('Applied');
-                }}
-              />
-            ))}
-          </ScrollView>
-        </View>
-
-        {selectedStatus && (
-          <View style={s.filterBar}>
-            <Ionicons name="funnel-outline" size={13} color={BLUE} />
-            <Text style={s.filterText}>Showing: {getStatus(selectedStatus).label}</Text>
-            <TouchableOpacity onPress={() => setSelectedStatus(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close-circle" size={16} color={BLUE} />
-            </TouchableOpacity>
-          </View>
-        )}
-
         <View style={s.tabRow}>
           {TABS.map(tab => {
             const isActive = activeTab === tab;
-            const badge = tab === 'Applied' ? stats.total : savedJobs.length;
+            const badge = tab === 'Applied' ? applications.length : savedJobs.length;
             return (
               <TouchableOpacity
                 key={tab}
@@ -2567,19 +2485,13 @@ export default function MyApplications({ onNavigate, route }) {
   );
 }
 
-// Screen-level Styles
+// ── Screen-level Styles ──
 const s = StyleSheet.create({
   safe:         { flex: 1, backgroundColor: NAVY },
   root:         { flex: 1, backgroundColor: BG },
   header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: NAVY },
-  iconBtn:      { alignSelf: 'flex-start' },
-  iconWrap:     { width: 36, height: 36, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
   headerTitle:  { fontSize: 16, fontWeight: '600', color: WHITE, letterSpacing: 0.2 },
   blue:        { color: GOLD_LT, fontStyle: 'italic', fontWeight: '700' },
-  statsBorder:  { backgroundColor: CARD, borderBottomWidth: 1.5, borderBottomColor: BORDER },
-  statsScroll:  { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  filterBar:    { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'rgba(0,104,181,0.08)', borderBottomWidth: 1.5, borderBottomColor: BORDER },
-  filterText:   { flex: 1, fontSize: 12, color: BLUE, fontWeight: '500' },
   tabRow:       { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 10, backgroundColor: CARD, borderBottomWidth: 1.5, borderBottomColor: BORDER },
   tab:          { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 22, backgroundColor: WHITE, borderWidth: 1.5, borderColor: BORDER, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   tabActive:    { backgroundColor: BLUE, borderColor: BLUE },
@@ -2665,17 +2577,6 @@ const s = StyleSheet.create({
     height: 3,
     borderRadius: 1.5,
     backgroundColor: BLUE,
-  },
-  tabBadgeDot: {
-    position: 'absolute',
-    top: -3,
-    right: -6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: GOLD,
-    borderWidth: 1.5,
-    borderColor: WHITE,
   },
 });
 

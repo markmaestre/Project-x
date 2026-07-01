@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, TextInput, Alert, ActivityIndicator,
-  Switch, BackHandler, Platform, Modal, Pressable,
+  Switch, BackHandler, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,13 +25,11 @@ const CARD       = '#FFFFFF';
 const TEXT_MAIN  = '#071A3E';
 const TEXT_MUTED = '#3A5070';
 const TEXT_LIGHT = '#7A90A8';
-const BORDER     = '#DCE6F2';
-const BORDER_SOFT= '#EAF0F8';
+const BORDER     = '#C8D8E8';
 const GREEN      = '#059669';
 const GREEN_SOFT = '#D1FAE5';
 const GREEN_MID  = '#86EFAC';
 const GREEN_DARK = '#059669';
-const RED        = '#EF4444';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -42,13 +40,13 @@ const TABS = [
   { key: 'ClientProfile', label: 'Profile',  icon: 'person',        iconOutline: 'person-outline'        },
 ];
 
+// ── Updated JOB_TYPES to match backend schema ──────────────────────────────
 const JOB_TYPES = [
   { label: 'Full Time',   value: 'full_time',   icon: 'briefcase-outline'      },
   { label: 'Part Time',   value: 'part_time',   icon: 'time-outline'           },
-  { label: 'Contract',    value: 'contract',    icon: 'document-text-outline'  },
+  { label: 'Project',     value: 'project',     icon: 'document-text-outline'  },
   { label: 'One Time',    value: 'one_time',    icon: 'flash-outline'          },
-  { label: 'Internship',  value: 'internship',  icon: 'school-outline'         },
-  { label: 'Freelance',   value: 'freelance',   icon: 'person-outline'         },
+  { label: 'Long Term',   value: 'long_term',   icon: 'infinite-outline'       },
 ];
 
 const WORK_SETUPS = [
@@ -57,20 +55,11 @@ const WORK_SETUPS = [
   { label: 'Hybrid', value: 'hybrid', icon: 'phone-portrait-outline'},
 ];
 
-const URGENCY_LEVELS = [
-  { label: 'Low',       value: 'low',       icon: 'thermometer-outline',  color: '#10B981' },
-  { label: 'Normal',    value: 'normal',    icon: 'thermometer-outline',  color: '#F59E0B' },
-  { label: 'Urgent',    value: 'urgent',    icon: 'flame-outline',        color: '#EF4444' },
-  { label: 'Immediate', value: 'immediate', icon: 'alert-circle-outline', color: '#DC2626' },
-];
-
 const EXPERIENCE_LEVELS = [
   { label: 'Entry',        value: 'entry',        icon: 'star-outline'     },
   { label: 'Intermediate', value: 'intermediate', icon: 'star-half-outline'},
   { label: 'Expert',       value: 'expert',       icon: 'star-outline'     },
   { label: 'Senior',       value: 'senior',       icon: 'trophy-outline'   },
-  { label: 'Lead',         value: 'lead',         icon: 'people-outline'   },
-  { label: 'Director',     value: 'director',     icon: 'business-outline' },
 ];
 
 const BUDGET_TYPES = [
@@ -78,20 +67,11 @@ const BUDGET_TYPES = [
   { label: 'Hourly Rate', value: 'hourly', icon: 'time-outline' },
 ];
 
-const PAYMENT_FREQUENCIES = [
-  { label: 'Hourly',    value: 'hourly',    icon: 'time-outline'     },
-  { label: 'Daily',     value: 'daily',     icon: 'sunny-outline'    },
-  { label: 'Weekly',    value: 'weekly',    icon: 'calendar-outline' },
-  { label: 'Bi-Weekly', value: 'bi-weekly', icon: 'calendar-outline' },
-  { label: 'Monthly',   value: 'monthly',   icon: 'calendar-outline' },
-  { label: 'One-Time',  value: 'one-time',  icon: 'flash-outline'    },
-];
-
 const CURRENCIES = [
-  { label: 'PHP · Philippine Peso', value: 'PHP', symbol: '₱' },
-  { label: 'USD · US Dollar',       value: 'USD', symbol: '$' },
-  { label: 'EUR · Euro',            value: 'EUR', symbol: '€' },
-  { label: 'GBP · British Pound',   value: 'GBP', symbol: '£' },
+  { label: 'PHP', value: 'PHP', symbol: '₱' },
+  { label: 'USD', value: 'USD', symbol: '$' },
+  { label: 'EUR', value: 'EUR', symbol: '€' },
+  { label: 'GBP', value: 'GBP', symbol: '£' },
 ];
 
 const CONTACT_PREFERENCES = [
@@ -100,25 +80,23 @@ const CONTACT_PREFERENCES = [
   { label: 'Phone', value: 'phone', icon: 'call-outline'       },
 ];
 
-const BENEFITS_OPTIONS = [
-  { label: 'Health Insurance',       value: 'health_insurance',       icon: 'medkit-outline'    },
-  { label: 'Paid Time Off',          value: 'paid_time_off',          icon: 'calendar-outline'  },
-  { label: 'Remote Stipend',         value: 'remote_stipend',         icon: 'wifi-outline'      },
-  { label: 'Equipment Provided',     value: 'equipment_provided',     icon: 'desktop-outline'   },
-  { label: 'Bonus Eligible',         value: 'bonus_eligible',         icon: 'gift-outline'      },
-  { label: 'Retirement Plan',        value: 'retirement_plan',        icon: 'shield-outline'    },
-  { label: 'Professional Development', value: 'professional_development', icon: 'school-outline'},
-];
-
 const DEGREE_LEVELS = [
-  { label: 'None',        value: 'none',        icon: 'close-circle-outline' },
-  { label: 'High School', value: 'high_school', icon: 'book-outline'         },
-  { label: 'Associate',   value: 'associate',   icon: 'ribbon-outline'       },
-  { label: 'Bachelor',    value: 'bachelor',    icon: 'school-outline'       },
-  { label: 'Master',      value: 'master',      icon: 'school-outline'       },
-  { label: 'Doctorate',   value: 'doctorate',   icon: 'trophy-outline'       },
+  { label: 'None',        value: 'none'        },
+  { label: 'High School', value: 'high_school' },
+  { label: 'Vocational',  value: 'vocational'  },
+  { label: 'College',     value: 'college'     },
+  { label: 'Masters',     value: 'masters'     },
+  { label: 'Doctorate',   value: 'doctorate'   },
 ];
 
+const DURATION_UNITS = [
+  { label: 'Hours', value: 'hours' },
+  { label: 'Days',  value: 'days'  },
+  { label: 'Weeks', value: 'weeks' },
+  { label: 'Months', value: 'months' },
+];
+
+// ── Suggested Job Titles ────────────────────────────────────────────────────
 const SUGGESTED_TITLES = [
   'Senior React Native Developer',
   'Full Stack Developer',
@@ -195,7 +173,7 @@ function StepBar({ currentStep }) {
                     </Text>
                 }
               </View>
-              <Text style={[sb.label, active && sb.labelActive, done && sb.labelDone]} numberOfLines={1}>
+              <Text style={[sb.label, active && sb.labelActive, done && sb.labelDone]}>
                 {step.label}
               </Text>
             </View>
@@ -212,44 +190,37 @@ function StepBar({ currentStep }) {
 const sb = StyleSheet.create({
   container: {
     flexDirection: 'row', alignItems: 'flex-start',
-    paddingHorizontal: 20, paddingVertical: 18,
+    paddingHorizontal: 20, paddingVertical: 16,
     backgroundColor: WHITE,
-    borderBottomWidth: 1, borderBottomColor: BORDER_SOFT,
+    borderBottomWidth: 1, borderBottomColor: BORDER,
   },
-  stepWrap: { alignItems: 'center', gap: 7, width: 72 },
+  stepWrap: { alignItems: 'center', gap: 6, width: 72 },
   circle: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: BG, borderWidth: 2, borderColor: BORDER,
     alignItems: 'center', justifyContent: 'center',
   },
-  circleActive: {
-    borderColor: BLUE, backgroundColor: BLUE,
-    shadowColor: BLUE, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3, shadowRadius: 6, elevation: 3,
-  },
+  circleActive: { borderColor: BLUE, backgroundColor: BLUE },
   circleDone:   { borderColor: GREEN, backgroundColor: GREEN },
   num:      { fontSize: 13, fontWeight: '700', color: TEXT_LIGHT },
   numActive:{ color: WHITE },
   numDone:  { color: WHITE },
-  label:      { fontSize: 10, fontWeight: '600', color: TEXT_LIGHT, textAlign: 'center' },
+  label:      { fontSize: 10, fontWeight: '500', color: TEXT_LIGHT, textAlign: 'center' },
   labelActive:{ color: BLUE,  fontWeight: '700' },
   labelDone:  { color: GREEN, fontWeight: '600' },
   line: {
     flex: 1, height: 2, backgroundColor: BORDER,
-    marginTop: 15, marginHorizontal: -4, borderRadius: 1,
+    marginTop: 15, marginHorizontal: -4,
   },
   lineDone: { backgroundColor: GREEN },
 });
 
 // ── Reusable Field Components ─────────────────────────────────────────────────
-function FieldLabel({ label, required, hint }) {
+function FieldLabel({ label, required }) {
   return (
-    <View style={{ marginBottom: 8 }}>
-      <Text style={f.label}>
-        {label}{required && <Text style={{ color: RED }}> *</Text>}
-      </Text>
-      {hint ? <Text style={f.hint}>{hint}</Text> : null}
-    </View>
+    <Text style={f.label}>
+      {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
+    </Text>
   );
 }
 
@@ -265,7 +236,6 @@ function ChipRow({ options, selected, onSelect, isMulti = false }) {
             key={opt.value}
             style={[f.chip, active && f.chipActive]}
             onPress={() => onSelect(opt.value)}
-            activeOpacity={0.75}
           >
             {opt.icon && (
               <Ionicons
@@ -284,178 +254,6 @@ function ChipRow({ options, selected, onSelect, isMulti = false }) {
   );
 }
 
-// ── Dropdown / Select ──────────────────────────────────────────────────────────
-function Dropdown({ icon, options, value, onSelect, placeholder = 'Select an option' }) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find(o => o.value === value);
-
-  return (
-    <View>
-      <TouchableOpacity
-        style={[dd.trigger, open && dd.triggerOpen]}
-        onPress={() => setOpen(true)}
-        activeOpacity={0.75}
-      >
-        {icon && (
-          <Ionicons name={icon} size={16} color={selected ? BLUE : TEXT_LIGHT} style={{ marginRight: 10 }} />
-        )}
-        <Text style={[dd.triggerText, !selected && dd.placeholderText]} numberOfLines={1}>
-          {selected ? selected.label : placeholder}
-        </Text>
-        <Ionicons name="chevron-down" size={16} color={TEXT_LIGHT} />
-      </TouchableOpacity>
-
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={dd.overlay} onPress={() => setOpen(false)}>
-          <Pressable style={dd.sheet} onPress={(e) => e.stopPropagation()}>
-            <View style={dd.sheetHandle} />
-            <Text style={dd.sheetTitle}>{placeholder}</Text>
-            <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
-              {options.map((opt) => {
-                const active = opt.value === value;
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[dd.item, active && dd.itemActive]}
-                    onPress={() => { onSelect(opt.value); setOpen(false); }}
-                    activeOpacity={0.7}
-                  >
-                    {opt.icon && (
-                      <View style={[dd.itemIconBox, active && dd.itemIconBoxActive]}>
-                        <Ionicons name={opt.icon} size={15} color={active ? WHITE : TEXT_MUTED} />
-                      </View>
-                    )}
-                    <Text style={[dd.itemText, active && dd.itemTextActive]}>{opt.label}</Text>
-                    {active && <Ionicons name="checkmark-circle" size={18} color={BLUE} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity style={dd.cancelBtn} onPress={() => setOpen(false)} activeOpacity={0.75}>
-              <Text style={dd.cancelBtnTxt}>Cancel</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    </View>
-  );
-}
-
-const dd = StyleSheet.create({
-  trigger: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: WHITE, borderRadius: 12,
-    borderWidth: 1.5, borderColor: BORDER,
-    paddingHorizontal: 14, paddingVertical: 13,
-  },
-  triggerOpen: { borderColor: BLUE, backgroundColor: 'rgba(0,85,165,0.04)' },
-  triggerText: { flex: 1, fontSize: 14, color: TEXT_MAIN, fontWeight: '500' },
-  placeholderText: { color: TEXT_LIGHT, fontWeight: '400' },
-  overlay: {
-    flex: 1, backgroundColor: 'rgba(7,26,62,0.45)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: WHITE,
-    borderTopLeftRadius: 22, borderTopRightRadius: 22,
-    paddingHorizontal: 18, paddingTop: 10, paddingBottom: 24,
-    shadowColor: NAVY, shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15, shadowRadius: 16, elevation: 12,
-  },
-  sheetHandle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: BORDER, alignSelf: 'center', marginBottom: 14,
-  },
-  sheetTitle: {
-    fontSize: 13, fontWeight: '700', color: TEXT_LIGHT,
-    textTransform: 'uppercase', letterSpacing: 0.6,
-    marginBottom: 10, paddingHorizontal: 4,
-  },
-  item: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingVertical: 12, paddingHorizontal: 8,
-    borderRadius: 12, marginBottom: 2,
-  },
-  itemActive: { backgroundColor: 'rgba(0,85,165,0.07)' },
-  itemIconBox: {
-    width: 28, height: 28, borderRadius: 8,
-    backgroundColor: BG, alignItems: 'center', justifyContent: 'center',
-  },
-  itemIconBoxActive: { backgroundColor: BLUE },
-  itemText: { flex: 1, fontSize: 14, color: TEXT_MAIN, fontWeight: '500' },
-  itemTextActive: { color: BLUE, fontWeight: '700' },
-  cancelBtn: {
-    marginTop: 8, paddingVertical: 13, borderRadius: 12,
-    alignItems: 'center', backgroundColor: BG,
-  },
-  cancelBtnTxt: { fontSize: 14, fontWeight: '700', color: TEXT_MUTED },
-});
-
-// ── Autocomplete text field ───────────────────────────────────────────────────
-function AutocompleteField({ icon, placeholder, value, onChange, suggestions }) {
-  const [focused, setFocused] = useState(false);
-  const blurTimeout = useRef(null);
-
-  const isExactMatch = suggestions.some(s => s.toLowerCase() === value.toLowerCase());
-  const filtered = value.length > 0
-    ? suggestions.filter(sug => sug.toLowerCase().includes(value.toLowerCase()))
-    : suggestions;
-  
-  const showList = focused && !isExactMatch && filtered.length > 0;
-
-  return (
-    <View>
-      <View style={[f.inputBox, focused && f.inputBoxFocused]}>
-        {icon && <Ionicons name={icon} size={16} color={focused ? BLUE : TEXT_LIGHT} style={{ marginRight: 8 }} />}
-        <TextInput
-          style={f.inputText}
-          placeholder={placeholder}
-          placeholderTextColor={TEXT_LIGHT}
-          value={value}
-          onChangeText={onChange}
-          onFocus={() => {
-            if (blurTimeout.current) clearTimeout(blurTimeout.current);
-            setFocused(true);
-          }}
-          onBlur={() => {
-            blurTimeout.current = setTimeout(() => setFocused(false), 300);
-          }}
-        />
-        {value.length > 0 && (
-          <TouchableOpacity onPress={() => onChange('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={16} color={TEXT_LIGHT} />
-          </TouchableOpacity>
-        )}
-      </View>
-      {showList && (
-        <View style={s.suggestionContainer}>
-          <ScrollView
-            style={{ maxHeight: 176 }}
-            showsVerticalScrollIndicator={true}
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled
-          >
-            {filtered.slice(0, 10).map((suggestion) => (
-              <TouchableOpacity
-                key={suggestion}
-                style={s.suggestionItem}
-                onPress={() => {
-                  onChange(suggestion);
-                  setFocused(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="bulb-outline" size={15} color={GOLD} />
-                <Text style={s.suggestionText}>{suggestion}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-    </View>
-  );
-}
-
 function TagInput({ tags, onAdd, onRemove, placeholder, value, onChange, icon }) {
   return (
     <View style={{ gap: 10 }}>
@@ -469,22 +267,20 @@ function TagInput({ tags, onAdd, onRemove, placeholder, value, onChange, icon })
             value={value}
             onChangeText={onChange}
             onSubmitEditing={onAdd}
-            returnKeyType="done"
           />
         </View>
-        <TouchableOpacity style={f.addBtn} onPress={onAdd} activeOpacity={0.8}>
+        <TouchableOpacity style={f.addBtn} onPress={onAdd}>
           <Ionicons name="add" size={18} color={WHITE} />
         </TouchableOpacity>
       </View>
       {tags.length > 0 && (
         <View style={f.tagWrap}>
           {tags.map((tag, i) => {
-            const tagLabel = typeof tag === 'object' ? `${tag.language} (${tag.proficiency})` : tag;
-            const tagValue = typeof tag === 'object' ? i : tag;
+            const tagLabel = typeof tag === 'object' ? tag.question || tag : tag;
             return (
               <View key={i} style={f.tag}>
                 <Text style={f.tagTxt}>{tagLabel}</Text>
-                <TouchableOpacity onPress={() => onRemove(tagValue)} hitSlop={6}>
+                <TouchableOpacity onPress={() => onRemove(tag)}>
                   <Ionicons name="close" size={13} color={BLUE} />
                 </TouchableOpacity>
               </View>
@@ -496,36 +292,20 @@ function TagInput({ tags, onAdd, onRemove, placeholder, value, onChange, icon })
   );
 }
 
-// ── FIXED InputBox component ───────────────────────────────────────────────────
-function InputBox({ icon, placeholder, value, onChange, multiline, keyboardType, onFocus, onBlur }) {
-  const [focused, setFocused] = useState(false);
+function InputBox({ icon, placeholder, value, onChange, onFocus, onBlur, multiline, keyboardType }) {
   return (
-    <View style={[
-      f.inputBox,
-      multiline && { alignItems: 'flex-start', minHeight: 120, paddingVertical: 6 },
-      focused && f.inputBoxFocused,
-    ]}>
-      {icon && <Ionicons name={icon} size={16} color={focused ? BLUE : TEXT_LIGHT} style={[{ marginRight: 8 }, multiline && { marginTop: 6 }]} />}
+    <View style={[f.inputBox, multiline && { alignItems: 'flex-start', height: 110 }]}>
+      {icon && <Ionicons name={icon} size={16} color={TEXT_LIGHT} style={[{ marginRight: 8 }, multiline && { marginTop: 14 }]} />}
       <TextInput
-        style={[
-          f.inputText, 
-          multiline && { 
-            textAlignVertical: 'top', 
-            paddingTop: 8, 
-            paddingBottom: 8,
-            minHeight: 80,
-            flex: 1,
-            height: '100%',
-          }
-        ]}
+        style={[f.inputText, multiline && { textAlignVertical: 'top', paddingTop: 14, height: 90 }]}
         placeholder={placeholder}
         placeholderTextColor={TEXT_LIGHT}
         value={value}
         onChangeText={onChange}
+        onFocus={onFocus}
+        onBlur={onBlur}
         multiline={multiline}
         keyboardType={keyboardType}
-        onFocus={(e) => { setFocused(true); onFocus && onFocus(e); }}
-        onBlur={(e) => { setFocused(false); onBlur && onBlur(e); }}
       />
     </View>
   );
@@ -534,7 +314,6 @@ function InputBox({ icon, placeholder, value, onChange, multiline, keyboardType,
 function SectionCard({ title, icon, children }) {
   return (
     <View style={f.sectionCard}>
-      <View style={f.sectionAccent} />
       <View style={f.sectionHeader}>
         <View style={f.sectionIconBox}>
           <Ionicons name={icon} size={16} color={BLUE} />
@@ -547,8 +326,7 @@ function SectionCard({ title, icon, children }) {
 }
 
 const f = StyleSheet.create({
-  label:   { fontSize: 12, fontWeight: '700', color: TEXT_MUTED, textTransform: 'uppercase', letterSpacing: 0.6 },
-  hint:    { fontSize: 11, color: TEXT_LIGHT, marginTop: 2, fontWeight: '400' },
+  label:   { fontSize: 12, fontWeight: '700', color: TEXT_MUTED, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -556,43 +334,19 @@ const f = StyleSheet.create({
     borderRadius: 10, borderWidth: 1.5, borderColor: BORDER,
     backgroundColor: WHITE,
   },
-  chipActive:   {
-    borderColor: BLUE, backgroundColor: 'rgba(0,85,165,0.07)',
-    shadowColor: BLUE, shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12, shadowRadius: 3, elevation: 1,
-  },
+  chipActive:   { borderColor: BLUE, backgroundColor: 'rgba(0,85,165,0.07)' },
   chipTxt:      { fontSize: 12, color: TEXT_MUTED, fontWeight: '500' },
   tagInputRow:  { flexDirection: 'row', gap: 8, alignItems: 'center' },
   inputBox: {
-    flex: 1, 
-    flexDirection: 'row', 
-    alignItems: 'center',
-    backgroundColor: WHITE, 
-    borderRadius: 12,
-    borderWidth: 1.5, 
-    borderColor: BORDER,
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: WHITE, borderRadius: 12,
+    borderWidth: 1.5, borderColor: BORDER,
     paddingHorizontal: 14,
-    paddingVertical: 2,
   },
-  inputBoxFocused: {
-    borderColor: BLUE,
-    shadowColor: BLUE, 
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.12, 
-    shadowRadius: 5, 
-    elevation: 1,
-  },
-  inputText: { 
-    flex: 1, 
-    fontSize: 14, 
-    color: TEXT_MAIN, 
-    paddingVertical: 10,
-  },
+  inputText:    { flex: 1, fontSize: 14, color: TEXT_MAIN, paddingVertical: 12 },
   addBtn: {
     width: 44, height: 44, borderRadius: 12,
     backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center',
-    shadowColor: BLUE, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2, shadowRadius: 5, elevation: 2,
   },
   tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tag: {
@@ -604,14 +358,9 @@ const f = StyleSheet.create({
   tagTxt: { fontSize: 12, color: BLUE, fontWeight: '600' },
   sectionCard: {
     backgroundColor: WHITE, borderRadius: 16, padding: 18,
-    marginBottom: 16, borderWidth: 1, borderColor: BORDER_SOFT,
-    shadowColor: NAVY, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 10, elevation: 2,
-    overflow: 'hidden',
-  },
-  sectionAccent: {
-    position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
-    backgroundColor: BLUE, opacity: 0.85,
+    marginBottom: 16, borderWidth: 1, borderColor: BORDER,
+    shadowColor: NAVY, shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 8, elevation: 1,
   },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
   sectionIconBox: {
@@ -619,7 +368,7 @@ const f = StyleSheet.create({
     backgroundColor: 'rgba(0,85,165,0.08)',
     alignItems: 'center', justifyContent: 'center',
   },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: TEXT_MAIN, letterSpacing: -0.1 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: TEXT_MAIN },
 });
 
 // ── Step 1: Job Details ───────────────────────────────────────────────────────
@@ -632,41 +381,121 @@ function Step1({
   workSetup, setWorkSetup,
   contactPreference, setContactPreference,
   category, setCategory,
+  vacancies, setVacancies,
+  timezone, setTimezone,
 }) {
+  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
+  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
+
+  const filteredTitles = SUGGESTED_TITLES.filter(t =>
+    t.toLowerCase().includes(title.toLowerCase()) && title.length > 0
+  );
+
+  const filteredCategories = SUGGESTED_CATEGORIES.filter(c =>
+    c.toLowerCase().includes(category.toLowerCase()) && category.length > 0
+  );
+
   return (
     <View>
       <SectionCard title="Job Information" icon="briefcase-outline">
         <View style={{ gap: 16 }}>
-          <View>
+          <View style={{ zIndex: 30, elevation: 30 }}>
             <FieldLabel label="Job Title" required />
-            <AutocompleteField
-              icon="briefcase-outline"
-              placeholder="e.g. Senior React Native Developer"
-              value={title}
-              onChange={setTitle}
-              suggestions={SUGGESTED_TITLES}
-            />
+            <View>
+              <InputBox
+                icon="briefcase-outline"
+                placeholder="e.g. Senior React Native Developer"
+                value={title}
+                onChange={(text) => {
+                  setTitle(text);
+                  setShowTitleSuggestions(text.length > 0);
+                }}
+                onFocus={() => setShowTitleSuggestions(title.length > 0)}
+                onBlur={() => setTimeout(() => setShowTitleSuggestions(false), 150)}
+              />
+              {showTitleSuggestions && filteredTitles.length > 0 && (
+                <View style={s.suggestionContainer}>
+                  {filteredTitles.slice(0, 5).map((suggestion) => (
+                    <TouchableOpacity
+                      key={suggestion}
+                      style={s.suggestionItem}
+                      onPress={() => {
+                        setTitle(suggestion);
+                        setShowTitleSuggestions(false);
+                      }}
+                    >
+                      <Ionicons name="bulb-outline" size={14} color={GOLD} />
+                      <Text style={s.suggestionText}>{suggestion}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
           </View>
 
-          <View>
+          <View style={{ zIndex: 20, elevation: 20 }}>
             <FieldLabel label="Category" required />
-            <AutocompleteField
-              icon="grid-outline"
-              placeholder="e.g. Technology, Design, Marketing"
-              value={category}
-              onChange={setCategory}
-              suggestions={SUGGESTED_CATEGORIES}
-            />
+            <View>
+              <InputBox
+                icon="grid-outline"
+                placeholder="e.g. Technology, Design, Marketing"
+                value={category}
+                onChange={(text) => {
+                  setCategory(text);
+                  setShowCategorySuggestions(text.length > 0);
+                }}
+                onFocus={() => setShowCategorySuggestions(category.length > 0)}
+                onBlur={() => setTimeout(() => setShowCategorySuggestions(false), 150)}
+              />
+              {showCategorySuggestions && filteredCategories.length > 0 && (
+                <View style={s.suggestionContainer}>
+                  {filteredCategories.slice(0, 5).map((suggestion) => (
+                    <TouchableOpacity
+                      key={suggestion}
+                      style={s.suggestionItem}
+                      onPress={() => {
+                        setCategory(suggestion);
+                        setShowCategorySuggestions(false);
+                      }}
+                    >
+                      <Ionicons name="bulb-outline" size={14} color={GOLD} />
+                      <Text style={s.suggestionText}>{suggestion}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
           </View>
 
           <View>
-            <FieldLabel label="Description" required hint="Responsibilities, deliverables, and expectations" />
+            <FieldLabel label="Description" required />
             <InputBox
               icon="document-text-outline"
               placeholder="Describe responsibilities, deliverables, and expectations..."
               value={description}
               onChange={setDescription}
               multiline
+            />
+          </View>
+
+          <View>
+            <FieldLabel label="Number of Vacancies" />
+            <InputBox
+              icon="people-outline"
+              placeholder="e.g. 1"
+              value={vacancies}
+              onChange={setVacancies}
+              keyboardType="numeric"
+            />
+          </View>
+
+          <View>
+            <FieldLabel label="Timezone" />
+            <InputBox
+              icon="time-outline"
+              placeholder="e.g. Asia/Manila"
+              value={timezone}
+              onChange={setTimezone}
             />
           </View>
         </View>
@@ -684,23 +513,22 @@ function Step1({
                 setSkillInput('');
               }
             }}
-            onRemove={(s) => setRequiredSkills(requiredSkills.filter(x => x !== s))}
+            onRemove={(s2) => setRequiredSkills(requiredSkills.filter(x => x !== s2))}
             placeholder="Add a skill..."
             icon="add-circle-outline"
           />
           <View>
-            <Text style={{ fontSize: 11, color: TEXT_LIGHT, marginBottom: 8, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>Suggested</Text>
+            <Text style={{ fontSize: 11, color: TEXT_LIGHT, marginBottom: 8, fontWeight: '500' }}>SUGGESTED</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {SKILLS_SUGGESTIONS.slice(0, 10).map(s => (
+              {SKILLS_SUGGESTIONS.slice(0, 10).map(sk => (
                 <TouchableOpacity
-                  key={s}
-                  style={[f.chip, { paddingHorizontal: 10, paddingVertical: 6 }, requiredSkills.includes(s) && f.chipActive]}
+                  key={sk}
+                  style={[f.chip, { paddingHorizontal: 10, paddingVertical: 6 }, requiredSkills.includes(sk) && f.chipActive]}
                   onPress={() => {
-                    if (!requiredSkills.includes(s)) setRequiredSkills([...requiredSkills, s]);
+                    if (!requiredSkills.includes(sk)) setRequiredSkills([...requiredSkills, sk]);
                   }}
-                  activeOpacity={0.75}
                 >
-                  <Text style={[{ fontSize: 11, color: TEXT_LIGHT }, requiredSkills.includes(s) && { color: BLUE, fontWeight: '700' }]}>{s}</Text>
+                  <Text style={[{ fontSize: 11, color: TEXT_LIGHT }, requiredSkills.includes(sk) && { color: BLUE }]}>{sk}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -712,13 +540,7 @@ function Step1({
         <View style={{ gap: 16 }}>
           <View>
             <FieldLabel label="Employment Type" />
-            <Dropdown
-              icon="briefcase-outline"
-              options={JOB_TYPES}
-              value={jobType}
-              onSelect={setJobType}
-              placeholder="Select employment type"
-            />
+            <ChipRow options={JOB_TYPES} selected={jobType} onSelect={setJobType} />
           </View>
           <View>
             <FieldLabel label="Work Setup" />
@@ -737,96 +559,200 @@ function Step1({
 // ── Step 2: Requirements & Budget ─────────────────────────────────────────────
 function Step2({
   budgetType, setBudgetType,
-  budgetAmount, setBudgetAmount,
-  estimatedDuration, setEstimatedDuration,
-  urgencyLevel, setUrgencyLevel,
+  budgetMin, setBudgetMin,
+  budgetMax, setBudgetMax,
+  budgetCurrency, setBudgetCurrency,
+  budgetNegotiable, setBudgetNegotiable,
+  hideBudget, setHideBudget,
+  durationValue, setDurationValue,
+  durationUnit, setDurationUnit,
+  estimatedHours, setEstimatedHours,
+  weeklyLimit, setWeeklyLimit,
+  startDate, setStartDate,
+  endDate, setEndDate,
   experienceLevel, setExperienceLevel,
-  payInformation, setPayInformation,
   location, setLocation,
   workSetup,
-  educationRequirements, setEducationRequirements,
   requirements, setRequirements,
+  educationRequirements, setEducationRequirements,
   applicationSettings, setApplicationSettings,
   certificationInput, setCertificationInput,
-  toolInput, setToolInput,
-  languageInput, setLanguageInput,
+  screeningQuestions, setScreeningQuestions,
+  screeningInput, setScreeningInput,
+  showAdvanced, setShowAdvanced,
 }) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showDeadlineDate, setShowDeadlineDate] = useState(false);
-
-  const toggleBenefit = (b) => {
-    setPayInformation({
-      ...payInformation,
-      benefits: payInformation.benefits.includes(b)
-        ? payInformation.benefits.filter(x => x !== b)
-        : [...payInformation.benefits, b],
-    });
-  };
+  const [showStartDate, setShowStartDate] = useState(false);
+  const [showEndDate, setShowEndDate] = useState(false);
 
   const formatDateDisplay = (date) => {
     if (!date) return 'Select date';
-    return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   return (
     <View>
-      <SectionCard title="Budget & Timeline" icon="cash-outline">
+      <SectionCard title="Budget" icon="cash-outline">
         <View style={{ gap: 16 }}>
           <View>
             <FieldLabel label="Budget Type" />
             <ChipRow options={BUDGET_TYPES} selected={budgetType} onSelect={setBudgetType} />
           </View>
           <View>
-            <FieldLabel label={`Budget Amount (${budgetType === 'hourly' ? 'per hour' : 'fixed total'})`} required />
-            <InputBox
-              icon="wallet-outline"
-              placeholder={budgetType === 'hourly' ? 'e.g. 500' : 'e.g. 25000'}
-              value={budgetAmount}
-              onChange={setBudgetAmount}
-              keyboardType="numeric"
+            <FieldLabel label="Currency" />
+            <ChipRow options={CURRENCIES.map(c => ({ ...c, icon: undefined }))}
+              selected={budgetCurrency}
+              onSelect={setBudgetCurrency} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <FieldLabel label="Min Amount" required />
+              <InputBox
+                icon="wallet-outline"
+                placeholder="e.g. 500"
+                value={budgetMin}
+                onChange={setBudgetMin}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <FieldLabel label="Max Amount" />
+              <InputBox
+                icon="wallet-outline"
+                placeholder="e.g. 1000"
+                value={budgetMax}
+                onChange={setBudgetMax}
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+          <View style={adv.switchRow}>
+            <Text style={adv.switchLabel}>Negotiable</Text>
+            <Switch
+              value={budgetNegotiable}
+              onValueChange={setBudgetNegotiable}
+              trackColor={{ false: BORDER, true: GREEN_MID }}
+              thumbColor={budgetNegotiable ? BLUE : TEXT_LIGHT}
             />
           </View>
-          <View>
-            <FieldLabel label="Estimated Duration" />
-            <InputBox
-              icon="hourglass-outline"
-              placeholder="e.g. 2 weeks, 1 month"
-              value={estimatedDuration}
-              onChange={setEstimatedDuration}
+          <View style={adv.switchRow}>
+            <Text style={adv.switchLabel}>Hide Budget from Applicants</Text>
+            <Switch
+              value={hideBudget}
+              onValueChange={setHideBudget}
+              trackColor={{ false: BORDER, true: GREEN_MID }}
+              thumbColor={hideBudget ? BLUE : TEXT_LIGHT}
             />
           </View>
         </View>
       </SectionCard>
 
-      <SectionCard title="Candidate Requirements" icon="person-circle-outline">
+      <SectionCard title="Timeline" icon="hourglass-outline">
         <View style={{ gap: 16 }}>
-          <View>
-            <FieldLabel label="Urgency Level" />
-            <ChipRow options={URGENCY_LEVELS} selected={urgencyLevel} onSelect={setUrgencyLevel} />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <FieldLabel label="Duration Value" />
+              <InputBox
+                icon="number-outline"
+                placeholder="e.g. 1"
+                value={durationValue}
+                onChange={setDurationValue}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <FieldLabel label="Duration Unit" />
+              <ChipRow options={DURATION_UNITS} selected={durationUnit} onSelect={setDurationUnit} />
+            </View>
           </View>
           <View>
-            <FieldLabel label="Experience Level" />
-            <Dropdown
-              icon="trophy-outline"
-              options={EXPERIENCE_LEVELS}
-              value={experienceLevel}
-              onSelect={setExperienceLevel}
-              placeholder="Select experience level"
+            <FieldLabel label="Estimated Hours (Optional)" />
+            <InputBox
+              icon="time-outline"
+              placeholder="e.g. 40"
+              value={estimatedHours}
+              onChange={setEstimatedHours}
+              keyboardType="numeric"
             />
           </View>
+          <View>
+            <FieldLabel label="Weekly Hour Limit (Optional)" />
+            <InputBox
+              icon="calendar-outline"
+              placeholder="e.g. 20"
+              value={weeklyLimit}
+              onChange={setWeeklyLimit}
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <FieldLabel label="Start Date" />
+              <TouchableOpacity
+                style={s.datePickerBtn}
+                onPress={() => setShowStartDate(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="calendar-outline" size={18} color={BLUE} />
+                <Text style={s.datePickerText}>
+                  {startDate ? formatDateDisplay(new Date(startDate)) : 'Select start date'}
+                </Text>
+              </TouchableOpacity>
+              {showStartDate && (
+                <DateTimePicker
+                  value={startDate ? new Date(startDate) : new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    setShowStartDate(false);
+                    if (selectedDate) {
+                      setStartDate(selectedDate.toISOString());
+                    }
+                  }}
+                />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <FieldLabel label="End Date" />
+              <TouchableOpacity
+                style={s.datePickerBtn}
+                onPress={() => setShowEndDate(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="calendar-outline" size={18} color={BLUE} />
+                <Text style={s.datePickerText}>
+                  {endDate ? formatDateDisplay(new Date(endDate)) : 'Select end date'}
+                </Text>
+              </TouchableOpacity>
+              {showEndDate && (
+                <DateTimePicker
+                  value={endDate ? new Date(endDate) : new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    setShowEndDate(false);
+                    if (selectedDate) {
+                      setEndDate(selectedDate.toISOString());
+                    }
+                  }}
+                />
+              )}
+            </View>
+          </View>
         </View>
+      </SectionCard>
+
+      <SectionCard title="Experience Level" icon="trophy-outline">
+        <FieldLabel label="Required Experience" />
+        <ChipRow options={EXPERIENCE_LEVELS} selected={experienceLevel} onSelect={setExperienceLevel} />
       </SectionCard>
 
       {/* Advanced Toggle */}
       <TouchableOpacity
         style={adv.toggle}
         onPress={() => setShowAdvanced(!showAdvanced)}
-        activeOpacity={0.75}
+        activeOpacity={0.7}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name="options-outline" size={16} color={BLUE} />
-          <Text style={adv.toggleTxt}>Advanced Options</Text>
-        </View>
+        <Text style={adv.toggleTxt}>Advanced Options</Text>
         <View style={[adv.badge, showAdvanced && adv.badgeOpen]}>
           <Ionicons name={showAdvanced ? 'chevron-up' : 'chevron-down'} size={14} color={showAdvanced ? WHITE : BLUE} />
         </View>
@@ -834,236 +760,183 @@ function Step2({
 
       {showAdvanced && (
         <>
-          {/* Pay Information */}
-          <SectionCard title="Pay Information" icon="receipt-outline">
-            <View style={{ gap: 16 }}>
-              <View>
-                <FieldLabel label="Salary Range (Optional)" />
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <InputBox placeholder="Min" value={payInformation.salary_range.min}
-                      onChange={(t) => setPayInformation({ ...payInformation, salary_range: { ...payInformation.salary_range, min: t } })}
-                      keyboardType="numeric" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <InputBox placeholder="Max" value={payInformation.salary_range.max}
-                      onChange={(t) => setPayInformation({ ...payInformation, salary_range: { ...payInformation.salary_range, max: t } })}
-                      keyboardType="numeric" />
-                  </View>
-                </View>
-              </View>
-              <View>
-                <FieldLabel label="Currency" />
-                <Dropdown
-                  icon="cash-outline"
-                  options={CURRENCIES}
-                  value={payInformation.salary_range.currency}
-                  onSelect={(v) => setPayInformation({ ...payInformation, salary_range: { ...payInformation.salary_range, currency: v } })}
-                  placeholder="Select currency"
-                />
-              </View>
-              <View>
-                <FieldLabel label="Payment Frequency" />
-                <Dropdown
-                  icon="repeat-outline"
-                  options={PAYMENT_FREQUENCIES}
-                  value={payInformation.payment_frequency}
-                  onSelect={(v) => setPayInformation({ ...payInformation, payment_frequency: v })}
-                  placeholder="Select payment frequency"
-                />
-              </View>
-              <View>
-                <FieldLabel label="Benefits" />
-                <ChipRow options={BENEFITS_OPTIONS} selected={payInformation.benefits} onSelect={toggleBenefit} isMulti />
-              </View>
-              <View style={adv.switchRow}>
-                <Text style={adv.switchLabel}>Salary Negotiable</Text>
-                <Switch
-                  value={payInformation.negotiable}
-                  onValueChange={(v) => setPayInformation({ ...payInformation, negotiable: v })}
-                  trackColor={{ false: BORDER, true: GREEN_MID }}
-                  thumbColor={payInformation.negotiable ? BLUE : WHITE}
-                />
-              </View>
-            </View>
-          </SectionCard>
-
           {/* Location */}
           {(workSetup === 'onsite' || workSetup === 'hybrid') && (
             <SectionCard title="Location" icon="location-outline">
               <View style={{ gap: 12 }}>
-                <InputBox icon="map-outline" placeholder="Specific Area (e.g. Makati, Ortigas)"
-                  value={location.specific_area}
-                  onChange={(t) => setLocation({ ...location, specific_area: t })} />
-                <InputBox icon="business-outline" placeholder="City"
+                <InputBox icon="location-outline" placeholder="Country (e.g. Philippines)"
+                  value={location.country}
+                  onChange={(t) => setLocation({ ...location, country: t })} />
+                <InputBox icon="business-outline" placeholder="Province"
+                  value={location.province}
+                  onChange={(t) => setLocation({ ...location, province: t })} />
+                <InputBox icon="map-outline" placeholder="City"
                   value={location.city}
                   onChange={(t) => setLocation({ ...location, city: t })} />
-                <InputBox icon="navigate-outline" placeholder="Full Work Address"
-                  value={location.work_address}
-                  onChange={(t) => setLocation({ ...location, work_address: t })} />
+                <InputBox icon="navigate-outline" placeholder="Full Address"
+                  value={location.address}
+                  onChange={(t) => setLocation({ ...location, address: t })} />
+                <InputBox icon="mail-outline" placeholder="Zip Code"
+                  value={location.zip_code}
+                  onChange={(t) => setLocation({ ...location, zip_code: t })} />
               </View>
             </SectionCard>
           )}
 
           {/* Requirements */}
-          <SectionCard title="Detailed Requirements" icon="list-outline">
+          <SectionCard title="Requirements" icon="list-outline">
             <View style={{ gap: 16 }}>
               <View>
-                <FieldLabel label="Minimum Years of Experience" />
-                <InputBox icon="bar-chart-outline" placeholder="e.g. 2"
-                  value={requirements.min_years_experience}
-                  onChange={(t) => setRequirements({ ...requirements, min_years_experience: t })}
-                  keyboardType="numeric" />
+                <FieldLabel label="Education Level" />
+                <ChipRow options={DEGREE_LEVELS.map(d => ({ ...d, icon: undefined }))}
+                  selected={requirements.education}
+                  onSelect={(v) => setRequirements({ ...requirements, education: v })} />
               </View>
-              <View>
-                <FieldLabel label="Preferred Tools" />
-                <TagInput
-                  tags={requirements.preferred_tools}
-                  value={toolInput}
-                  onChange={setToolInput}
-                  onAdd={() => {
-                    if (toolInput.trim() && !requirements.preferred_tools.includes(toolInput.trim())) {
-                      setRequirements({ ...requirements, preferred_tools: [...requirements.preferred_tools, toolInput.trim()] });
-                      setToolInput('');
-                    }
-                  }}
-                  onRemove={(t) => setRequirements({ ...requirements, preferred_tools: requirements.preferred_tools.filter(x => x !== t) })}
-                  placeholder="Add a tool..."
+              <View style={adv.switchRow}>
+                <Text style={adv.switchLabel}>Portfolio Required</Text>
+                <Switch
+                  value={requirements.portfolio_required}
+                  onValueChange={(v) => setRequirements({ ...requirements, portfolio_required: v })}
+                  trackColor={{ false: BORDER, true: GREEN_MID }}
+                  thumbColor={requirements.portfolio_required ? BLUE : TEXT_LIGHT}
+                />
+              </View>
+              <View style={adv.switchRow}>
+                <Text style={adv.switchLabel}>Resume Required</Text>
+                <Switch
+                  value={requirements.resume_required}
+                  onValueChange={(v) => setRequirements({ ...requirements, resume_required: v })}
+                  trackColor={{ false: BORDER, true: GREEN_MID }}
+                  thumbColor={requirements.resume_required ? BLUE : TEXT_LIGHT}
+                />
+              </View>
+              <View style={adv.switchRow}>
+                <Text style={adv.switchLabel}>Cover Letter Required</Text>
+                <Switch
+                  value={requirements.cover_letter_required}
+                  onValueChange={(v) => setRequirements({ ...requirements, cover_letter_required: v })}
+                  trackColor={{ false: BORDER, true: GREEN_MID }}
+                  thumbColor={requirements.cover_letter_required ? BLUE : TEXT_LIGHT}
                 />
               </View>
               <View>
-                <FieldLabel label="Languages Required" />
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                  <View style={{ flex: 2 }}>
-                    <InputBox placeholder="Language" value={languageInput.language}
-                      onChange={(t) => setLanguageInput({ ...languageInput, language: t })} />
-                  </View>
-                  <View style={{ flex: 1.5 }}>
-                    <InputBox placeholder="Proficiency" value={languageInput.proficiency}
-                      onChange={(t) => setLanguageInput({ ...languageInput, proficiency: t })} />
-                  </View>
-                  <TouchableOpacity style={f.addBtn} onPress={() => {
-                    if (languageInput.language.trim()) {
-                      setRequirements({ ...requirements, languages_required: [...requirements.languages_required, { ...languageInput }] });
-                      setLanguageInput({ language: '', proficiency: 'professional' });
+                <FieldLabel label="Preferred Languages" />
+                <TagInput
+                  tags={requirements.preferred_languages}
+                  value={screeningInput}
+                  onChange={setScreeningInput}
+                  onAdd={() => {
+                    if (screeningInput.trim() && !requirements.preferred_languages.includes(screeningInput.trim())) {
+                      setRequirements({
+                        ...requirements,
+                        preferred_languages: [...requirements.preferred_languages, screeningInput.trim()]
+                      });
+                      setScreeningInput('');
                     }
-                  }} activeOpacity={0.8}>
-                    <Ionicons name="add" size={18} color={WHITE} />
-                  </TouchableOpacity>
-                </View>
-                {requirements.languages_required.length > 0 && (
-                  <View style={f.tagWrap}>
-                    {requirements.languages_required.map((lang, idx) => (
-                      <View key={idx} style={f.tag}>
-                        <Ionicons name="language-outline" size={12} color={BLUE} />
-                        <Text style={f.tagTxt}>{lang.language} ({lang.proficiency})</Text>
-                        <TouchableOpacity onPress={() => {
-                          const arr = [...requirements.languages_required]; arr.splice(idx, 1);
-                          setRequirements({ ...requirements, languages_required: arr });
-                        }} hitSlop={6}>
-                          <Ionicons name="close" size={13} color={BLUE} />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                )}
+                  }}
+                  onRemove={(lang) => setRequirements({
+                    ...requirements,
+                    preferred_languages: requirements.preferred_languages.filter(x => x !== lang)
+                  })}
+                  placeholder="Add a language..."
+                />
               </View>
               <View>
-                <FieldLabel label="Additional Requirements" />
-                <InputBox placeholder="Any other requirements or special instructions..."
-                  value={requirements.additional_requirements}
-                  onChange={(t) => setRequirements({ ...requirements, additional_requirements: t })}
-                  multiline />
+                <FieldLabel label="Preferred Certifications" />
+                <TagInput
+                  tags={requirements.preferred_certifications}
+                  value={certificationInput}
+                  onChange={setCertificationInput}
+                  onAdd={() => {
+                    if (certificationInput.trim() && !requirements.preferred_certifications.includes(certificationInput.trim())) {
+                      setRequirements({
+                        ...requirements,
+                        preferred_certifications: [...requirements.preferred_certifications, certificationInput.trim()]
+                      });
+                      setCertificationInput('');
+                    }
+                  }}
+                  onRemove={(cert) => setRequirements({
+                    ...requirements,
+                    preferred_certifications: requirements.preferred_certifications.filter(x => x !== cert)
+                  })}
+                  placeholder="Add a certification..."
+                />
               </View>
             </View>
           </SectionCard>
 
-          {/* Education */}
-          <SectionCard title="Education Requirements" icon="school-outline">
-            <View style={{ gap: 16 }}>
-              <View>
-                <FieldLabel label="Minimum Degree" />
-                <Dropdown
-                  icon="school-outline"
-                  options={DEGREE_LEVELS}
-                  value={educationRequirements.minimum_degree}
-                  onSelect={(v) => setEducationRequirements({ ...educationRequirements, minimum_degree: v })}
-                  placeholder="Select minimum degree"
-                />
-              </View>
-              <View>
-                <FieldLabel label="Preferred Field of Study" />
-                <InputBox icon="school-outline" placeholder="e.g. Computer Science, Business Administration"
-                  value={educationRequirements.preferred_field}
-                  onChange={(t) => setEducationRequirements({ ...educationRequirements, preferred_field: t })} />
-              </View>
-              <View>
-                <FieldLabel label="Required Certifications" />
-                <TagInput
-                  tags={educationRequirements.required_certifications}
-                  value={certificationInput}
-                  onChange={setCertificationInput}
-                  onAdd={() => {
-                    if (certificationInput.trim()) {
-                      setEducationRequirements({ ...educationRequirements, required_certifications: [...educationRequirements.required_certifications, certificationInput.trim()] });
-                      setCertificationInput('');
-                    }
-                  }}
-                  onRemove={(c) => setEducationRequirements({ ...educationRequirements, required_certifications: educationRequirements.required_certifications.filter(x => x !== c) })}
-                  placeholder="Add a certification..."
-                />
-              </View>
-              <View>
-                <FieldLabel label="Years in Field" />
-                <InputBox icon="time-outline" placeholder="e.g. 3"
-                  value={educationRequirements.years_of_experience}
-                  onChange={(t) => setEducationRequirements({ ...educationRequirements, years_of_experience: t })}
-                  keyboardType="numeric" />
-              </View>
+          {/* Screening Questions */}
+          <SectionCard title="Screening Questions" icon="help-circle-outline">
+            <View style={{ gap: 12 }}>
+              <TagInput
+                tags={screeningQuestions}
+                value={screeningInput}
+                onChange={setScreeningInput}
+                onAdd={() => {
+                  if (screeningInput.trim()) {
+                    setScreeningQuestions([...screeningQuestions, { question: screeningInput.trim(), required: true }]);
+                    setScreeningInput('');
+                  }
+                }}
+                onRemove={(q) => setScreeningQuestions(screeningQuestions.filter(x => x.question !== q.question))}
+                placeholder="Add a screening question..."
+              />
             </View>
           </SectionCard>
 
           {/* Application Settings */}
           <SectionCard title="Application Settings" icon="settings-outline">
             <View style={{ gap: 16 }}>
+              <View>
+                <FieldLabel label="Max Applicants" />
+                <InputBox
+                  icon="people-outline"
+                  placeholder="100"
+                  value={applicationSettings.max_applicants}
+                  onChange={(t) => setApplicationSettings({ ...applicationSettings, max_applicants: t })}
+                  keyboardType="numeric"
+                />
+              </View>
               <View style={adv.switchRow}>
                 <Text style={adv.switchLabel}>Auto Accept Applications</Text>
                 <Switch
                   value={applicationSettings.auto_accept}
                   onValueChange={(v) => setApplicationSettings({ ...applicationSettings, auto_accept: v })}
                   trackColor={{ false: BORDER, true: GREEN_MID }}
-                  thumbColor={applicationSettings.auto_accept ? BLUE : WHITE}
+                  thumbColor={applicationSettings.auto_accept ? BLUE : TEXT_LIGHT}
+                />
+              </View>
+              <View style={adv.switchRow}>
+                <Text style={adv.switchLabel}>Allow Multiple Hires</Text>
+                <Switch
+                  value={applicationSettings.allow_multiple_hires}
+                  onValueChange={(v) => setApplicationSettings({ ...applicationSettings, allow_multiple_hires: v })}
+                  trackColor={{ false: BORDER, true: GREEN_MID }}
+                  thumbColor={applicationSettings.allow_multiple_hires ? BLUE : TEXT_LIGHT}
                 />
               </View>
               <View>
-                <FieldLabel label="Maximum Applicants" />
-                <InputBox icon="people-outline" placeholder="100"
-                  value={applicationSettings.max_applicants}
-                  onChange={(t) => setApplicationSettings({ ...applicationSettings, max_applicants: t })}
-                  keyboardType="numeric" />
-              </View>
-              <View>
-                <FieldLabel label="Application Deadline (Optional)" />
+                <FieldLabel label="Application Deadline" />
                 <TouchableOpacity
                   style={s.datePickerBtn}
-                  onPress={() => setShowDeadlineDate(true)}
-                  activeOpacity={0.75}
+                  onPress={() => setShowStartDate(true)}
+                  activeOpacity={0.7}
                 >
                   <Ionicons name="calendar-outline" size={18} color={BLUE} />
                   <Text style={s.datePickerText}>
                     {applicationSettings.application_deadline
-                      ? formatDateDisplay(applicationSettings.application_deadline)
-                      : 'Select deadline date'}
+                      ? formatDateDisplay(new Date(applicationSettings.application_deadline))
+                      : 'Select deadline'}
                   </Text>
-                  <Ionicons name="chevron-forward" size={16} color={TEXT_LIGHT} />
                 </TouchableOpacity>
-                {showDeadlineDate && (
+                {showStartDate && (
                   <DateTimePicker
                     value={applicationSettings.application_deadline ? new Date(applicationSettings.application_deadline) : new Date()}
                     mode="date"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedDate) => {
-                      setShowDeadlineDate(false);
+                      setShowStartDate(false);
                       if (selectedDate) {
                         setApplicationSettings({
                           ...applicationSettings,
@@ -1075,6 +948,37 @@ function Step2({
                   />
                 )}
               </View>
+            </View>
+          </SectionCard>
+
+          {/* Job Features */}
+          <SectionCard title="Job Features" icon="flag-outline">
+            <View style={adv.switchRow}>
+              <Text style={adv.switchLabel}>Featured Job</Text>
+              <Switch
+                value={applicationSettings.featured}
+                onValueChange={(v) => setApplicationSettings({ ...applicationSettings, featured: v })}
+                trackColor={{ false: BORDER, true: GREEN_MID }}
+                thumbColor={applicationSettings.featured ? BLUE : TEXT_LIGHT}
+              />
+            </View>
+            <View style={[adv.switchRow, { marginTop: 12 }]}>
+              <Text style={adv.switchLabel}>Urgent Hiring</Text>
+              <Switch
+                value={applicationSettings.urgent}
+                onValueChange={(v) => setApplicationSettings({ ...applicationSettings, urgent: v })}
+                trackColor={{ false: BORDER, true: GREEN_MID }}
+                thumbColor={applicationSettings.urgent ? BLUE : TEXT_LIGHT}
+              />
+            </View>
+            <View style={[adv.switchRow, { marginTop: 12 }]}>
+              <Text style={adv.switchLabel}>NDA Required</Text>
+              <Switch
+                value={applicationSettings.nda_required}
+                onValueChange={(v) => setApplicationSettings({ ...applicationSettings, nda_required: v })}
+                trackColor={{ false: BORDER, true: GREEN_MID }}
+                thumbColor={applicationSettings.nda_required ? BLUE : TEXT_LIGHT}
+              />
             </View>
           </SectionCard>
         </>
@@ -1090,7 +994,7 @@ const adv = StyleSheet.create({
     borderWidth: 1, borderColor: BORDER, marginBottom: 16,
     borderStyle: 'dashed',
   },
-  toggleTxt: { fontSize: 14, fontWeight: '700', color: BLUE },
+  toggleTxt: { fontSize: 14, fontWeight: '600', color: BLUE },
   badge: {
     width: 28, height: 28, borderRadius: 8,
     backgroundColor: 'rgba(0,85,165,0.08)',
@@ -1118,14 +1022,25 @@ function ReviewRow({ icon, label, value, accent }) {
   );
 }
 
-function Step3({ title, description, requiredSkills, jobType, workSetup, urgencyLevel,
-  experienceLevel, budgetType, budgetAmount, estimatedDuration, contactPreference,
-  payInformation, location, requirements, educationRequirements, applicationSettings,
-  category }) {
+function Step3({ title, description, requiredSkills, jobType, workSetup,
+  experienceLevel, budgetType, budgetMin, budgetMax, budgetCurrency, budgetNegotiable,
+  durationValue, durationUnit, estimatedHours, weeklyLimit, startDate, endDate,
+  contactPreference, location, requirements, applicationSettings,
+  category, vacancies, timezone, screeningQuestions }) {
 
-  const urgency = URGENCY_LEVELS.find(u => u.value === urgencyLevel);
   const experience = EXPERIENCE_LEVELS.find(e => e.value === experienceLevel);
-  const currencySymbol = CURRENCIES.find(c => c.value === payInformation.salary_range.currency)?.symbol || '';
+  const budgetLabel = BUDGET_TYPES.find(b => b.value === budgetType)?.label;
+
+  const formatDateDisplay = (date) => {
+    if (!date) return null;
+    return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  const getStatusDisplay = () => {
+    if (applicationSettings.urgent) return '🚨 Urgent';
+    if (applicationSettings.featured) return '⭐ Featured';
+    return 'Open';
+  };
 
   return (
     <View>
@@ -1135,7 +1050,7 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
         </View>
         <View style={{ flex: 1 }}>
           <Text style={rv.heroTitle}>{title || 'Untitled Job'}</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             {category && (
               <View style={rv.badge}>
                 <Text style={rv.badgeTxt}>{category}</Text>
@@ -1151,14 +1066,19 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
                 <Text style={rv.badgeTxt}>{WORK_SETUPS.find(w => w.value === workSetup)?.label}</Text>
               </View>
             )}
-            {urgencyLevel && (
-              <View style={[rv.badge, { backgroundColor: `${urgency?.color}22`, borderColor: `${urgency?.color}55` }]}>
-                <Text style={[rv.badgeTxt, { color: WHITE }]}>{urgency?.label}</Text>
-              </View>
-            )}
             {experienceLevel && (
               <View style={rv.badge}>
                 <Text style={rv.badgeTxt}>{experience?.label}</Text>
+              </View>
+            )}
+            {applicationSettings.urgent && (
+              <View style={[rv.badge, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
+                <Text style={[rv.badgeTxt, { color: '#DC2626' }]}>Urgent</Text>
+              </View>
+            )}
+            {applicationSettings.featured && (
+              <View style={[rv.badge, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
+                <Text style={[rv.badgeTxt, { color: '#D97706' }]}>Featured</Text>
               </View>
             )}
           </View>
@@ -1168,6 +1088,9 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
       <SectionCard title="Job Details" icon="document-text-outline">
         <View style={{ gap: 12 }}>
           <ReviewRow icon="grid-outline" label="Category" value={category} />
+          <ReviewRow icon="briefcase-outline" label="Title" value={title} />
+          <ReviewRow icon="people-outline" label="Vacancies" value={vacancies} />
+          <ReviewRow icon="time-outline" label="Timezone" value={timezone} />
           <ReviewRow icon="document-text-outline" label="Description" value={description?.substring(0, 120) + (description?.length > 120 ? '...' : '')} />
           {requiredSkills?.length > 0 && (
             <View style={rv.row}>
@@ -1175,9 +1098,9 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
               <View style={{ flex: 1 }}>
                 <Text style={rv.rowLabel}>Required Skills</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                  {requiredSkills.map(s => (
-                    <View key={s} style={[f.tag, { paddingVertical: 4 }]}>
-                      <Text style={[f.tagTxt, { fontSize: 11 }]}>{s}</Text>
+                  {requiredSkills.map(sk => (
+                    <View key={sk} style={[f.tag, { paddingVertical: 4 }]}>
+                      <Text style={[f.tagTxt, { fontSize: 11 }]}>{sk}</Text>
                     </View>
                   ))}
                 </View>
@@ -1186,56 +1109,65 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
           )}
           <ReviewRow icon="person-outline" label="Contact Preference" value={contactPreference} />
           {experienceLevel && <ReviewRow icon="trophy-outline" label="Experience Level" value={experience?.label} />}
+          {screeningQuestions?.length > 0 && (
+            <ReviewRow icon="help-circle-outline" label="Screening Questions" value={`${screeningQuestions.length} question(s)`} />
+          )}
         </View>
       </SectionCard>
 
-      <SectionCard title="Budget & Payment" icon="cash-outline">
+      <SectionCard title="Budget & Timeline" icon="cash-outline">
         <View style={{ gap: 12 }}>
-          <ReviewRow icon="wallet-outline" label="Budget" value={budgetAmount ? `${currencySymbol}${budgetAmount} · ${BUDGET_TYPES.find(b => b.value === budgetType)?.label}` : null} />
-          <ReviewRow icon="hourglass-outline" label="Duration" value={estimatedDuration} />
-          {(payInformation.salary_range.min || payInformation.salary_range.max) && (
-            <ReviewRow icon="receipt-outline" label="Salary Range"
-              value={`${currencySymbol}${payInformation.salary_range.min || '?'} – ${currencySymbol}${payInformation.salary_range.max || '?'} / ${payInformation.payment_frequency}`} />
-          )}
-          {payInformation.benefits?.length > 0 && (
-            <ReviewRow icon="gift-outline" label="Benefits" value={payInformation.benefits.length + ' benefit(s) included'} />
-          )}
-          {payInformation.negotiable && <ReviewRow icon="checkmark-circle-outline" label="Negotiable" value="Yes" accent={GREEN} />}
+          <ReviewRow icon="wallet-outline" label="Budget" value={`${budgetCurrency} ${budgetMin}${budgetMax ? ` - ${budgetCurrency} ${budgetMax}` : ''} (${budgetLabel})`} />
+          <ReviewRow icon="checkmark-circle-outline" label="Negotiable" value={budgetNegotiable ? 'Yes' : 'No'} accent={budgetNegotiable ? GREEN : undefined} />
+          <ReviewRow icon="time-outline" label="Duration" value={`${durationValue} ${durationUnit}`} />
+          {estimatedHours && <ReviewRow icon="hourglass-outline" label="Est. Hours" value={`${estimatedHours} hrs`} />}
+          {weeklyLimit && <ReviewRow icon="calendar-outline" label="Weekly Limit" value={`${weeklyLimit} hrs/week`} />}
+          {startDate && <ReviewRow icon="calendar-outline" label="Start Date" value={formatDateDisplay(startDate)} />}
+          {endDate && <ReviewRow icon="calendar-outline" label="End Date" value={formatDateDisplay(endDate)} />}
         </View>
       </SectionCard>
 
-      {(requirements.min_years_experience || requirements.preferred_tools?.length > 0 ||
-        requirements.languages_required?.length > 0 || requirements.additional_requirements ||
-        educationRequirements.minimum_degree !== 'none') && (
-        <SectionCard title="Requirements" icon="list-outline">
-          <View style={{ gap: 12 }}>
-            {requirements.min_years_experience ? <ReviewRow icon="bar-chart-outline" label="Min. Experience" value={`${requirements.min_years_experience} year(s)`} /> : null}
-            {requirements.preferred_tools?.length > 0 && <ReviewRow icon="construct-outline" label="Preferred Tools" value={requirements.preferred_tools.join(', ')} />}
-            {requirements.languages_required?.length > 0 && <ReviewRow icon="language-outline" label="Languages" value={requirements.languages_required.map(l => `${l.language} (${l.proficiency})`).join(', ')} />}
-            {educationRequirements.minimum_degree && educationRequirements.minimum_degree !== 'none' && (
-              <ReviewRow icon="school-outline" label="Minimum Degree" value={DEGREE_LEVELS.find(d => d.value === educationRequirements.minimum_degree)?.label} />
-            )}
-            {educationRequirements.preferred_field && <ReviewRow icon="ribbon-outline" label="Preferred Field" value={educationRequirements.preferred_field} />}
-          </View>
-        </SectionCard>
-      )}
-
-      {(workSetup === 'onsite' || workSetup === 'hybrid') && location.specific_area && (
+      {location && (location.country || location.city) && (
         <SectionCard title="Location" icon="location-outline">
           <View style={{ gap: 12 }}>
-            <ReviewRow icon="map-outline" label="Area" value={location.specific_area} />
-            <ReviewRow icon="business-outline" label="City" value={location.city} />
-            <ReviewRow icon="navigate-outline" label="Address" value={location.work_address} />
+            {location.country && <ReviewRow icon="location-outline" label="Country" value={location.country} />}
+            {location.province && <ReviewRow icon="business-outline" label="Province" value={location.province} />}
+            {location.city && <ReviewRow icon="map-outline" label="City" value={location.city} />}
+            {location.address && <ReviewRow icon="navigate-outline" label="Address" value={location.address} />}
+            {location.zip_code && <ReviewRow icon="mail-outline" label="Zip Code" value={location.zip_code} />}
           </View>
         </SectionCard>
       )}
 
-      {applicationSettings.application_deadline && (
+      {requirements && (requirements.education !== 'none' || requirements.portfolio_required || requirements.resume_required || requirements.cover_letter_required || requirements.preferred_languages?.length > 0) && (
+        <SectionCard title="Requirements" icon="list-outline">
+          <View style={{ gap: 12 }}>
+            {requirements.education && requirements.education !== 'none' && (
+              <ReviewRow icon="school-outline" label="Education" value={DEGREE_LEVELS.find(d => d.value === requirements.education)?.label} />
+            )}
+            <ReviewRow icon="portfolio-outline" label="Portfolio Required" value={requirements.portfolio_required ? 'Yes' : 'No'} accent={requirements.portfolio_required ? GREEN : undefined} />
+            <ReviewRow icon="document-text-outline" label="Resume Required" value={requirements.resume_required ? 'Yes' : 'No'} accent={requirements.resume_required ? GREEN : undefined} />
+            <ReviewRow icon="chatbubble-outline" label="Cover Letter Required" value={requirements.cover_letter_required ? 'Yes' : 'No'} accent={requirements.cover_letter_required ? GREEN : undefined} />
+            {requirements.preferred_languages?.length > 0 && (
+              <ReviewRow icon="language-outline" label="Languages" value={requirements.preferred_languages.join(', ')} />
+            )}
+            {requirements.preferred_certifications?.length > 0 && (
+              <ReviewRow icon="ribbon-outline" label="Certifications" value={requirements.preferred_certifications.join(', ')} />
+            )}
+          </View>
+        </SectionCard>
+      )}
+
+      {applicationSettings && (
         <SectionCard title="Application Settings" icon="settings-outline">
           <View style={{ gap: 12 }}>
             <ReviewRow icon="people-outline" label="Max Applicants" value={applicationSettings.max_applicants} />
-            <ReviewRow icon="checkmark-circle-outline" label="Auto Accept" value={applicationSettings.auto_accept ? 'Yes' : 'No'} />
-            <ReviewRow icon="calendar-outline" label="Deadline" value={new Date(applicationSettings.application_deadline).toLocaleDateString()} />
+            <ReviewRow icon="checkmark-circle-outline" label="Auto Accept" value={applicationSettings.auto_accept ? 'Yes' : 'No'} accent={applicationSettings.auto_accept ? GREEN : undefined} />
+            <ReviewRow icon="people-outline" label="Multiple Hires" value={applicationSettings.allow_multiple_hires ? 'Yes' : 'No'} accent={applicationSettings.allow_multiple_hires ? GREEN : undefined} />
+            {applicationSettings.application_deadline && (
+              <ReviewRow icon="calendar-outline" label="Deadline" value={formatDateDisplay(applicationSettings.application_deadline)} />
+            )}
+            <ReviewRow icon="flag-outline" label="Status" value={getStatusDisplay()} />
           </View>
         </SectionCard>
       )}
@@ -1253,29 +1185,26 @@ function Step3({ title, description, requiredSkills, jobType, workSetup, urgency
 const rv = StyleSheet.create({
   hero: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 14,
-    backgroundColor: NAVY, borderRadius: 18, padding: 20, marginBottom: 16,
-    shadowColor: NAVY, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25, shadowRadius: 14, elevation: 5,
+    backgroundColor: NAVY, borderRadius: 16, padding: 18, marginBottom: 16,
   },
   heroIcon: {
     width: 48, height: 48, borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)',
   },
-  heroTitle: { fontSize: 18, fontWeight: '800', color: WHITE, lineHeight: 24, letterSpacing: -0.2 },
+  heroTitle: { fontSize: 18, fontWeight: '800', color: WHITE, lineHeight: 24 },
   badge: {
-    paddingHorizontal: 9, paddingVertical: 4,
-    borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
-  badgeTxt: { fontSize: 10, color: 'rgba(255,255,255,0.9)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  badgeTxt: { fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: '600', textTransform: 'uppercase' },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   iconBox: {
     width: 28, height: 28, borderRadius: 7,
     backgroundColor: BG, alignItems: 'center', justifyContent: 'center', marginTop: 1,
   },
-  rowLabel: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  rowLabel: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
   rowValue: { fontSize: 13, color: TEXT_MAIN, fontWeight: '500', marginTop: 2, lineHeight: 18 },
   confirmBanner: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 10,
@@ -1293,6 +1222,7 @@ export default function PostJobScreen({ onNavigate }) {
 
   const [activeTab, setActiveTab] = useState('PostJob');
   const [currentStep, setCurrentStep] = useState(1);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Basic
   const [title, setTitle] = useState('');
@@ -1300,49 +1230,62 @@ export default function PostJobScreen({ onNavigate }) {
   const [category, setCategory] = useState('');
   const [requiredSkills, setRequiredSkills] = useState([]);
   const [skillInput, setSkillInput] = useState('');
-  const [jobType, setJobType] = useState('one_time');
+  const [jobType, setJobType] = useState('project');
   const [workSetup, setWorkSetup] = useState('remote');
-  const [urgencyLevel, setUrgencyLevel] = useState('normal');
-  const [experienceLevel, setExperienceLevel] = useState('');
-  const [budgetType, setBudgetType] = useState('fixed');
-  const [budgetAmount, setBudgetAmount] = useState('');
-  const [estimatedDuration, setEstimatedDuration] = useState('');
+  const [experienceLevel, setExperienceLevel] = useState('entry');
   const [contactPreference, setContactPreference] = useState('chat');
+  const [vacancies, setVacancies] = useState('1');
+  const [timezone, setTimezone] = useState('Asia/Manila');
 
-  // Pay
-  const [payInformation, setPayInformation] = useState({
-    salary_range: { min: '', max: '', currency: 'PHP' },
-    payment_frequency: 'monthly',
-    benefits: [],
-    negotiable: false,
-    display_pay: true,
-  });
+  // Budget
+  const [budgetType, setBudgetType] = useState('fixed');
+  const [budgetMin, setBudgetMin] = useState('');
+  const [budgetMax, setBudgetMax] = useState('');
+  const [budgetCurrency, setBudgetCurrency] = useState('PHP');
+  const [budgetNegotiable, setBudgetNegotiable] = useState(false);
+  const [hideBudget, setHideBudget] = useState(false);
+
+  // Timeline
+  const [durationValue, setDurationValue] = useState('1');
+  const [durationUnit, setDurationUnit] = useState('weeks');
+  const [estimatedHours, setEstimatedHours] = useState('');
+  const [weeklyLimit, setWeeklyLimit] = useState('');
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
 
   // Location
   const [location, setLocation] = useState({
-    address: '', city: '', state: '', country: 'Philippines',
-    zip_code: '', specific_area: '', landmark: '', work_address: '',
+    country: 'Philippines',
+    province: '',
+    city: '',
+    address: '',
+    zip_code: '',
   });
-
-  // Education
-  const [educationRequirements, setEducationRequirements] = useState({
-    minimum_degree: 'none', preferred_field: '',
-    required_certifications: [], years_of_experience: '',
-  });
-  const [certificationInput, setCertificationInput] = useState('');
 
   // Requirements
   const [requirements, setRequirements] = useState({
-    min_years_experience: '', preferred_tools: [],
-    languages_required: [], additional_requirements: '',
+    education: 'none',
+    portfolio_required: false,
+    resume_required: false,
+    cover_letter_required: false,
+    preferred_languages: [],
+    preferred_certifications: [],
   });
-  const [toolInput, setToolInput] = useState('');
-  const [languageInput, setLanguageInput] = useState({ language: '', proficiency: 'professional' });
 
-  // App Settings
+  // Screening Questions
+  const [screeningQuestions, setScreeningQuestions] = useState([]);
+  const [screeningInput, setScreeningInput] = useState('');
+  const [certificationInput, setCertificationInput] = useState('');
+
+  // Application Settings
   const [applicationSettings, setApplicationSettings] = useState({
-    auto_accept: false, max_applicants: '100',
-    application_deadline: '', questions_for_applicants: [],
+    max_applicants: '100',
+    auto_accept: false,
+    allow_multiple_hires: false,
+    featured: false,
+    urgent: false,
+    nda_required: false,
+    application_deadline: null,
   });
 
   // Handle Android hardware back button
@@ -1375,8 +1318,8 @@ export default function PostJobScreen({ onNavigate }) {
   };
 
   const validateStep2 = () => {
-    if (!budgetAmount || parseFloat(budgetAmount) <= 0) {
-      Alert.alert('Missing Info', 'Please enter a valid budget amount');
+    if (!budgetMin || parseFloat(budgetMin) <= 0) {
+      Alert.alert('Missing Info', 'Please enter a valid budget minimum amount');
       return false;
     }
     return true;
@@ -1399,77 +1342,147 @@ export default function PostJobScreen({ onNavigate }) {
   };
 
   const resetForm = () => {
-    setTitle(''); setDescription(''); setCategory(''); setRequiredSkills([]); setBudgetAmount('');
-    setEstimatedDuration(''); setJobType('one_time'); setWorkSetup('remote');
-    setUrgencyLevel('normal'); setExperienceLevel(''); setBudgetType('fixed');
-    setContactPreference('chat'); setSkillInput('');
-    setPayInformation({ salary_range: { min: '', max: '', currency: 'PHP' }, payment_frequency: 'monthly', benefits: [], negotiable: false, display_pay: true });
-    setLocation({ address: '', city: '', state: '', country: 'Philippines', zip_code: '', specific_area: '', landmark: '', work_address: '' });
-    setEducationRequirements({ minimum_degree: 'none', preferred_field: '', required_certifications: [], years_of_experience: '' });
-    setRequirements({ min_years_experience: '', preferred_tools: [], languages_required: [], additional_requirements: '' });
-    setApplicationSettings({ auto_accept: false, max_applicants: '100', application_deadline: '', questions_for_applicants: [] });
+    setTitle('');
+    setDescription('');
+    setCategory('');
+    setRequiredSkills([]);
+    setSkillInput('');
+    setJobType('project');
+    setWorkSetup('remote');
+    setExperienceLevel('entry');
+    setContactPreference('chat');
+    setVacancies('1');
+    setTimezone('Asia/Manila');
+    setBudgetType('fixed');
+    setBudgetMin('');
+    setBudgetMax('');
+    setBudgetCurrency('PHP');
+    setBudgetNegotiable(false);
+    setHideBudget(false);
+    setDurationValue('1');
+    setDurationUnit('weeks');
+    setEstimatedHours('');
+    setWeeklyLimit('');
+    setStartDate(null);
+    setEndDate(null);
+    setLocation({
+      country: 'Philippines',
+      province: '',
+      city: '',
+      address: '',
+      zip_code: '',
+    });
+    setRequirements({
+      education: 'none',
+      portfolio_required: false,
+      resume_required: false,
+      cover_letter_required: false,
+      preferred_languages: [],
+      preferred_certifications: [],
+    });
+    setScreeningQuestions([]);
+    setScreeningInput('');
+    setCertificationInput('');
+    setApplicationSettings({
+      max_applicants: '100',
+      auto_accept: false,
+      allow_multiple_hires: false,
+      featured: false,
+      urgent: false,
+      nda_required: false,
+      application_deadline: null,
+    });
     setCurrentStep(1);
+    setShowAdvanced(false);
   };
 
+  // ==================== UPDATED handlePost FUNCTION ====================
   const handlePost = async () => {
     if (!token) {
       Alert.alert('Error', 'You must be logged in to post a job');
       return;
     }
 
+    // Prepare job data matching the backend schema
     const jobData = {
+      // Basic Information
       title: title.trim(),
       description: description.trim(),
       category: category.trim(),
+      subcategory: null,
       required_skills: requiredSkills,
+      tags: [],
+      
+      // Job Details
       job_type: jobType,
       work_setup: workSetup,
-      urgency_level: urgencyLevel,
-      experience_level: experienceLevel || null,
-      budget_type: budgetType,
-      budget_amount: parseFloat(budgetAmount),
-      estimated_duration: estimatedDuration.trim() || null,
-      contact_preference: contactPreference,
-      pay_information: {
-        salary_range: {
-          min: payInformation.salary_range.min ? parseFloat(payInformation.salary_range.min) : null,
-          max: payInformation.salary_range.max ? parseFloat(payInformation.salary_range.max) : null,
-          currency: payInformation.salary_range.currency || 'PHP',
-        },
-        payment_frequency: payInformation.payment_frequency || 'monthly',
-        benefits: payInformation.benefits || [],
-        negotiable: payInformation.negotiable || false,
-        display_pay: payInformation.display_pay !== undefined ? payInformation.display_pay : true,
-      },
+      experience_level: experienceLevel,
+      vacancies: parseInt(vacancies) || 1,
+      
+      // Location
       location: {
-        address: location.address || null,
-        city: location.city || null,
-        state: location.state || null,
         country: location.country || 'Philippines',
-        zip_code: location.zip_code || null,
-        specific_area: location.specific_area || null,
-        landmark: location.landmark || null,
-        work_address: location.work_address || null,
+        province: location.province || '',
+        city: location.city || '',
+        address: location.address || '',
+        zip_code: location.zip_code || '',
       },
-      education_requirements: {
-        minimum_degree: educationRequirements.minimum_degree || 'none',
-        preferred_field: educationRequirements.preferred_field || null,
-        required_certifications: educationRequirements.required_certifications || [],
-        years_of_experience: parseInt(educationRequirements.years_of_experience) || 0,
-      },
+      
+      timezone: timezone || 'Asia/Manila',
+      
+      // Budget
+      budget_type: budgetType,
+      budget_min: parseFloat(budgetMin) || 0,
+      budget_max: budgetMax ? parseFloat(budgetMax) : (parseFloat(budgetMin) || 0),
+      budget_currency: budgetCurrency || 'PHP',
+      budget_negotiable: budgetNegotiable,
+      hide_budget: hideBudget,
+      
+      // Timeline
+      duration_value: parseInt(durationValue) || 1,
+      duration_unit: durationUnit || 'weeks',
+      estimated_hours: estimatedHours ? parseInt(estimatedHours) : null,
+      weekly_limit: weeklyLimit ? parseInt(weeklyLimit) : null,
+      start_date: startDate || null,
+      end_date: endDate || null,
+      
+      // Requirements
       requirements: {
-        min_years_experience: parseInt(requirements.min_years_experience) || 0,
-        preferred_tools: requirements.preferred_tools || [],
-        languages_required: requirements.languages_required || [],
-        additional_requirements: requirements.additional_requirements || null,
+        education: requirements.education || 'none',
+        portfolio_required: requirements.portfolio_required || false,
+        resume_required: requirements.resume_required || false,
+        cover_letter_required: requirements.cover_letter_required || false,
+        preferred_languages: requirements.preferred_languages || [],
+        preferred_certifications: requirements.preferred_certifications || [],
       },
-      application_settings: {
-        auto_accept: applicationSettings.auto_accept || false,
+      
+      // Screening Questions
+      screening_questions: screeningQuestions.map(q => ({
+        question: q.question,
+        required: q.required !== undefined ? q.required : true
+      })),
+      
+      // Hiring Settings
+      hiring: {
         max_applicants: parseInt(applicationSettings.max_applicants) || 100,
-        application_deadline: applicationSettings.application_deadline || null,
-        questions_for_applicants: applicationSettings.questions_for_applicants || [],
+        auto_accept: applicationSettings.auto_accept || false,
+        allow_multiple_hires: applicationSettings.allow_multiple_hires || false,
       },
+      
+      // Features
+      featured: applicationSettings.featured || false,
+      urgent: applicationSettings.urgent || false,
+      nda_required: applicationSettings.nda_required || false,
+      
+      // Visibility
+      visibility: 'public',
+      
+      // Application Deadline
+      application_deadline: applicationSettings.application_deadline || null,
     };
+
+    console.log('=== JOB DATA BEING SENT ===');
+    console.log('Job Data:', JSON.stringify(jobData, null, 2));
 
     try {
       const result = await dispatch(createJob(jobData)).unwrap();
@@ -1499,20 +1512,32 @@ export default function PostJobScreen({ onNavigate }) {
     skillInput, setSkillInput,
     jobType, setJobType,
     workSetup, setWorkSetup,
-    urgencyLevel, setUrgencyLevel,
-    experienceLevel, setExperienceLevel,
-    budgetType, setBudgetType,
-    budgetAmount, setBudgetAmount,
-    estimatedDuration, setEstimatedDuration,
     contactPreference, setContactPreference,
-    payInformation, setPayInformation,
+    vacancies, setVacancies,
+    timezone, setTimezone,
+    budgetType, setBudgetType,
+    budgetMin, setBudgetMin,
+    budgetMax, setBudgetMax,
+    budgetCurrency, setBudgetCurrency,
+    budgetNegotiable, setBudgetNegotiable,
+    hideBudget, setHideBudget,
+    durationValue, setDurationValue,
+    durationUnit, setDurationUnit,
+    estimatedHours, setEstimatedHours,
+    weeklyLimit, setWeeklyLimit,
+    startDate, setStartDate,
+    endDate, setEndDate,
+    experienceLevel, setExperienceLevel,
     location, setLocation,
-    educationRequirements, setEducationRequirements,
+    workSetup,
     requirements, setRequirements,
+    educationRequirements: requirements, // Reuse requirements for education
+    setEducationRequirements: setRequirements,
     applicationSettings, setApplicationSettings,
     certificationInput, setCertificationInput,
-    toolInput, setToolInput,
-    languageInput, setLanguageInput,
+    screeningQuestions, setScreeningQuestions,
+    screeningInput, setScreeningInput,
+    showAdvanced, setShowAdvanced,
   };
 
   return (
@@ -1523,14 +1548,14 @@ export default function PostJobScreen({ onNavigate }) {
         <View style={s.topbar}>
           <View style={s.topbarLeft}>
             <View style={s.logoBox}>
-              <Ionicons name="flash-outline" size={16} color={NAVY} />
+              <Ionicons name="flash-outline" size={15} color={NAVY} />
             </View>
             <View>
               <Text style={s.topbarBrand}>Taskra</Text>
               <Text style={s.topbarTagline}>Client Portal</Text>
             </View>
           </View>
-          <TouchableOpacity style={s.postingsBtn} onPress={() => onNavigate('Mypostings')} activeOpacity={0.8}>
+          <TouchableOpacity style={s.postingsBtn} onPress={() => onNavigate('Mypostings')}>
             <Ionicons name="document-text-outline" size={16} color={WHITE} />
             <Text style={s.postingsBtnText}>My Posts</Text>
           </TouchableOpacity>
@@ -1563,7 +1588,7 @@ export default function PostJobScreen({ onNavigate }) {
           {/* Navigation Buttons */}
           <View style={s.navRow}>
             {currentStep > 1 ? (
-              <TouchableOpacity style={s.backNavBtn} onPress={handleBack} activeOpacity={0.8}>
+              <TouchableOpacity style={s.backNavBtn} onPress={handleBack}>
                 <Ionicons name="arrow-back" size={18} color={BLUE} />
                 <Text style={s.backNavBtnTxt}>Back</Text>
               </TouchableOpacity>
@@ -1597,13 +1622,13 @@ export default function PostJobScreen({ onNavigate }) {
           {/* Show error if any */}
           {error && (
             <View style={s.errorContainer}>
-              <Ionicons name="alert-circle-outline" size={18} color={RED} />
+              <Ionicons name="alert-circle-outline" size={18} color="#EF4444" />
               <Text style={s.errorText}>{typeof error === 'string' ? error : error.message || 'An error occurred'}</Text>
             </View>
           )}
         </ScrollView>
 
-        {/* BOTTOM TAB BAR - Fixed position */}
+        {/* BOTTOM TAB BAR */}
         <SafeAreaView edges={['bottom']} style={s.tabSafe}>
           <View style={s.tabBar}>
             {TABS.map(tab => {
@@ -1645,32 +1670,28 @@ const s = StyleSheet.create({
 
   topbar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 14, backgroundColor: NAVY,
-    shadowColor: NAVY, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
+    paddingHorizontal: 20, paddingVertical: 12, backgroundColor: NAVY,
   },
   topbarLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   logoBox: {
-    width: 34, height: 34, backgroundColor: GOLD, borderRadius: 10,
+    width: 32, height: 32, backgroundColor: GOLD, borderRadius: 9,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: GOLD_DK, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35, shadowRadius: 4, elevation: 2,
   },
-  topbarBrand: { fontSize: 16, fontWeight: '800', color: WHITE, letterSpacing: -0.3 },
-  topbarTagline: { fontSize: 9, fontWeight: '600', color: GOLD_LT, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 1 },
+  topbarBrand: { fontSize: 15, fontWeight: '800', color: WHITE, letterSpacing: -0.2 },
+  topbarTagline: { fontSize: 9, fontWeight: '500', color: GOLD_LT, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 1 },
   postingsBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 13, paddingVertical: 8,
+    paddingHorizontal: 12, paddingVertical: 7,
     borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.1)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
   },
-  postingsBtnText: { fontSize: 12, fontWeight: '700', color: WHITE },
+  postingsBtnText: { fontSize: 12, fontWeight: '600', color: WHITE },
 
-  scroll: { padding: 16, paddingBottom: 20 },
+  scroll: { padding: 16, paddingBottom: 40 },
 
   stepHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    marginBottom: 18,
+    marginBottom: 16,
   },
   stepHeaderIcon: {
     width: 40, height: 40, borderRadius: 12,
@@ -1678,8 +1699,8 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: 'rgba(0,85,165,0.15)',
   },
-  stepHeaderNum:   { fontSize: 11, color: TEXT_LIGHT, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
-  stepHeaderTitle: { fontSize: 20, fontWeight: '800', color: TEXT_MAIN, marginTop: 1, letterSpacing: -0.3 },
+  stepHeaderNum:   { fontSize: 11, color: TEXT_LIGHT, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  stepHeaderTitle: { fontSize: 20, fontWeight: '800', color: TEXT_MAIN, marginTop: 1 },
 
   navRow: { flexDirection: 'row', gap: 12, marginTop: 24, alignItems: 'center' },
   backNavBtn: {
@@ -1687,13 +1708,13 @@ const s = StyleSheet.create({
     paddingVertical: 14, borderRadius: 12,
     borderWidth: 1.5, borderColor: BORDER, backgroundColor: WHITE,
   },
-  backNavBtnTxt: { fontSize: 15, fontWeight: '700', color: BLUE },
+  backNavBtnTxt: { fontSize: 15, fontWeight: '600', color: BLUE },
   nextBtn: {
     flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     paddingVertical: 14, borderRadius: 12,
     backgroundColor: BLUE,
     shadowColor: BLUE, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28, shadowRadius: 12, elevation: 4,
+    shadowOpacity: 0.25, shadowRadius: 12, elevation: 4,
   },
   nextBtnTxt: { fontSize: 15, fontWeight: '700', color: WHITE },
   postBtn: {
@@ -1713,36 +1734,38 @@ const s = StyleSheet.create({
   errorText: { flex: 1, fontSize: 13, color: '#991B1B', lineHeight: 18 },
 
   suggestionContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
     backgroundColor: WHITE,
-    borderWidth: 1.5,
-    borderColor: BLUE,
-    borderRadius: 12,
-    marginTop: 6,
-    maxHeight: 180,
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
-    zIndex: 999,
-    position: 'relative',
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 8,
+    maxHeight: 160,
     overflow: 'hidden',
+    zIndex: 999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 6,
   },
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: BORDER_SOFT,
+    borderBottomColor: BORDER,
     backgroundColor: WHITE,
   },
   suggestionText: {
     fontSize: 13,
     color: TEXT_MAIN,
     fontWeight: '500',
-    flex: 1,
   },
   datePickerBtn: {
     flexDirection: 'row',
@@ -1761,66 +1784,33 @@ const s = StyleSheet.create({
     color: TEXT_MAIN,
   },
 
-  tabSafe: { 
-    backgroundColor: WHITE,
-    borderTopWidth: 1.5,
-    borderTopColor: BORDER_SOFT,
-  },
+  tabSafe: { backgroundColor: WHITE },
   tabBar: {
-    flexDirection: 'row',
-    backgroundColor: WHITE,
-    paddingTop: 6,
-    paddingBottom: 4,
-    paddingHorizontal: 8,
+    flexDirection: 'row', backgroundColor: WHITE,
+    borderTopWidth: 1.5, borderTopColor: BORDER,
+    paddingTop: 6, paddingBottom: 4, paddingHorizontal: 8,
   },
   tabItem: {
-    flex: 1, 
-    alignItems: 'center', 
-    justifyContent: 'flex-start',
-    paddingVertical: 4, 
-    position: 'relative',
+    flex: 1, alignItems: 'center', justifyContent: 'flex-start',
+    paddingVertical: 4, position: 'relative',
   },
   tabActiveBar: {
-    position: 'absolute', 
-    top: 0,
-    width: 24, 
-    height: 3,
-    backgroundColor: BLUE, 
-    borderRadius: 999,
+    position: 'absolute', top: 0,
+    width: 24, height: 3,
+    backgroundColor: BLUE, borderRadius: 999,
   },
-  tabIconWrap: { 
-    position: 'relative', 
-    marginBottom: 3, 
-    marginTop: 6 
-  },
+  tabIconWrap: { position: 'relative', marginBottom: 3, marginTop: 6 },
   tabFab: {
-    width: 44, 
-    height: 36, 
-    borderRadius: 12,
+    width: 44, height: 36, borderRadius: 12,
     backgroundColor: GOLD,
-    alignItems: 'center', 
-    justifyContent: 'center',
-    marginBottom: 3, 
-    marginTop: 2,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 3, marginTop: 2,
     shadowColor: GOLD_DK,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.28, 
-    shadowRadius: 5, 
-    elevation: 3,
-    borderWidth: 1, 
-    borderColor: GOLD_LT,
+    shadowOpacity: 0.28, shadowRadius: 5, elevation: 3,
+    borderWidth: 1, borderColor: GOLD_LT,
   },
-  tabLabel: { 
-    fontSize: 10, 
-    color: TEXT_LIGHT, 
-    fontWeight: '600' 
-  },
-  tabLabelActive: { 
-    color: BLUE, 
-    fontWeight: '700' 
-  },
-  tabLabelPost: { 
-    color: GOLD, 
-    fontWeight: '700' 
-  },
+  tabLabel:     { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500' },
+  tabLabelActive: { color: BLUE, fontWeight: '700' },
+  tabLabelPost: { color: GOLD, fontWeight: '700' },
 });

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, Text, TouchableOpacity, StyleSheet, 
   FlatList, TextInput, Image, ActivityIndicator, 
-  RefreshControl, Alert, StatusBar
+  RefreshControl, Alert, StatusBar, BackHandler
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -219,6 +219,21 @@ export default function Messages({ onNavigate, route, userRole = 'freelancer' })
     }
   }, []);
 
+  // Handle hardware back button press
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (selectedChat) {
+        // If in chat view, go back to conversation list
+        handleBackFromChat();
+        return true; // Prevent default behavior
+      }
+      // If in conversation list, let the default back behavior happen
+      return false;
+    });
+
+    return () => backHandler.remove();
+  }, [selectedChat]);
+
   // Check if route params has a user to chat with (from navigation)
   useEffect(() => {
     if (route?.params?.userId && route?.params?.userName) {
@@ -338,6 +353,13 @@ export default function Messages({ onNavigate, route, userRole = 'freelancer' })
         await dispatch(markAsRead(conversation.other_user_id)).unwrap();
         await fetchConversations();
       }
+    }
+  };
+
+  const handleBackFromChat = () => {
+    setSelectedChat(null);
+    if (!useMockData) {
+      dispatch(clearMessages());
     }
   };
 
@@ -461,20 +483,7 @@ export default function Messages({ onNavigate, route, userRole = 'freelancer' })
 
   const ChatHeader = () => (
     <View style={styles.chatHeader}>
-      <TouchableOpacity 
-        onPress={() => {
-          setSelectedChat(null);
-          if (!useMockData) {
-            dispatch(clearMessages());
-          }
-        }} 
-        style={styles.backButton}
-        activeOpacity={0.7}
-      >
-        <View style={styles.backIconWrap}>
-          <Ionicons name="arrow-back" size={18} color={WHITE} />
-        </View>
-      </TouchableOpacity>
+      {/* Removed the custom back button here - now using device back button */}
       
       <View style={styles.chatHeaderInfo}>
         <View style={styles.chatAvatarContainer}>
@@ -588,15 +597,7 @@ export default function Messages({ onNavigate, route, userRole = 'freelancer' })
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
       
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => onNavigate(userRole === 'freelancer' ? 'FreelancerDashboard' : 'ClientDashboard')} 
-          style={styles.backBtn}
-          activeOpacity={0.7}
-        >
-          <View style={styles.backIconWrap}>
-            <Ionicons name="arrow-back" size={18} color={WHITE} />
-          </View>
-        </TouchableOpacity>
+        {/* Removed the custom back button in header as requested */}
         <Text style={styles.title}>Messages</Text>
         <TouchableOpacity style={styles.newMsgBtn} activeOpacity={0.7}>
           <View style={styles.newMsgIconWrap}>
@@ -682,14 +683,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, 
     paddingVertical: 16,
     backgroundColor: NAVY,
-  },
-  backBtn: { alignSelf: 'flex-start' },
-  backIconWrap: {
-    width: 40, height: 40,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center', justifyContent: 'center',
   },
   title: { fontSize: 18, fontWeight: '700', color: WHITE, letterSpacing: -0.3 },
   newMsgBtn: { alignSelf: 'flex-start' },
@@ -887,15 +880,12 @@ const styles = StyleSheet.create({
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center', // Changed from 'space-between' to center the content
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
     backgroundColor: NAVY,
-  },
-  backButton: {
-    alignSelf: 'flex-start',
   },
   chatHeaderInfo: {
     flexDirection: 'row',
@@ -950,6 +940,7 @@ const styles = StyleSheet.create({
   },
   chatMenuBtn: {
     alignSelf: 'flex-start',
+    marginLeft: 8,
   },
   menuIconWrap: {
     width: 40, height: 40,

@@ -9,6 +9,7 @@ import {
   Alert,
   StatusBar,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -202,6 +203,16 @@ export default function Profile({ onNavigate, route }) {
 
   useEffect(() => { loadLocalCV(); }, []);
 
+  // Handle hardware back button press
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Let the default back behavior happen - navigate to previous screen
+      return false;
+    });
+
+    return () => backHandler.remove();
+  }, []);
+
   const fetchProfile = useCallback(async () => {
     try { await dispatch(getProfile()).unwrap(); }
     catch { Alert.alert('Error', 'Failed to load profile.'); }
@@ -295,9 +306,7 @@ export default function Profile({ onNavigate, route }) {
         >
           {/* ── Header ── */}
           <View style={styles.header}>
-            <TouchableOpacity style={styles.headerBtn} onPress={() => onNavigate('FreelancerDashboard')} activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={18} color={WHITE} />
-            </TouchableOpacity>
+            {/* Removed the custom back button */}
             <Text style={styles.headerTitle}>Profile</Text>
             <TouchableOpacity style={[styles.headerBtn, styles.headerEditBtn]} onPress={toEdit} activeOpacity={0.75}>
               <Ionicons name="pencil-outline" size={16} color={GOLD} />
@@ -475,8 +484,13 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: NAVY,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', // Changed from 'space-between' to 'center'
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    backgroundColor: NAVY,
+    position: 'relative',
   },
   headerBtn: {
     width: 36, height: 36, borderRadius: 10,
@@ -487,6 +501,8 @@ const styles = StyleSheet.create({
   headerEditBtn: {
     backgroundColor: 'rgba(200,149,32,0.15)',
     borderColor: 'rgba(200,149,32,0.35)',
+    position: 'absolute',
+    right: 16,
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: WHITE, letterSpacing: 0.2 },
 
