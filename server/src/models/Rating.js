@@ -1,8 +1,6 @@
-// src/models/Rating.js
 import mongoose from 'mongoose';
 
 const ratingSchema = new mongoose.Schema({
-  // Who gave the rating
   reviewer_id: {
     type: mongoose.Schema.Types.ObjectId,
     refPath: 'reviewer_model',
@@ -13,8 +11,6 @@ const ratingSchema = new mongoose.Schema({
     required: true,
     enum: ['Client', 'Freelancer'],
   },
-  
-  // Who is being rated
   recipient_id: {
     type: mongoose.Schema.Types.ObjectId,
     refPath: 'recipient_model',
@@ -25,8 +21,6 @@ const ratingSchema = new mongoose.Schema({
     required: true,
     enum: ['Client', 'Freelancer'],
   },
-  
-  // Rating details
   rating: {
     type: Number,
     required: true,
@@ -38,15 +32,11 @@ const ratingSchema = new mongoose.Schema({
     trim: true,
     maxlength: 1000,
   },
-  
-  // Associated job/contract
   job_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Job',
     required: true,
   },
-  
-  // Category ratings (optional, more detailed)
   communication: {
     type: Number,
     min: 1,
@@ -67,8 +57,6 @@ const ratingSchema = new mongoose.Schema({
     min: 1,
     max: 5,
   },
-  
-  // Metadata
   is_public: {
     type: Boolean,
     default: true,
@@ -77,8 +65,6 @@ const ratingSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  
-  // Response from recipient
   response: {
     text: {
       type: String,
@@ -89,8 +75,6 @@ const ratingSchema = new mongoose.Schema({
       type: Date,
     },
   },
-  
-  // Whether this is a rating for a completed job
   job_completed: {
     type: Boolean,
     default: true,
@@ -102,10 +86,8 @@ const ratingSchema = new mongoose.Schema({
   },
 });
 
-// Ensure one rating per user per job
 ratingSchema.index({ reviewer_id: 1, recipient_id: 1, job_id: 1 }, { unique: true });
 
-// Static method to get average rating for a user
 ratingSchema.statics.getAverageRating = async function(userId, model) {
   const result = await this.aggregate([
     {
@@ -161,7 +143,6 @@ ratingSchema.statics.getAverageRating = async function(userId, model) {
   };
 };
 
-// Get all ratings for a user
 ratingSchema.statics.getUserRatings = async function(userId, model, limit = 10, skip = 0) {
   return this.find({
     recipient_id: userId,
@@ -172,17 +153,6 @@ ratingSchema.statics.getUserRatings = async function(userId, model, limit = 10, 
   .skip(skip)
   .limit(limit)
   .populate('reviewer_id', 'first_name last_name profile_picture username email_address')
-  .populate('job_id', 'title');
-};
-
-// Get ratings given by a user
-ratingSchema.statics.getGivenRatings = async function(userId, model) {
-  return this.find({
-    reviewer_id: userId,
-    reviewer_model: model,
-  })
-  .sort({ created_at: -1 })
-  .populate('recipient_id', 'first_name last_name profile_picture username email_address')
   .populate('job_id', 'title');
 };
 

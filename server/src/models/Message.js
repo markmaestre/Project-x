@@ -1,4 +1,3 @@
-// models/Message.js
 import mongoose from 'mongoose';
 
 const messageSchema = new mongoose.Schema({
@@ -41,7 +40,6 @@ const messageSchema = new mongoose.Schema({
   },
 });
 
-// Index for faster queries
 messageSchema.index({ sender_id: 1, receiver_id: 1, created_at: -1 });
 messageSchema.index({ receiver_id: 1, is_read: 1 });
 messageSchema.index({ created_at: -1 });

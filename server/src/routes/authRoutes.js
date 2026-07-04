@@ -9,24 +9,50 @@ import {
   generateVerificationCode, 
   sendVerificationEmail,
   sendPasswordResetEmail 
-} from "../service/emailService.js";
+} from "../services/emailService.js";
 
 const router = express.Router();
 
-// Middleware to parse FormData boolean values
+// ==================== HELPER FUNCTIONS ====================
+
+// Check if email is a business email (not from free providers)
+const isBusinessEmail = (email) => {
+  if (!email) return false;
+  
+  const domain = email.split('@')[1]?.toLowerCase();
+  if (!domain) return false;
+  
+  // List of free email providers
+  const freeProviders = [
+    'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
+    'aol.com', 'icloud.com', 'mail.com', 'protonmail.com',
+    'zoho.com', 'yandex.com', 'gmx.com', 'tutanota.com',
+    'fastmail.com', 'hushmail.com', 'runbox.com', 'live.com',
+    'msn.com', 'me.com', 'mac.com', 'inbox.com', 'mailinator.com',
+    'guerrillamail.com', '10minutemail.com', 'temp-mail.org'
+  ];
+  
+  return !freeProviders.includes(domain);
+};
+
+// Get email domain
+const getEmailDomain = (email) => {
+  if (!email) return null;
+  return email.split('@')[1]?.toLowerCase() || null;
+};
+
+// Parse FormData booleans
 const parseFormDataBooleans = (req, res, next) => {
   if (req.body) {
-    // Convert string 'true'/'false' to boolean for specific fields
     if (req.body.terms_accepted === 'true') req.body.terms_accepted = true;
     if (req.body.terms_accepted === 'false') req.body.terms_accepted = false;
   }
   next();
 };
 
-// Helper function to handle image upload
+// Handle profile picture upload
 const handleProfilePictureUpload = async (file, existingPublicId = null) => {
   if (existingPublicId) {
-    // Delete old image from Cloudinary
     await cloudinary.uploader.destroy(existingPublicId);
   }
   
@@ -40,7 +66,7 @@ const handleProfilePictureUpload = async (file, existingPublicId = null) => {
   return null;
 };
 
-// ==================== CLIENT REGISTRATION ====================
+// ==================== CLIENT REGISTRATION (UPDATED) ====================
 router.post("/register/client", upload.single('profile_picture'), parseFormDataBooleans, async (req, res) => {
   const {
     first_name,
@@ -53,8 +79,11 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
     country,
     city,
     address,
+    client_type = 'personal', // NEW: 'personal' or 'business'
+    business_email, // NEW: Company email (required for business)
     business_type,
     industry,
+    company_size,
     bio_about,
     website,
     budget_range,
@@ -68,22 +97,24 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
     last_name,
     company_name,
     email_address,
+    client_type,
+    business_email,
+    business_type,
+    industry,
+    company_size,
     phone_number,
     country,
     city,
     address,
-    business_type,
-    industry,
     bio_about,
     website,
-    budget_range,
-    preferred_communication_method,
-    terms_accepted_type: typeof terms_accepted,
     terms_accepted_value: terms_accepted,
     role
   });
 
-  // Validate required fields
+  // ==================== VALIDATION ====================
+  
+  // Required fields
   if (!first_name || !first_name.trim()) {
     if (req.file) await cloudinary.uploader.destroy(req.file.filename);
     return res.status(400).json({ message: "First name is required" });
@@ -119,12 +150,105 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
     return res.status(400).json({ message: "You must accept the terms and conditions" });
   }
 
+  // ==================== BUSINESS VALIDATION ====================
+  
+  if (client_type === 'business') {
+    // Business requires company name
+    if (!company_name || !company_name.trim()) {
+      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      return res.status(400).json({ 
+        message: "Company name is required for business accounts" 
+      });
+    }
+
+    // Business requires business email
+    if (!business_email || !business_email.trim()) {
+      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      return res.status(400).json({ 
+        message: "Business email is required for business accounts" 
+      });
+    }
+
+    // Validate business email is NOT from free providers
+    if (!isBusinessEmail(business_email)) {
+      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      return res.status(400).json({ 
+        message: "Please use a company email address (e.g., name@company.com). Free email providers like Gmail, Yahoo, etc. are not allowed for business accounts." 
+      });
+    }
+
+    // Business requires business type
+    if (!business_type || !business_type.trim()) {
+      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      return res.status(400).json({ 
+        message: "Business type is required for business accounts" 
+      });
+    }
+
+    // Business requires industry
+    if (!industry || !industry.trim()) {
+      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      return res.status(400).json({ 
+        message: "Industry is required for business accounts" 
+      });
+    }
+
+    // Business requires company size
+    if (!company_size) {
+      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      return res.status(400).json({ 
+        message: "Company size is required for business accounts" 
+      });
+    }
+
+    // Check if business email is already used
+    const existingBusinessEmail = await Client.findOne({ 
+      business_email: business_email.toLowerCase().trim() 
+    });
+    if (existingBusinessEmail) {
+      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      return res.status(400).json({ 
+        message: "This business email is already registered" 
+      });
+    }
+  }
+
+  // ==================== PERSONAL VALIDATION ====================
+  
+  if (client_type === 'personal') {
+    // Personal accounts don't need business email
+    // But if they provide one, validate it's not a free email
+    if (business_email && business_email.trim()) {
+      if (!isBusinessEmail(business_email)) {
+        if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+        return res.status(400).json({ 
+          message: "If providing a business email, please use a company email address (e.g., name@company.com)" 
+        });
+      }
+    }
+  }
+
   try {
     // Check if user already exists
-    const existingUser = await Client.findOne({ email_address: email_address.toLowerCase() });
+    const existingUser = await Client.findOne({ 
+      email_address: email_address.toLowerCase() 
+    });
     if (existingUser) {
       if (req.file) await cloudinary.uploader.destroy(req.file.filename);
       return res.status(400).json({ message: "User with this email already exists" });
+    }
+
+    // Check if business email is already used (if provided)
+    if (business_email && business_email.trim()) {
+      const existingBusiness = await Client.findOne({ 
+        business_email: business_email.toLowerCase().trim() 
+      });
+      if (existingBusiness) {
+        if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+        return res.status(400).json({ 
+          message: "This business email is already registered" 
+        });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -143,11 +267,18 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
-    const client = new Client({
+    // Determine if business email is verified
+    const isBusinessEmailVerified = client_type === 'business' && business_email ? false : false;
+
+    // Build client data
+    const clientData = {
       first_name: first_name.trim(),
       last_name: last_name.trim(),
-      company_name: company_name && company_name.trim() ? company_name.trim() : null,
+      company_name: client_type === 'business' ? company_name.trim() : null,
       email_address: email_address.toLowerCase().trim(),
+      business_email: business_email && business_email.trim() ? business_email.toLowerCase().trim() : null,
+      company_email_domain: business_email && business_email.trim() ? getEmailDomain(business_email) : null,
+      is_company_email_verified: client_type === 'business' ? false : false,
       password: hashedPassword,
       phone_number: phone_number && phone_number.trim() ? phone_number.trim() : null,
       country: country && country.trim() ? country.trim() : null,
@@ -155,8 +286,10 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
       address: address && address.trim() ? address.trim() : null,
       profile_picture: profilePictureData?.url || null,
       profile_picture_public_id: profilePictureData?.public_id || null,
+      client_type: client_type,
       business_type: business_type && business_type.trim() ? business_type.trim() : null,
       industry: industry && industry.trim() ? industry.trim() : null,
+      company_size: company_size || null,
       bio_about: bio_about && bio_about.trim() ? bio_about.trim() : null,
       website: website && website.trim() ? website.trim() : null,
       budget_range: budget_range && budget_range.trim() ? budget_range.trim() : null,
@@ -166,35 +299,45 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
       verification_code: verificationCode,
       verification_code_expires: expiresAt,
       is_email_verified: false,
-    });
+    };
 
+    const client = new Client(clientData);
     await client.save();
 
     // Send verification email
     try {
       await sendVerificationEmail(email_address, verificationCode);
       console.log('Verification email sent successfully');
+      
+      // If business, send verification to business email too
+      if (client_type === 'business' && business_email) {
+        await sendVerificationEmail(business_email, verificationCode);
+        console.log('Business verification email sent successfully');
+      }
     } catch (emailError) {
       console.error('Failed to send verification email:', emailError);
-      // Don't fail registration if email fails, but log it
     }
 
     res.status(201).json({
-      message: "Client registered successfully. Please verify your email.",
+      message: client_type === 'business' 
+        ? "Business account registered successfully. Please verify both your personal and business emails." 
+        : "Client registered successfully. Please verify your email.",
       user: {
         id: client._id,
         first_name: client.first_name,
         last_name: client.last_name,
         email_address: client.email_address,
+        client_type: client.client_type,
+        business_email: client.business_email,
         role: client.role,
         profile_picture: client.profile_picture,
         is_email_verified: client.is_email_verified,
+        is_company_email_verified: client.is_company_email_verified,
       },
       requires_verification: true,
     });
   } catch (err) {
     console.error('Client registration error:', err);
-    // Clean up uploaded file on error
     if (req.file) await cloudinary.uploader.destroy(req.file.filename);
     res.status(500).json({ error: err.message });
   }
@@ -248,42 +391,35 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
     languages,
     certifications,
     availability_status,
-    terms_accepted_type: typeof terms_accepted,
     terms_accepted_value: terms_accepted,
     role
   });
 
-  // Parse arrays if they come as strings, otherwise use as is
+  // Parse arrays if they come as strings
   let parsedSkills = skills;
   let parsedLanguages = languages;
   let parsedCertifications = certifications;
 
-  // If skills is a string, try to parse it as JSON
   if (skills && typeof skills === 'string') {
     try {
       parsedSkills = JSON.parse(skills);
     } catch (e) {
-      // If not JSON, treat as comma-separated string
       parsedSkills = skills.split(',').map(s => s.trim()).filter(s => s);
     }
   }
   
-  // If languages is a string, try to parse it as JSON
   if (languages && typeof languages === 'string') {
     try {
       parsedLanguages = JSON.parse(languages);
     } catch (e) {
-      // If not JSON, treat as comma-separated string
       parsedLanguages = languages.split(',').map(l => l.trim()).filter(l => l);
     }
   }
   
-  // If certifications is a string, try to parse it as JSON
   if (certifications && typeof certifications === 'string') {
     try {
       parsedCertifications = JSON.parse(certifications);
     } catch (e) {
-      // If not JSON, treat as comma-separated string
       parsedCertifications = certifications.split(',').map(c => c.trim()).filter(c => c);
     }
   }
@@ -406,7 +542,6 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
       console.log('Verification email sent successfully');
     } catch (emailError) {
       console.error('Failed to send verification email:', emailError);
-      // Don't fail registration if email fails, but log it
     }
 
     res.status(201).json({
@@ -430,7 +565,7 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
   }
 });
 
-// ==================== VERIFY EMAIL ====================
+// ==================== VERIFY EMAIL (UPDATED) ====================
 router.post("/verify-email", async (req, res) => {
   const { email, code } = req.body;
 
@@ -467,6 +602,12 @@ router.post("/verify-email", async (req, res) => {
     user.is_email_verified = true;
     user.verification_code = null;
     user.verification_code_expires = null;
+    
+    // If business client, also verify business email
+    if (userRole === "client" && user.client_type === "business") {
+      user.is_company_email_verified = true;
+    }
+    
     await user.save();
 
     // Generate token for auto-login
@@ -497,12 +638,16 @@ router.post("/verify-email", async (req, res) => {
     if (userRole === "client") {
       userResponse = {
         ...userResponse,
+        client_type: user.client_type,
         company_name: user.company_name,
+        business_email: user.business_email,
+        is_company_email_verified: user.is_company_email_verified,
         phone_number: user.phone_number,
         country: user.country,
         city: user.city,
         business_type: user.business_type,
-        industry: user.industry
+        industry: user.industry,
+        company_size: user.company_size
       };
     } else {
       userResponse = {
@@ -519,12 +664,46 @@ router.post("/verify-email", async (req, res) => {
     }
 
     res.json({
-      message: "Email verified successfully",
+      message: userRole === "client" && user.client_type === "business" 
+        ? "Email verified successfully. Your business email has also been verified." 
+        : "Email verified successfully",
       token,
       user: userResponse,
     });
   } catch (err) {
     console.error('Email verification error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== CHECK EMAIL TYPE (NEW) ====================
+router.post("/check-email-type", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email || !email.trim()) {
+    return res.status(400).json({ message: "Email is required" });
+  }
+
+  try {
+    const isBusiness = isBusinessEmail(email);
+    const domain = getEmailDomain(email);
+    
+    res.json({
+      success: true,
+      data: {
+        email: email,
+        is_business_email: isBusiness,
+        domain: domain,
+        message: isBusiness 
+          ? "This is a business/company email address" 
+          : "This is a personal/free email address (Gmail, Yahoo, etc.)",
+        recommendation: isBusiness 
+          ? "Valid for business accounts" 
+          : "Use a company email for business accounts"
+      }
+    });
+  } catch (err) {
+    console.error('Check email type error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -707,7 +886,6 @@ router.post("/login", async (req, res) => {
     if (!userData.is_email_verified) {
       // Check if verification code is expired, resend if needed
       if (!userData.verification_code_expires || userData.verification_code_expires < new Date()) {
-        // Generate new code
         const newCode = generateVerificationCode();
         const expiresAt = new Date();
         expiresAt.setMinutes(expiresAt.getMinutes() + 10);
@@ -716,7 +894,6 @@ router.post("/login", async (req, res) => {
         userData.verification_code_expires = expiresAt;
         await userData.save();
         
-        // Send new verification email
         try {
           await sendVerificationEmail(email_address, newCode);
         } catch (emailError) {
@@ -769,12 +946,16 @@ router.post("/login", async (req, res) => {
     if (userRole === "client") {
       userResponse = {
         ...userResponse,
+        client_type: userData.client_type || 'personal',
         company_name: userData.company_name,
+        business_email: userData.business_email,
+        is_company_email_verified: userData.is_company_email_verified,
         phone_number: userData.phone_number,
         country: userData.country,
         city: userData.city,
         business_type: userData.business_type,
-        industry: userData.industry
+        industry: userData.industry,
+        company_size: userData.company_size
       };
     } else {
       userResponse = {
@@ -841,7 +1022,8 @@ router.put("/profile", authMiddleware, upload.single('profile_picture'), async (
         "first_name", "last_name", "company_name", "phone_number", 
         "country", "city", "address", "business_type",
         "industry", "bio_about", "website", "budget_range", 
-        "preferred_communication_method"
+        "preferred_communication_method",
+        "company_size"
       ];
       
       allowedFields.forEach(field => {
@@ -938,7 +1120,7 @@ router.put("/profile", authMiddleware, upload.single('profile_picture'), async (
   }
 });
 
-// ==================== GET FREELANCERS LIST (For clients) ====================
+// ==================== GET FREELANCERS LIST ====================
 router.get("/freelancers", authMiddleware, async (req, res) => {
   try {
     const freelancers = await Freelancer.find(

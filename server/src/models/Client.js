@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 
 const clientSchema = new mongoose.Schema({
-  // Personal Information
   first_name: {
     type: String,
     required: true,
@@ -12,8 +11,6 @@ const clientSchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
-  
-  // Company Information - ALL OPTIONAL NA!
   company_name: {
     type: String,
     trim: true,
@@ -42,12 +39,26 @@ const clientSchema = new mongoose.Schema({
     trim: true,
     default: null,
   },
-  
-  // Contact Information
+  business_email: {
+    type: String,
+    lowercase: true,
+    trim: true,
+    default: null,
+  },
+  company_email_domain: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    default: null,
+  },
+  is_company_email_verified: {
+    type: Boolean,
+    default: false,
+  },
   email_address: {
     type: String,
     required: true,
-    unique: true, // Keep this
+    unique: true,
     lowercase: true,
     trim: true,
   },
@@ -55,8 +66,6 @@ const clientSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
-  
-  // Authentication
   password: {
     type: String,
     required: true,
@@ -86,8 +95,6 @@ const clientSchema = new mongoose.Schema({
     enum: ['email', 'google'],
     default: 'email',
   },
-  
-  // Location
   country: {
     type: String,
     trim: true,
@@ -100,8 +107,6 @@ const clientSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
-  
-  // Profile
   profile_picture: {
     type: String,
     default: null,
@@ -110,8 +115,6 @@ const clientSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
-  
-  // Bio & Preferences
   bio_about: {
     type: String,
     trim: true,
@@ -120,8 +123,6 @@ const clientSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
-  
-  // Budget - Optional din
   budget_range: {
     min: {
       type: Number,
@@ -138,15 +139,11 @@ const clientSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
-  
-  // Client Type - Added this para malaman kung personal o business
   client_type: {
     type: String,
     enum: ['personal', 'business'],
     default: 'personal',
   },
-  
-  // Status & Activity
   account_status: {
     type: String,
     enum: ['active', 'inactive', 'suspended', 'banned'],
@@ -164,8 +161,6 @@ const clientSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
-  
-  // Terms & Role
   terms_accepted: {
     type: Boolean,
     required: true,
@@ -175,8 +170,6 @@ const clientSchema = new mongoose.Schema({
     default: 'client',
     enum: ['client', 'freelancer'],
   },
-
-  // NEW FIELDS: Rating and Jobs Completed
   rating: {
     average: { 
       type: Number, 
@@ -202,14 +195,13 @@ const clientSchema = new mongoose.Schema({
   },
 });
 
-// Indexes - Remove duplicate indexes
-// Only keep indexes that are NOT already defined with 'unique: true' in the schema
+// Indexes
 clientSchema.index({ account_status: 1 });
 clientSchema.index({ client_type: 1 });
-clientSchema.index({ 'rating.average': -1 }); // For sorting by rating
-// REMOVED: clientSchema.index({ email_address: 1 }); // Already has unique: true
+clientSchema.index({ 'rating.average': -1 });
+clientSchema.index({ company_email_domain: 1 });
 
-// Virtual para sa display name
+// Virtual
 clientSchema.virtual('display_name').get(function() {
   if (this.client_type === 'business' && this.company_name) {
     return this.company_name;
@@ -217,7 +209,17 @@ clientSchema.virtual('display_name').get(function() {
   return `${this.first_name} ${this.last_name}`;
 });
 
-// Remove password when converting to JSON
+// Methods
+clientSchema.methods.isCompanyEmail = function() {
+  if (!this.business_email) return false;
+  const domain = this.business_email.split('@')[1];
+  const freeProviders = [
+    'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
+    'aol.com', 'icloud.com', 'mail.com', 'protonmail.com'
+  ];
+  return !freeProviders.includes(domain.toLowerCase());
+};
+
 clientSchema.methods.toJSON = function() {
   const obj = this.toObject();
   delete obj.password;

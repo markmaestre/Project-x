@@ -8,37 +8,27 @@ const contractSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-
     client_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Client",
       required: true,
     },
-
     freelancer_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Freelancer",
       required: true,
     },
-
     application_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Application",
       required: true,
     },
-
     status: {
       type: String,
-      enum: [
-        "active",
-        "paused",
-        "completed",
-        "cancelled",
-      ],
+      enum: ["active", "paused", "completed", "cancelled"],
       default: "active",
       index: true,
     },
-
     agreed_budget: {
       amount: Number,
       type: {
@@ -50,29 +40,24 @@ const contractSchema = new mongoose.Schema(
         default: "PHP",
       },
     },
-
     start_date: {
       type: Date,
       default: Date.now,
     },
-
     end_date: {
       type: Date,
       default: null,
     },
-
     progress: {
       type: Number,
       default: 0,
       min: 0,
       max: 100,
     },
-
     terms: {
       type: String,
       default: null,
     },
-
     is_active: {
       type: Boolean,
       default: true,
@@ -84,5 +69,4 @@ const contractSchema = new mongoose.Schema(
 );
 
 const Contract = mongoose.model("Contract", contractSchema);
-
 export default Contract;
