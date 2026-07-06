@@ -10,6 +10,8 @@ import messageRoutes from "./src/routes/messageRoutes.js";
 import connectDB from "./src/config/mongodb.js";
 import Contract from "./src/routes/contractRoutes.js";
 import ProjectUpdate from "./src/routes/projectUpdateRoutes.js";
+import notificationRoutes from "./src/routes/notificationRoutes.js";
+
 
 
 const app = express();
@@ -28,6 +30,7 @@ app.use("/api", applicationRoutes);
 app.use("/api", messageRoutes);
 app.use("/api", ProjectUpdate);
 app.use("/api", Contract);
+app.use("/api", notificationRoutes);
 
 
 

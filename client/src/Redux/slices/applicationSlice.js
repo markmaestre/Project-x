@@ -2,6 +2,34 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../services/api';
 
+// ==================== HELPER FUNCTIONS ====================
+
+// Helper to log FormData contents for debugging
+const logFormData = (formData) => {
+  if (formData instanceof FormData) {
+    console.log('=== FormData Contents ===');
+    for (let pair of formData.entries()) {
+      const value = pair[1];
+      if (value instanceof Blob || value instanceof File) {
+        console.log(pair[0], ':', value.name || 'Blob', `(${value.size || 0} bytes, ${value.type || 'unknown'})`);
+      } else if (typeof value === 'object') {
+        console.log(pair[0], ':', JSON.stringify(value));
+      } else {
+        console.log(pair[0], ':', value);
+      }
+    }
+  }
+};
+
+// Helper to check if token is valid
+const getAuthToken = (getState) => {
+  const token = getState().auth.token;
+  if (!token) {
+    throw new Error('No token found. Please login again.');
+  }
+  return token;
+};
+
 // ==================== FREELANCER ROUTES ====================
 
 // Apply for a job with comprehensive data (Freelancer)
@@ -9,26 +37,23 @@ export const applyForJob = createAsyncThunk(
   'applications/applyForJob',
   async (formData, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found. Please login again.' });
-      }
+      const token = getAuthToken(getState);
 
-      console.log('applyForJob called with formData type:', formData instanceof FormData ? 'FormData' : typeof formData);
+      console.log('applyForJob called with formData type:', 
+        formData instanceof FormData ? 'FormData' : typeof formData);
       
       let response;
       
       // Check if formData is FormData (from file upload) or regular object
       if (formData instanceof FormData) {
-        console.log('=== FormData Contents ===');
-        for (let pair of formData.entries()) {
-          console.log(pair[0], ':', typeof pair[1] === 'object' ? (pair[1].name || pair[1].uri || 'Object') : pair[1]);
-        }
+        logFormData(formData);
         
         response = await api.post('/applications/with-resume', formData, {
           headers: {
             Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data',
           },
+          timeout: 30000, // 30 second timeout for file upload
         });
       } else {
         response = await api.post('/applications', formData, {
@@ -39,28 +64,55 @@ export const applyForJob = createAsyncThunk(
         });
       }
       
-      console.log('Application response:', response.data);
+      console.log('Application response status:', response.status);
+      console.log('Application response data:', response.data);
+      
       return response.data;
     } catch (error) {
       console.error('Apply for job error details:', {
         status: error.response?.status,
         data: error.response?.data,
-        message: error.message
+        message: error.message,
+        config: error.config ? {
+          url: error.config.url,
+          method: error.config.method,
+          headers: error.config.headers,
+        } : null,
       });
-      return rejectWithValue(error.response?.data || { message: error.message || 'Failed to submit application' });
+      
+      // Handle specific error cases
+      if (error.response?.status === 400) {
+        if (error.response?.data?.message?.includes('already applied')) {
+          return rejectWithValue({ 
+            message: 'You have already applied for this job',
+            code: 'ALREADY_APPLIED'
+          });
+        }
+      }
+      
+      if (error.response?.status === 413) {
+        return rejectWithValue({ 
+          message: 'File is too large. Please upload a file smaller than 5MB.',
+          code: 'FILE_TOO_LARGE'
+        });
+      }
+      
+      return rejectWithValue(
+        error.response?.data || { 
+          message: error.message || 'Failed to submit application',
+          code: 'UNKNOWN_ERROR'
+        }
+      );
     }
   }
 );
 
-// Get freelancer's applications
+// Get freelancer's applications with improved error handling
 export const getFreelancerApplications = createAsyncThunk(
   'applications/getFreelancerApplications',
   async ({ status, page = 1, limit = 20 } = {}, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
-      }
+      const token = getAuthToken(getState);
 
       const params = { page, limit };
       if (status && status !== 'All') params.status = status;
@@ -70,10 +122,30 @@ export const getFreelancerApplications = createAsyncThunk(
         params
       });
       
-      return response.data;
+      return {
+        applications: response.data.applications || [],
+        totalPages: response.data.totalPages || 1,
+        currentPage: response.data.currentPage || 1,
+        totalApplications: response.data.totalApplications || 0,
+      };
     } catch (error) {
-      console.error('Get freelancer applications error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      console.error('Get freelancer applications error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      if (error.response?.status === 401) {
+        return rejectWithValue({ 
+          message: 'Session expired. Please login again.',
+          code: 'UNAUTHORIZED'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to fetch applications',
+        code: 'FETCH_ERROR'
+      });
     }
   }
 );
@@ -83,9 +155,10 @@ export const getApplicationById = createAsyncThunk(
   'applications/getApplicationById',
   async (applicationId, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+      const token = getAuthToken(getState);
+
+      if (!applicationId) {
+        return rejectWithValue({ message: 'Application ID is required' });
       }
 
       const response = await api.get(`/applications/${applicationId}`, {
@@ -95,7 +168,18 @@ export const getApplicationById = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.error('Get application error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      
+      if (error.response?.status === 404) {
+        return rejectWithValue({ 
+          message: 'Application not found',
+          code: 'NOT_FOUND'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to fetch application',
+        code: 'FETCH_ERROR'
+      });
     }
   }
 );
@@ -105,13 +189,14 @@ export const withdrawApplication = createAsyncThunk(
   'applications/withdrawApplication',
   async ({ applicationId, reason }, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+      const token = getAuthToken(getState);
+
+      if (!applicationId) {
+        return rejectWithValue({ message: 'Application ID is required' });
       }
 
       const response = await api.patch(`/applications/${applicationId}/withdraw`, 
-        { reason },
+        { reason: reason || 'Withdrawn by freelancer' },
         {
           headers: { 
             Authorization: `Bearer ${token}`,
@@ -123,7 +208,18 @@ export const withdrawApplication = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.error('Withdraw application error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      
+      if (error.response?.status === 400) {
+        return rejectWithValue({ 
+          message: error.response?.data?.message || 'Cannot withdraw this application at this stage',
+          code: 'CANNOT_WITHDRAW'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to withdraw application',
+        code: 'WITHDRAW_ERROR'
+      });
     }
   }
 );
@@ -135,13 +231,14 @@ export const saveJobForLater = createAsyncThunk(
   'applications/saveJobForLater',
   async ({ jobId, notes }, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+      const token = getAuthToken(getState);
+
+      if (!jobId) {
+        return rejectWithValue({ message: 'Job ID is required' });
       }
 
       const response = await api.post('/applications/save', 
-        { job_id: jobId, notes },
+        { job_id: jobId, notes: notes || null },
         {
           headers: { 
             Authorization: `Bearer ${token}`,
@@ -153,7 +250,18 @@ export const saveJobForLater = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.error('Save job error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      
+      if (error.response?.status === 400) {
+        return rejectWithValue({ 
+          message: error.response?.data?.message || 'Job already saved',
+          code: 'ALREADY_SAVED'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to save job',
+        code: 'SAVE_ERROR'
+      });
     }
   }
 );
@@ -163,9 +271,10 @@ export const unsaveJob = createAsyncThunk(
   'applications/unsaveJob',
   async (jobId, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+      const token = getAuthToken(getState);
+
+      if (!jobId) {
+        return rejectWithValue({ message: 'Job ID is required' });
       }
 
       const response = await api.delete(`/applications/save/${jobId}`, {
@@ -175,7 +284,18 @@ export const unsaveJob = createAsyncThunk(
       return { jobId, message: response.data.message };
     } catch (error) {
       console.error('Unsave job error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      
+      if (error.response?.status === 404) {
+        return rejectWithValue({ 
+          message: 'Saved job not found',
+          code: 'NOT_FOUND'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to unsave job',
+        code: 'UNSAVE_ERROR'
+      });
     }
   }
 );
@@ -185,20 +305,25 @@ export const getSavedJobs = createAsyncThunk(
   'applications/getSavedJobs',
   async ({ page = 1, limit = 20 } = {}, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
-      }
+      const token = getAuthToken(getState);
 
       const response = await api.get('/applications/saved', {
         headers: { Authorization: `Bearer ${token}` },
         params: { page, limit }
       });
       
-      return response.data;
+      return {
+        savedJobs: response.data.savedJobs || [],
+        totalSaved: response.data.totalSaved || 0,
+        totalPages: response.data.totalPages || 1,
+        currentPage: response.data.currentPage || 1,
+      };
     } catch (error) {
       console.error('Get saved jobs error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to fetch saved jobs',
+        code: 'FETCH_ERROR'
+      });
     }
   }
 );
@@ -208,19 +333,27 @@ export const checkJobSaved = createAsyncThunk(
   'applications/checkJobSaved',
   async (jobId, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+      const token = getAuthToken(getState);
+
+      if (!jobId) {
+        return rejectWithValue({ message: 'Job ID is required' });
       }
 
       const response = await api.get(`/applications/saved/check/${jobId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      return { jobId, ...response.data };
+      return { 
+        jobId, 
+        isSaved: response.data.isSaved || false,
+        savedJobId: response.data.savedJobId || null,
+      };
     } catch (error) {
       console.error('Check job saved error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to check saved status',
+        code: 'CHECK_ERROR'
+      });
     }
   }
 );
@@ -232,9 +365,10 @@ export const getJobApplications = createAsyncThunk(
   'applications/getJobApplications',
   async ({ jobId, status, page = 1, limit = 20 }, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+      const token = getAuthToken(getState);
+
+      if (!jobId) {
+        return rejectWithValue({ message: 'Job ID is required' });
       }
 
       const params = { page, limit };
@@ -245,10 +379,26 @@ export const getJobApplications = createAsyncThunk(
         params
       });
       
-      return response.data;
+      return {
+        applications: response.data.applications || [],
+        totalPages: response.data.totalPages || 1,
+        currentPage: response.data.currentPage || 1,
+        totalApplications: response.data.totalApplications || 0,
+      };
     } catch (error) {
       console.error('Get job applications error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      
+      if (error.response?.status === 403) {
+        return rejectWithValue({ 
+          message: 'You do not have permission to view these applications',
+          code: 'FORBIDDEN'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to fetch applications',
+        code: 'FETCH_ERROR'
+      });
     }
   }
 );
@@ -258,10 +408,7 @@ export const getClientApplications = createAsyncThunk(
   'applications/getClientApplications',
   async ({ status, job_id, page = 1, limit = 20 } = {}, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
-      }
+      const token = getAuthToken(getState);
 
       const params = { page, limit };
       if (status && status !== 'All') params.status = status;
@@ -272,10 +419,19 @@ export const getClientApplications = createAsyncThunk(
         params
       });
       
-      return response.data;
+      return {
+        applications: response.data.applications || [],
+        totalPages: response.data.totalPages || 1,
+        currentPage: response.data.currentPage || 1,
+        totalApplications: response.data.totalApplications || 0,
+        statusBreakdown: response.data.statusBreakdown || {},
+      };
     } catch (error) {
       console.error('Get client applications error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to fetch applications',
+        code: 'FETCH_ERROR'
+      });
     }
   }
 );
@@ -285,9 +441,10 @@ export const updateApplicationStatus = createAsyncThunk(
   'applications/updateApplicationStatus',
   async ({ applicationId, status, interview, offer }, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+      const token = getAuthToken(getState);
+
+      if (!applicationId) {
+        return rejectWithValue({ message: 'Application ID is required' });
       }
 
       const payload = { status };
@@ -311,23 +468,45 @@ export const updateApplicationStatus = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.error('Update application status error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      
+      if (error.response?.status === 403) {
+        return rejectWithValue({ 
+          message: 'You do not have permission to update this application',
+          code: 'FORBIDDEN'
+        });
+      }
+      
+      if (error.response?.status === 400) {
+        return rejectWithValue({ 
+          message: error.response?.data?.message || 'Invalid status update',
+          code: 'INVALID_UPDATE'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to update application status',
+        code: 'UPDATE_ERROR'
+      });
     }
   }
 );
 
-// Send offer to freelancer (Client only) - Using new schema
+// Send offer to freelancer (Client only)
 export const sendOffer = createAsyncThunk(
   'applications/sendOffer',
   async ({ applicationId, amount, message }, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+      const token = getAuthToken(getState);
+
+      if (!applicationId) {
+        return rejectWithValue({ message: 'Application ID is required' });
+      }
+      if (!amount || amount <= 0) {
+        return rejectWithValue({ message: 'Valid offer amount is required' });
       }
 
       const response = await api.post(`/applications/${applicationId}/offer`, 
-        { amount, message },
+        { amount, message: message || 'We would like to offer you this position.' },
         {
           headers: { 
             Authorization: `Bearer ${token}`,
@@ -339,7 +518,18 @@ export const sendOffer = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.error('Send offer error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      
+      if (error.response?.status === 403) {
+        return rejectWithValue({ 
+          message: 'You do not have permission to send offers',
+          code: 'FORBIDDEN'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to send offer',
+        code: 'SEND_OFFER_ERROR'
+      });
     }
   }
 );
@@ -349,19 +539,32 @@ export const downloadResume = createAsyncThunk(
   'applications/downloadResume',
   async (applicationId, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+      const token = getAuthToken(getState);
+
+      if (!applicationId) {
+        return rejectWithValue({ message: 'Application ID is required' });
       }
 
       const response = await api.get(`/applications/${applicationId}/resume`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
       });
       
       return response.data;
     } catch (error) {
       console.error('Download resume error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      
+      if (error.response?.status === 404) {
+        return rejectWithValue({ 
+          message: 'Resume not found',
+          code: 'NOT_FOUND'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to download resume',
+        code: 'DOWNLOAD_ERROR'
+      });
     }
   }
 );
@@ -371,9 +574,10 @@ export const completeJob = createAsyncThunk(
   'applications/completeJob',
   async (jobId, { getState, rejectWithValue }) => {
     try {
-      const token = getState().auth.token;
-      if (!token) {
-        return rejectWithValue({ message: 'No token found' });
+      const token = getAuthToken(getState);
+
+      if (!jobId) {
+        return rejectWithValue({ message: 'Job ID is required' });
       }
 
       const response = await api.patch(`/jobs/${jobId}/complete`, 
@@ -389,7 +593,18 @@ export const completeJob = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.error('Complete job error:', error.response?.data);
-      return rejectWithValue(error.response?.data || { message: error.message });
+      
+      if (error.response?.status === 403) {
+        return rejectWithValue({ 
+          message: 'You do not have permission to complete this job',
+          code: 'FORBIDDEN'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to complete job',
+        code: 'COMPLETE_JOB_ERROR'
+      });
     }
   }
 );
@@ -424,6 +639,8 @@ const initialState = {
     withdrawn: 0,
   },
   statusBreakdown: {},
+  lastUpdated: null,
+  uploadProgress: 0, // For file upload progress
 };
 
 // ==================== SLICE ====================
@@ -475,6 +692,31 @@ const applicationSlice = createSlice({
         job.notes = notes;
       }
     },
+    setUploadProgress: (state, action) => {
+      state.uploadProgress = action.payload;
+    },
+    resetUploadProgress: (state) => {
+      state.uploadProgress = 0;
+    },
+    updateApplicationStatusLocally: (state, action) => {
+      const { applicationId, status } = action.payload;
+      const index = state.applications.findIndex(app => app._id === applicationId);
+      if (index !== -1) {
+        state.applications[index].status = status;
+      }
+      if (state.selectedApplication?._id === applicationId) {
+        state.selectedApplication.status = status;
+      }
+      // Update stats
+      const stats = state.stats;
+      const oldStatus = state.applications[index]?.status;
+      if (oldStatus && oldStatus !== status) {
+        // Decrement old status count
+        if (stats[oldStatus] > 0) stats[oldStatus]--;
+        // Increment new status count
+        if (stats[status] !== undefined) stats[status]++;
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -483,20 +725,29 @@ const applicationSlice = createSlice({
         state.isLoading = true;
         state.error = null;
         state.applySuccess = false;
+        state.uploadProgress = 0;
       })
       .addCase(applyForJob.fulfilled, (state, action) => {
         state.isLoading = false;
         state.applySuccess = true;
         state.error = null;
+        state.uploadProgress = 100;
         if (action.payload.application) {
           state.applications.unshift(action.payload.application);
           state.totalCount += 1;
+          // Update stats
+          const status = action.payload.application.status || 'pending';
+          if (state.stats[status] !== undefined) {
+            state.stats[status] += 1;
+          }
         }
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(applyForJob.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
         state.applySuccess = false;
+        state.uploadProgress = 0;
       })
       
       // ==================== GET FREELANCER APPLICATIONS ====================
@@ -510,6 +761,7 @@ const applicationSlice = createSlice({
         state.totalCount = action.payload.totalApplications || 0;
         state.totalPages = action.payload.totalPages || 1;
         state.currentPage = action.payload.currentPage || 1;
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(getFreelancerApplications.rejected, (state, action) => {
         state.isLoading = false;
@@ -546,6 +798,7 @@ const applicationSlice = createSlice({
         if (state.selectedApplication?._id === updatedApp._id) {
           state.selectedApplication = updatedApp;
         }
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(withdrawApplication.rejected, (state, action) => {
         state.isLoading = false;
@@ -563,6 +816,7 @@ const applicationSlice = createSlice({
         state.totalCount = action.payload.totalApplications || 0;
         state.totalPages = action.payload.totalPages || 1;
         state.currentPage = action.payload.currentPage || 1;
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(getJobApplications.rejected, (state, action) => {
         state.isLoading = false;
@@ -581,6 +835,7 @@ const applicationSlice = createSlice({
         state.totalPages = action.payload.totalPages || 1;
         state.currentPage = action.payload.currentPage || 1;
         state.statusBreakdown = action.payload.statusBreakdown || {};
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(getClientApplications.rejected, (state, action) => {
         state.isLoading = false;
@@ -600,12 +855,21 @@ const applicationSlice = createSlice({
         const updatedApp = action.payload.application;
         const index = state.applications.findIndex(app => app._id === updatedApp._id);
         if (index !== -1) {
+          const oldStatus = state.applications[index].status;
           state.applications[index] = updatedApp;
+          // Update stats
+          if (oldStatus && oldStatus !== updatedApp.status) {
+            if (state.stats[oldStatus] > 0) state.stats[oldStatus]--;
+            if (state.stats[updatedApp.status] !== undefined) {
+              state.stats[updatedApp.status]++;
+            }
+          }
         }
         
         if (state.selectedApplication?._id === updatedApp._id) {
           state.selectedApplication = updatedApp;
         }
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(updateApplicationStatus.rejected, (state, action) => {
         state.isLoading = false;
@@ -628,6 +892,7 @@ const applicationSlice = createSlice({
         if (state.selectedApplication?._id === updatedApp._id) {
           state.selectedApplication = updatedApp;
         }
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(sendOffer.rejected, (state, action) => {
         state.isLoading = false;
@@ -664,6 +929,7 @@ const applicationSlice = createSlice({
         }
         state.isSaved = true;
         state.savedJobId = action.payload.savedJob?._id || null;
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(saveJobForLater.rejected, (state, action) => {
         state.isLoading = false;
@@ -681,6 +947,7 @@ const applicationSlice = createSlice({
         state.savedJobIds = state.savedJobIds.filter(id => id !== action.payload.jobId);
         state.isSaved = false;
         state.savedJobId = null;
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(unsaveJob.rejected, (state, action) => {
         state.isLoading = false;
@@ -701,6 +968,7 @@ const applicationSlice = createSlice({
         state.totalCount = action.payload.totalSaved || 0;
         state.totalPages = action.payload.totalPages || 1;
         state.currentPage = action.payload.currentPage || 1;
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(getSavedJobs.rejected, (state, action) => {
         state.isLoading = false;
@@ -732,13 +1000,22 @@ const applicationSlice = createSlice({
         const jobId = action.payload.job._id;
         state.applications = state.applications.map(app => {
           if (app.job_id?._id === jobId && (app.status === 'hired' || app.status === 'offered')) {
-            return { ...app, status: 'completed' };
+            const oldStatus = app.status;
+            const newApp = { ...app, status: 'completed' };
+            // Update stats
+            if (state.stats[oldStatus] > 0) state.stats[oldStatus]--;
+            if (state.stats.completed !== undefined) state.stats.completed++;
+            return newApp;
           }
           return app;
         });
         if (state.selectedApplication?.job_id?._id === jobId) {
+          const oldStatus = state.selectedApplication.status;
           state.selectedApplication = { ...state.selectedApplication, status: 'completed' };
+          if (state.stats[oldStatus] > 0) state.stats[oldStatus]--;
+          if (state.stats.completed !== undefined) state.stats.completed++;
         }
+        state.lastUpdated = new Date().toISOString();
       })
       .addCase(completeJob.rejected, (state, action) => {
         state.isLoading = false;
@@ -758,7 +1035,10 @@ export const {
   clearApplications,
   clearSavedJobs,
   updateApplicationLocally,
-  updateSavedJobNotes
+  updateSavedJobNotes,
+  setUploadProgress,
+  resetUploadProgress,
+  updateApplicationStatusLocally,
 } = applicationSlice.actions;
 
 // ==================== SELECTORS ====================
@@ -779,5 +1059,7 @@ export const selectUpdateSuccess = (state) => state.applications.updateSuccess;
 export const selectResumeUrl = (state) => state.applications.resumeUrl;
 export const selectApplicationStats = (state) => state.applications.stats;
 export const selectStatusBreakdown = (state) => state.applications.statusBreakdown;
+export const selectUploadProgress = (state) => state.applications.uploadProgress;
+export const selectLastUpdated = (state) => state.applications.lastUpdated;
 
 export default applicationSlice.reducer;

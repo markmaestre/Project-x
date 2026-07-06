@@ -5,188 +5,14 @@ import { authMiddleware } from "../middleware/authMiddleware.js";
 import Contract from "../models/Contract.js";
 import Job from "../models/Job.js";
 import Application from "../models/Application.js";
-import Client from "../models/Client.js";
-import Freelancer from "../models/Freelancer.js";
+import ContractService from "../services/contractService.js";
+import NotificationService from "../services/notificationService.js";
 
 const router = express.Router();
 
-// ==================== HELPER FUNCTIONS ====================
+// ==================== CLIENT & FREELANCER ROUTES ====================
 
-// Check if user is authorized for contract
-const checkContractAuthorization = async (contractId, userId, userRole) => {
-  const contract = await Contract.findById(contractId);
-  if (!contract) {
-    return { error: "Contract not found", status: 404 };
-  }
-
-  const isClient = contract.client_id.toString() === userId;
-  const isFreelancer = contract.freelancer_id.toString() === userId;
-
-  if (!isClient && !isFreelancer && userRole !== 'admin') {
-    return { error: "Unauthorized access to this contract", status: 403 };
-  }
-
-  return { contract, isClient, isFreelancer };
-};
-
-// ==================== CREATE CONTRACT ====================
-
-// Create a new contract (Client only)
-router.post("/contracts", authMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== "client") {
-      return res.status(403).json({ message: "Only clients can create contracts" });
-    }
-
-    const {
-      job_id,
-      application_id,
-      agreed_budget,
-      start_date,
-      end_date,
-      terms
-    } = req.body;
-
-    // Validate required fields
-    if (!job_id || !application_id) {
-      return res.status(400).json({ 
-        message: "Job ID and Application ID are required" 
-      });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(job_id) || 
-        !mongoose.Types.ObjectId.isValid(application_id)) {
-      return res.status(400).json({ message: "Invalid ID format" });
-    }
-
-    // Get job and verify ownership
-    const job = await Job.findOne({ _id: job_id, is_deleted: false });
-    if (!job) {
-      return res.status(404).json({ message: "Job not found" });
-    }
-
-    if (job.client_id.toString() !== req.user.id) {
-      return res.status(403).json({ 
-        message: "You do not own this job" 
-      });
-    }
-
-    // Get application and verify
-    const application = await Application.findById(application_id);
-    if (!application) {
-      return res.status(404).json({ message: "Application not found" });
-    }
-
-    if (application.job_id.toString() !== job_id) {
-      return res.status(400).json({ 
-        message: "Application does not belong to this job" 
-      });
-    }
-
-    if (application.status !== "hired") {
-      return res.status(400).json({ 
-        message: "Application must be in 'hired' status to create a contract" 
-      });
-    }
-
-    // Check if contract already exists for this application
-    const existingContract = await Contract.findOne({ application_id });
-    if (existingContract) {
-      return res.status(400).json({ 
-        message: "A contract already exists for this application" 
-      });
-    }
-
-    // Create contract
-    const contractData = {
-      job_id,
-      client_id: req.user.id,
-      freelancer_id: application.freelancer_id,
-      application_id,
-      status: "active",
-      agreed_budget: agreed_budget || {
-        amount: application.proposed_rate || 0,
-        type: job.budget?.type || "fixed",
-        currency: job.budget?.currency || "PHP"
-      },
-      start_date: start_date || new Date(),
-      end_date: end_date || null,
-      terms: terms || null,
-      progress: 0,
-      is_active: true
-    };
-
-    const contract = new Contract(contractData);
-    await contract.save();
-
-    // Update job with assigned freelancer and status
-    job.assigned_freelancer_id = application.freelancer_id;
-    job.status = "in_progress";
-    await job.save();
-
-    // Update application status
-    application.status = "completed";
-    await application.save();
-
-    // Populate contract for response
-    const populatedContract = await Contract.findById(contract._id)
-      .populate("job_id", "title description budget category")
-      .populate("client_id", "first_name last_name company_name profile_picture")
-      .populate("freelancer_id", "first_name last_name username profile_picture")
-      .populate("application_id", "cover_letter proposed_rate");
-
-    res.status(201).json({
-      message: "Contract created successfully",
-      contract: populatedContract
-    });
-  } catch (error) {
-    console.error("Error creating contract:", error);
-    res.status(500).json({ 
-      message: "Error creating contract", 
-      error: error.message 
-    });
-  }
-});
-
-// ==================== GET CONTRACTS ====================
-
-// Get contracts for client
-router.get("/client/contracts", authMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== "client") {
-      return res.status(403).json({ message: "Access denied. Clients only." });
-    }
-
-    const { status, page = 1, limit = 20 } = req.query;
-    const query = { client_id: req.user.id };
-    
-    if (status) query.status = status;
-
-    const contracts = await Contract.find(query)
-      .populate("job_id", "title description budget category")
-      .populate("freelancer_id", "first_name last_name username profile_picture rating")
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const total = await Contract.countDocuments(query);
-
-    res.json({
-      contracts,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
-      totalContracts: total
-    });
-  } catch (error) {
-    console.error("Error fetching client contracts:", error);
-    res.status(500).json({ 
-      message: "Error fetching contracts", 
-      error: error.message 
-    });
-  }
-});
-
-// Get contracts for freelancer
+// Get all contracts for the authenticated freelancer
 router.get("/freelancer/contracts", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "freelancer") {
@@ -194,349 +20,554 @@ router.get("/freelancer/contracts", authMiddleware, async (req, res) => {
     }
 
     const { status, page = 1, limit = 20 } = req.query;
-    const query = { freelancer_id: req.user.id };
     
-    if (status) query.status = status;
+    let query = { freelancer_id: req.user.id };
+    if (status && status !== 'All') {
+      query.status = status;
+    }
 
     const contracts = await Contract.find(query)
-      .populate("job_id", "title description budget category")
+      .populate("job_id", "title description budget category required_skills work_setup job_type")
       .populate("client_id", "first_name last_name company_name profile_picture rating")
+      .populate("application_id", "cover_letter proposed_rate status")
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
     const total = await Contract.countDocuments(query);
 
+    // Get status breakdown
+    const statusBreakdown = await Contract.aggregate([
+      { $match: { freelancer_id: new mongoose.Types.ObjectId(req.user.id) } },
+      { $group: { _id: "$status", count: { $sum: 1 } } }
+    ]);
+
+    const breakdown = {};
+    statusBreakdown.forEach(item => {
+      breakdown[item._id] = item.count;
+    });
+
     res.json({
       contracts,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
-      totalContracts: total
+      totalContracts: total,
+      statusBreakdown: breakdown
     });
   } catch (error) {
     console.error("Error fetching freelancer contracts:", error);
-    res.status(500).json({ 
-      message: "Error fetching contracts", 
-      error: error.message 
-    });
+    res.status(500).json({ message: "Error fetching contracts", error: error.message });
   }
 });
 
-// Get single contract by ID
-router.get("/contracts/:id", authMiddleware, async (req, res) => {
+// Get all contracts for the authenticated client
+router.get("/client/contracts", authMiddleware, async (req, res) => {
   try {
-    const { id } = req.params;
+    if (req.user.role !== "client") {
+      return res.status(403).json({ message: "Access denied. Clients only." });
+    }
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    const { status, page = 1, limit = 20 } = req.query;
+    
+    let query = { client_id: req.user.id };
+    if (status && status !== 'All') {
+      query.status = status;
+    }
+
+    const contracts = await Contract.find(query)
+      .populate("job_id", "title description budget category required_skills work_setup job_type")
+      .populate("freelancer_id", "first_name last_name username profile_picture skills rating")
+      .populate("application_id", "cover_letter proposed_rate status")
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Contract.countDocuments(query);
+
+    // Get status breakdown
+    const statusBreakdown = await Contract.aggregate([
+      { $match: { client_id: new mongoose.Types.ObjectId(req.user.id) } },
+      { $group: { _id: "$status", count: { $sum: 1 } } }
+    ]);
+
+    const breakdown = {};
+    statusBreakdown.forEach(item => {
+      breakdown[item._id] = item.count;
+    });
+
+    res.json({
+      contracts,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      totalContracts: total,
+      statusBreakdown: breakdown
+    });
+  } catch (error) {
+    console.error("Error fetching client contracts:", error);
+    res.status(500).json({ message: "Error fetching contracts", error: error.message });
+  }
+});
+
+// Get contract details by ID (Both client and freelancer)
+router.get("/contracts/:contractId", authMiddleware, async (req, res) => {
+  try {
+    const { contractId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(contractId)) {
       return res.status(400).json({ message: "Invalid contract ID" });
     }
 
-    const { error, contract, status: errorStatus } = 
-      await checkContractAuthorization(id, req.user.id, req.user.role);
-    
-    if (error) {
-      return res.status(errorStatus).json({ message: error });
+    const contract = await Contract.findById(contractId)
+      .populate("job_id", "title description budget category required_skills work_setup job_type experience_level")
+      .populate({
+        path: "job_id",
+        populate: {
+          path: "client_id",
+          select: "first_name last_name company_name profile_picture rating email_address phone_number"
+        }
+      })
+      .populate("client_id", "first_name last_name company_name profile_picture rating email_address phone_number")
+      .populate("freelancer_id", "first_name last_name username profile_picture skills experience_level years_of_experience hourly_rate bio_about_me rating portfolio")
+      .populate("application_id", "cover_letter proposed_rate resume education experiences status");
+
+    if (!contract) {
+      return res.status(404).json({ message: "Contract not found" });
     }
 
-    const populatedContract = await Contract.findById(id)
-      .populate("job_id", "title description budget category required_skills work_setup")
-      .populate("client_id", "first_name last_name company_name profile_picture rating")
-      .populate("freelancer_id", "first_name last_name username profile_picture rating")
-      .populate("application_id", "cover_letter proposed_rate status");
+    // Check authorization
+    const isClient = contract.client_id._id.toString() === req.user.id;
+    const isFreelancer = contract.freelancer_id._id.toString() === req.user.id;
 
-    res.json({ contract: populatedContract });
+    if (!isClient && !isFreelancer && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    res.json({ contract });
   } catch (error) {
     console.error("Error fetching contract:", error);
-    res.status(500).json({ 
-      message: "Error fetching contract", 
-      error: error.message 
-    });
+    res.status(500).json({ message: "Error fetching contract", error: error.message });
   }
 });
 
-// ==================== UPDATE CONTRACT ====================
-
-// Update contract
-router.put("/contracts/:id", authMiddleware, async (req, res) => {
+// Update contract progress (Both client and freelancer)
+router.patch("/contracts/:contractId/progress", authMiddleware, async (req, res) => {
   try {
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid contract ID" });
-    }
-
-    const { error, contract, isClient, status: errorStatus } = 
-      await checkContractAuthorization(id, req.user.id, req.user.role);
-    
-    if (error) {
-      return res.status(errorStatus).json({ message: error });
-    }
-
-    // Only client can update contract terms and budget
-    if (!isClient && req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        message: "Only the client can update contract details" 
-      });
-    }
-
-    const updates = {};
-    const allowedUpdates = ["agreed_budget", "terms", "end_date"];
-
-    allowedUpdates.forEach(field => {
-      if (req.body[field] !== undefined) {
-        updates[field] = req.body[field];
-      }
-    });
-
-    if (req.body.agreed_budget) {
-      updates.agreed_budget = {
-        amount: req.body.agreed_budget.amount || contract.agreed_budget.amount,
-        type: req.body.agreed_budget.type || contract.agreed_budget.type,
-        currency: req.body.agreed_budget.currency || contract.agreed_budget.currency
-      };
-    }
-
-    const updatedContract = await Contract.findByIdAndUpdate(
-      id,
-      updates,
-      { new: true, runValidators: true }
-    );
-
-    res.json({
-      message: "Contract updated successfully",
-      contract: updatedContract
-    });
-  } catch (error) {
-    console.error("Error updating contract:", error);
-    res.status(500).json({ 
-      message: "Error updating contract", 
-      error: error.message 
-    });
-  }
-});
-
-// Update contract status
-router.patch("/contracts/:id/status", authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid contract ID" });
-    }
-
-    const validStatuses = ["active", "paused", "completed", "cancelled"];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ 
-        message: "Invalid status. Must be one of: " + validStatuses.join(", ") 
-      });
-    }
-
-    const { error, contract, isClient, isFreelancer, status: errorStatus } = 
-      await checkContractAuthorization(id, req.user.id, req.user.role);
-    
-    if (error) {
-      return res.status(errorStatus).json({ message: error });
-    }
-
-    // Both client and freelancer can update status
-    // But we need to validate certain transitions
-    if (status === "completed") {
-      // Only client can mark as completed
-      if (!isClient && req.user.role !== 'admin') {
-        return res.status(403).json({ 
-          message: "Only the client can mark contract as completed" 
-        });
-      }
-      contract.progress = 100;
-    }
-
-    if (status === "cancelled") {
-      // Both can cancel but for different reasons
-      contract.is_active = false;
-    }
-
-    contract.status = status;
-    await contract.save();
-
-    // Update job status based on contract status
-    const job = await Job.findById(contract.job_id);
-    if (job) {
-      if (status === "completed") {
-        job.status = "completed";
-      } else if (status === "cancelled") {
-        job.status = "cancelled";
-      }
-      await job.save();
-    }
-
-    res.json({
-      message: `Contract status updated to ${status}`,
-      contract
-    });
-  } catch (error) {
-    console.error("Error updating contract status:", error);
-    res.status(500).json({ 
-      message: "Error updating contract status", 
-      error: error.message 
-    });
-  }
-});
-
-// Update contract progress
-router.patch("/contracts/:id/progress", authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
+    const { contractId } = req.params;
     const { progress } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(contractId)) {
       return res.status(400).json({ message: "Invalid contract ID" });
     }
 
-    if (progress === undefined || progress < 0 || progress > 100) {
-      return res.status(400).json({ 
-        message: "Progress must be between 0 and 100" 
-      });
+    if (progress === undefined || progress === null) {
+      return res.status(400).json({ message: "Progress value is required" });
     }
 
-    const { error, contract, isClient, isFreelancer, status: errorStatus } = 
-      await checkContractAuthorization(id, req.user.id, req.user.role);
-    
-    if (error) {
-      return res.status(errorStatus).json({ message: error });
+    if (progress < 0 || progress > 100) {
+      return res.status(400).json({ message: "Progress must be between 0 and 100" });
     }
 
-    // Both client and freelancer can update progress
-    contract.progress = progress;
-    
-    if (progress === 100) {
-      contract.status = "completed";
-      contract.is_active = false;
-      
-      // Update job
-      const job = await Job.findById(contract.job_id);
-      if (job) {
-        job.status = "completed";
-        await job.save();
-      }
-    }
-
-    await contract.save();
+    // Use ContractService
+    const contract = await ContractService.updateProgress({
+      contract_id: contractId,
+      user_id: req.user.id,
+      progress: progress
+    });
 
     res.json({
-      message: "Contract progress updated",
+      message: "Progress updated successfully",
       contract
     });
   } catch (error) {
-    console.error("Error updating contract progress:", error);
-    res.status(500).json({ 
-      message: "Error updating contract progress", 
-      error: error.message 
-    });
+    console.error("Error updating progress:", error);
+    if (error.message === 'Contract not found') {
+      return res.status(404).json({ message: error.message });
+    }
+    if (error.message === 'Unauthorized') {
+      return res.status(403).json({ message: error.message });
+    }
+    res.status(500).json({ message: "Error updating progress", error: error.message });
   }
 });
 
-// ==================== DELETE CONTRACT ====================
-
-// Soft delete contract (Admin only or client with cancellation)
-router.delete("/contracts/:id", authMiddleware, async (req, res) => {
+// Complete contract (Both client and freelancer)
+router.patch("/contracts/:contractId/complete", authMiddleware, async (req, res) => {
   try {
-    const { id } = req.params;
+    const { contractId } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(contractId)) {
       return res.status(400).json({ message: "Invalid contract ID" });
     }
 
-    const { error, contract, status: errorStatus } = 
-      await checkContractAuthorization(id, req.user.id, req.user.role);
-    
-    if (error) {
-      return res.status(errorStatus).json({ message: error });
+    // Use ContractService
+    const contract = await ContractService.completeContract({
+      contract_id: contractId,
+      user_id: req.user.id
+    });
+
+    res.json({
+      message: "Contract completed successfully",
+      contract
+    });
+  } catch (error) {
+    console.error("Error completing contract:", error);
+    if (error.message === 'Contract not found') {
+      return res.status(404).json({ message: error.message });
+    }
+    if (error.message === 'Unauthorized') {
+      return res.status(403).json({ message: error.message });
+    }
+    res.status(500).json({ message: "Error completing contract", error: error.message });
+  }
+});
+
+// Cancel contract (Both client and freelancer)
+router.patch("/contracts/:contractId/cancel", authMiddleware, async (req, res) => {
+  try {
+    const { contractId } = req.params;
+    const { reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(contractId)) {
+      return res.status(400).json({ message: "Invalid contract ID" });
     }
 
-    // Only admin or client can delete
-    if (req.user.role !== 'admin' && req.user.role !== 'client') {
-      return res.status(403).json({ 
-        message: "Only admins or clients can delete contracts" 
+    const contract = await Contract.findById(contractId)
+      .populate("client_id freelancer_id job_id");
+
+    if (!contract) {
+      return res.status(404).json({ message: "Contract not found" });
+    }
+
+    // Check authorization
+    const isClient = contract.client_id._id.toString() === req.user.id;
+    const isFreelancer = contract.freelancer_id._id.toString() === req.user.id;
+
+    if (!isClient && !isFreelancer && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    if (contract.status === 'completed' || contract.status === 'cancelled') {
+      return res.status(400).json({ message: "Contract is already completed or cancelled" });
+    }
+
+    contract.status = 'cancelled';
+    contract.is_active = false;
+    contract.end_date = new Date();
+    await contract.save();
+
+    // Update job
+    await Job.findByIdAndUpdate(contract.job_id._id, {
+      status: 'open',
+      assigned_freelancer_id: null,
+    });
+
+    // Update application status back to pending
+    if (contract.application_id) {
+      await Application.findByIdAndUpdate(contract.application_id, {
+        status: 'pending'
       });
     }
 
-    // Soft delete by setting is_active to false
-    contract.is_active = false;
-    contract.status = "cancelled";
-    await contract.save();
+    // Notify both parties
+    await NotificationService.createNotification({
+      recipient_id: contract.client_id._id,
+      recipient_model: 'Client',
+      sender_id: contract.freelancer_id._id,
+      sender_model: 'Freelancer',
+      type: 'contract_cancelled',
+      title: 'Contract Cancelled',
+      message: `Project "${contract.job_id.title}" has been cancelled. Reason: ${reason || 'Not specified'}`,
+      reference_id: contract._id,
+      reference_model: 'Contract',
+      priority: 'high',
+    });
+
+    await NotificationService.createNotification({
+      recipient_id: contract.freelancer_id._id,
+      recipient_model: 'Freelancer',
+      sender_id: contract.client_id._id,
+      sender_model: 'Client',
+      type: 'contract_cancelled',
+      title: 'Contract Cancelled',
+      message: `Project "${contract.job_id.title}" has been cancelled. Reason: ${reason || 'Not specified'}`,
+      reference_id: contract._id,
+      reference_model: 'Contract',
+      priority: 'high',
+    });
 
     res.json({
       message: "Contract cancelled successfully",
       contract
     });
   } catch (error) {
-    console.error("Error deleting contract:", error);
-    res.status(500).json({ 
-      message: "Error deleting contract", 
-      error: error.message 
-    });
+    console.error("Error cancelling contract:", error);
+    res.status(500).json({ message: "Error cancelling contract", error: error.message });
   }
 });
 
-// ==================== CONTRACT STATISTICS ====================
-
-// Get contract statistics
-router.get("/contracts/stats/dashboard", authMiddleware, async (req, res) => {
+// Pause contract (Both client and freelancer)
+router.patch("/contracts/:contractId/pause", authMiddleware, async (req, res) => {
   try {
-    if (req.user.role === "client") {
-      const query = { client_id: req.user.id };
-      
-      const total = await Contract.countDocuments(query);
-      const active = await Contract.countDocuments({ ...query, status: "active" });
-      const paused = await Contract.countDocuments({ ...query, status: "paused" });
-      const completed = await Contract.countDocuments({ ...query, status: "completed" });
-      const cancelled = await Contract.countDocuments({ ...query, status: "cancelled" });
+    const { contractId } = req.params;
+    const { reason } = req.body;
 
-      const contracts = await Contract.find(query);
-      const totalBudget = contracts.reduce((sum, c) => 
-        sum + (c.agreed_budget?.amount || 0), 0
-      );
-      const averageProgress = contracts.reduce((sum, c) => 
-        sum + (c.progress || 0), 0
-      ) / (contracts.length || 1);
-
-      res.json({
-        total,
-        active,
-        paused,
-        completed,
-        cancelled,
-        totalBudget,
-        averageProgress: Math.round(averageProgress)
-      });
-    } else if (req.user.role === "freelancer") {
-      const query = { freelancer_id: req.user.id };
-      
-      const total = await Contract.countDocuments(query);
-      const active = await Contract.countDocuments({ ...query, status: "active" });
-      const completed = await Contract.countDocuments({ ...query, status: "completed" });
-
-      const contracts = await Contract.find(query);
-      const totalEarnings = contracts
-        .filter(c => c.status === "completed")
-        .reduce((sum, c) => sum + (c.agreed_budget?.amount || 0), 0);
-
-      res.json({
-        total,
-        active,
-        completed,
-        totalEarnings
-      });
-    } else {
-      res.status(403).json({ message: "Access denied" });
+    if (!mongoose.Types.ObjectId.isValid(contractId)) {
+      return res.status(400).json({ message: "Invalid contract ID" });
     }
-  } catch (error) {
-    console.error("Error fetching contract statistics:", error);
-    res.status(500).json({ 
-      message: "Error fetching statistics", 
-      error: error.message 
+
+    const contract = await Contract.findById(contractId)
+      .populate("client_id freelancer_id job_id");
+
+    if (!contract) {
+      return res.status(404).json({ message: "Contract not found" });
+    }
+
+    // Check authorization
+    const isClient = contract.client_id._id.toString() === req.user.id;
+    const isFreelancer = contract.freelancer_id._id.toString() === req.user.id;
+
+    if (!isClient && !isFreelancer && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    if (contract.status !== 'active') {
+      return res.status(400).json({ message: "Only active contracts can be paused" });
+    }
+
+    contract.status = 'paused';
+    await contract.save();
+
+    // Notify both parties
+    await NotificationService.createNotification({
+      recipient_id: contract.client_id._id,
+      recipient_model: 'Client',
+      sender_id: contract.freelancer_id._id,
+      sender_model: 'Freelancer',
+      type: 'contract_paused',
+      title: 'Contract Paused',
+      message: `Project "${contract.job_id.title}" has been paused. Reason: ${reason || 'Not specified'}`,
+      reference_id: contract._id,
+      reference_model: 'Contract',
+      priority: 'medium',
     });
+
+    await NotificationService.createNotification({
+      recipient_id: contract.freelancer_id._id,
+      recipient_model: 'Freelancer',
+      sender_id: contract.client_id._id,
+      sender_model: 'Client',
+      type: 'contract_paused',
+      title: 'Contract Paused',
+      message: `Project "${contract.job_id.title}" has been paused. Reason: ${reason || 'Not specified'}`,
+      reference_id: contract._id,
+      reference_model: 'Contract',
+      priority: 'medium',
+    });
+
+    res.json({
+      message: "Contract paused successfully",
+      contract
+    });
+  } catch (error) {
+    console.error("Error pausing contract:", error);
+    res.status(500).json({ message: "Error pausing contract", error: error.message });
+  }
+});
+
+// Resume contract (Both client and freelancer)
+router.patch("/contracts/:contractId/resume", authMiddleware, async (req, res) => {
+  try {
+    const { contractId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(contractId)) {
+      return res.status(400).json({ message: "Invalid contract ID" });
+    }
+
+    const contract = await Contract.findById(contractId)
+      .populate("client_id freelancer_id job_id");
+
+    if (!contract) {
+      return res.status(404).json({ message: "Contract not found" });
+    }
+
+    // Check authorization
+    const isClient = contract.client_id._id.toString() === req.user.id;
+    const isFreelancer = contract.freelancer_id._id.toString() === req.user.id;
+
+    if (!isClient && !isFreelancer && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    if (contract.status !== 'paused') {
+      return res.status(400).json({ message: "Only paused contracts can be resumed" });
+    }
+
+    contract.status = 'active';
+    await contract.save();
+
+    // Notify both parties
+    await NotificationService.createNotification({
+      recipient_id: contract.client_id._id,
+      recipient_model: 'Client',
+      sender_id: contract.freelancer_id._id,
+      sender_model: 'Freelancer',
+      type: 'contract_resumed',
+      title: 'Contract Resumed',
+      message: `Project "${contract.job_id.title}" has been resumed`,
+      reference_id: contract._id,
+      reference_model: 'Contract',
+      priority: 'medium',
+    });
+
+    await NotificationService.createNotification({
+      recipient_id: contract.freelancer_id._id,
+      recipient_model: 'Freelancer',
+      sender_id: contract.client_id._id,
+      sender_model: 'Client',
+      type: 'contract_resumed',
+      title: 'Contract Resumed',
+      message: `Project "${contract.job_id.title}" has been resumed`,
+      reference_id: contract._id,
+      reference_model: 'Contract',
+      priority: 'medium',
+    });
+
+    res.json({
+      message: "Contract resumed successfully",
+      contract
+    });
+  } catch (error) {
+    console.error("Error resuming contract:", error);
+    res.status(500).json({ message: "Error resuming contract", error: error.message });
+  }
+});
+
+// Get contract analytics for a client
+router.get("/client/contract-analytics", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "client") {
+      return res.status(403).json({ message: "Access denied. Clients only." });
+    }
+
+    const clientId = req.user.id;
+
+    // Get all contracts for the client
+    const contracts = await Contract.find({ client_id: clientId });
+    
+    const totalContracts = contracts.length;
+    const activeContracts = contracts.filter(c => c.status === 'active').length;
+    const completedContracts = contracts.filter(c => c.status === 'completed').length;
+    const cancelledContracts = contracts.filter(c => c.status === 'cancelled').length;
+    const pausedContracts = contracts.filter(c => c.status === 'paused').length;
+
+    // Calculate total budget
+    const totalBudget = contracts.reduce((sum, contract) => {
+      return sum + (contract.agreed_budget?.amount || 0);
+    }, 0);
+
+    // Get active contract details
+    const activeContractDetails = await Contract.find({ 
+      client_id: clientId, 
+      status: 'active' 
+    })
+      .populate("freelancer_id", "first_name last_name username profile_picture rating")
+      .populate("job_id", "title");
+
+    res.json({
+      analytics: {
+        totalContracts,
+        activeContracts,
+        completedContracts,
+        cancelledContracts,
+        pausedContracts,
+        totalBudget,
+        completionRate: totalContracts > 0 ? (completedContracts / totalContracts) * 100 : 0,
+      },
+      activeContracts: activeContractDetails
+    });
+  } catch (error) {
+    console.error("Error fetching contract analytics:", error);
+    res.status(500).json({ message: "Error fetching contract analytics", error: error.message });
+  }
+});
+
+// Get contract analytics for a freelancer
+router.get("/freelancer/contract-analytics", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "freelancer") {
+      return res.status(403).json({ message: "Access denied. Freelancers only." });
+    }
+
+    const freelancerId = req.user.id;
+
+    // Get all contracts for the freelancer
+    const contracts = await Contract.find({ freelancer_id: freelancerId });
+    
+    const totalContracts = contracts.length;
+    const activeContracts = contracts.filter(c => c.status === 'active').length;
+    const completedContracts = contracts.filter(c => c.status === 'completed').length;
+    const cancelledContracts = contracts.filter(c => c.status === 'cancelled').length;
+    const pausedContracts = contracts.filter(c => c.status === 'paused').length;
+
+    // Calculate total earnings
+    const totalEarnings = contracts.reduce((sum, contract) => {
+      if (contract.status === 'completed') {
+        return sum + (contract.agreed_budget?.amount || 0);
+      }
+      return sum;
+    }, 0);
+
+    // Calculate average rating from completed contracts
+    // Note: You'll need to add a rating field to the contract or fetch from reviews
+
+    res.json({
+      analytics: {
+        totalContracts,
+        activeContracts,
+        completedContracts,
+        cancelledContracts,
+        pausedContracts,
+        totalEarnings,
+        completionRate: totalContracts > 0 ? (completedContracts / totalContracts) * 100 : 0,
+      },
+      recentContracts: contracts.slice(0, 5)
+    });
+  } catch (error) {
+    console.error("Error fetching freelancer contract analytics:", error);
+    res.status(500).json({ message: "Error fetching contract analytics", error: error.message });
+  }
+});
+
+// Get contract by application ID (Helper route)
+router.get("/contracts/application/:applicationId", authMiddleware, async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(applicationId)) {
+      return res.status(400).json({ message: "Invalid application ID" });
+    }
+
+    const contract = await Contract.findOne({ application_id: applicationId })
+      .populate("job_id", "title description budget")
+      .populate("client_id", "first_name last_name company_name profile_picture")
+      .populate("freelancer_id", "first_name last_name username profile_picture");
+
+    if (!contract) {
+      return res.status(404).json({ message: "Contract not found for this application" });
+    }
+
+    // Check authorization
+    const isClient = contract.client_id._id.toString() === req.user.id;
+    const isFreelancer = contract.freelancer_id._id.toString() === req.user.id;
+
+    if (!isClient && !isFreelancer && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    res.json({ contract });
+  } catch (error) {
+    console.error("Error fetching contract by application:", error);
+    res.status(500).json({ message: "Error fetching contract", error: error.message });
   }
 });
 

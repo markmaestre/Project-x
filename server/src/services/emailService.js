@@ -6,7 +6,6 @@ dotenv.config();
 
 // ==================== CREATE TRANSPORTER ====================
 
-// Create transporter with better configuration
 const createTransporter = () => {
   // For development using Ethereal (testing)
   if (process.env.NODE_ENV === 'development' && !process.env.EMAIL_USER) {
@@ -34,7 +33,7 @@ const createTransporter = () => {
     tls: {
       rejectUnauthorized: false,
     },
-    pool: true, // Use connection pooling
+    pool: true,
     maxConnections: 5,
     maxMessages: 100,
   });
@@ -42,13 +41,11 @@ const createTransporter = () => {
 
 // ==================== CODE GENERATION ====================
 
-// Generate random 6-digit verification code
 export const generateVerificationCode = () => {
   const code = Math.floor(100000 + Math.random() * 900000);
   return code.toString();
 };
 
-// Generate random 8-character password (optional)
 export const generateRandomPassword = () => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
   let password = '';
@@ -60,7 +57,6 @@ export const generateRandomPassword = () => {
 
 // ==================== HTML TEMPLATES ====================
 
-// Get base email template wrapper
 const getBaseTemplate = (content, title = 'Taskra') => {
   return `
     <!DOCTYPE html>
@@ -152,7 +148,8 @@ const getBaseTemplate = (content, title = 'Taskra') => {
   `;
 };
 
-// Email verification template
+// ==================== VERIFICATION EMAIL ====================
+
 const getVerificationEmailHTML = (name = '', code, isBusiness = false, businessEmail = '') => {
   const content = `
     <div class="content">
@@ -201,7 +198,8 @@ const getVerificationEmailHTML = (name = '', code, isBusiness = false, businessE
   return getBaseTemplate(content, isBusiness ? 'Verify Your Business Email' : 'Verify Your Email');
 };
 
-// Password reset template
+// ==================== PASSWORD RESET EMAIL ====================
+
 const getPasswordResetHTML = (name = '', code) => {
   const content = `
     <div class="content">
@@ -244,7 +242,8 @@ const getPasswordResetHTML = (name = '', code) => {
   return getBaseTemplate(content, 'Reset Your Password');
 };
 
-// Welcome email template
+// ==================== WELCOME EMAIL ====================
+
 const getWelcomeEmailHTML = (name = '', role = '') => {
   const content = `
     <div class="content">
@@ -296,13 +295,279 @@ const getWelcomeEmailHTML = (name = '', role = '') => {
   return getBaseTemplate(content, 'Welcome to Taskra');
 };
 
+// ==================== NEW JOB NOTIFICATION EMAIL ====================
+
+const getNewJobNotificationHTML = (jobData, freelancerName = '') => {
+  const {
+    title,
+    description,
+    category,
+    job_type,
+    budget,
+    company_name,
+    client_name,
+    client_email,
+    client_phone,
+    client_company,
+    client_profile_picture,
+    client_bio,
+    client_rating,
+    posted_date,
+    job_id,
+    required_skills = [],
+    experience_level,
+    work_setup,
+    application_deadline,
+    location
+  } = jobData;
+
+  const skillsHtml = required_skills.length > 0 
+    ? required_skills.map(skill => 
+        `<span style="display: inline-block; background: #e8f5e9; color: #2e7d32; padding: 4px 12px; border-radius: 20px; font-size: 12px; margin: 3px 4px 3px 0;">${skill}</span>`
+      ).join('')
+    : '<span style="color: #8BA5BC;">No specific skills required</span>';
+
+  // Client info section
+  const clientInfoHtml = `
+    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 15px 0;">
+      <h3 style="color: #071B2E; font-size: 16px; margin-bottom: 10px;">👤 About the Client</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <div>
+          <span style="color: #8BA5BC; font-size: 12px;">Name</span>
+          <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${client_name || 'Not specified'}</p>
+        </div>
+        ${company_name ? `
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">Company</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${company_name}</p>
+          </div>
+        ` : ''}
+        ${client_email ? `
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">Email</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${client_email}</p>
+          </div>
+        ` : ''}
+        ${client_phone ? `
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">Phone</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${client_phone}</p>
+          </div>
+        ` : ''}
+        ${client_rating ? `
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">Rating</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">⭐ ${client_rating.average || 0} (${client_rating.count || 0} reviews)</p>
+          </div>
+        ` : ''}
+        ${location?.city || location?.country ? `
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">Location</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">
+              ${[location?.city, location?.province, location?.country].filter(Boolean).join(', ')}
+            </p>
+          </div>
+        ` : ''}
+        ${client_bio ? `
+          <div style="grid-column: 1 / -1;">
+            <span style="color: #8BA5BC; font-size: 12px;">About</span>
+            <p style="color: #4A5B6E; margin: 2px 0; font-size: 14px;">${client_bio.substring(0, 150)}${client_bio.length > 150 ? '...' : ''}</p>
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
+
+  const content = `
+    <div class="content">
+      <div style="background: #e8f5e9; padding: 12px 20px; border-radius: 8px; border-left: 4px solid #00C9A7; margin-bottom: 20px;">
+        <p style="margin: 0; font-size: 14px; color: #1e7e34;">
+          <strong>📢 New Job Opportunity!</strong>
+        </p>
+      </div>
+      
+      <h2 style="color: #071B2E; font-size: 24px; margin-bottom: 15px;">
+        ${title}
+      </h2>
+      
+      <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">💰 Budget</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">
+              ${budget?.type === 'fixed' ? '₱' : '₱'}
+              ${budget?.min ? budget.min : ''} 
+              ${budget?.max ? `- ${budget.max}` : ''}
+              ${budget?.type === 'hourly' ? '/hour' : ''}
+              ${budget?.negotiable ? '(Negotiable)' : ''}
+            </p>
+          </div>
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">📋 Job Type</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${job_type || 'Project'}</p>
+          </div>
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">📍 Work Setup</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${work_setup || 'Remote'}</p>
+          </div>
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">📊 Experience Level</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${experience_level || 'Entry'}</p>
+          </div>
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">📂 Category</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${category || 'Not specified'}</p>
+          </div>
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">📅 Posted</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${posted_date || new Date().toLocaleDateString()}</p>
+          </div>
+        </div>
+      </div>
+
+      ${clientInfoHtml}
+
+      <div style="margin: 15px 0;">
+        <h3 style="color: #071B2E; font-size: 16px; margin-bottom: 10px;">📝 Description</h3>
+        <p style="color: #4A5B6E; line-height: 1.8;">${description || 'No description provided.'}</p>
+      </div>
+
+      <div style="margin: 15px 0;">
+        <h3 style="color: #071B2E; font-size: 16px; margin-bottom: 10px;">🔧 Required Skills</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+          ${skillsHtml}
+        </div>
+      </div>
+
+      ${application_deadline ? `
+        <div style="background: #fff3cd; padding: 12px 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 15px 0;">
+          <p style="margin: 0; color: #856404; font-size: 14px;">
+            ⏰ Application Deadline: <strong>${new Date(application_deadline).toLocaleDateString()}</strong>
+          </p>
+        </div>
+      ` : ''}
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/jobs/${job_id}" 
+           style="display: inline-block; background: #00C9A7; color: #ffffff; padding: 14px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+          View & Apply Now
+        </a>
+      </div>
+
+      <p style="font-size: 14px; color: #8BA5BC; text-align: center;">
+        You're receiving this because you're subscribed to job notifications.
+        <br>
+        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/settings/notifications" 
+           style="color: #00C9A7; text-decoration: none;">
+          Manage notifications
+        </a>
+      </p>
+    </div>
+  `;
+  
+  return getBaseTemplate(content, 'New Job Opportunity - Taskra');
+};
+
+// ==================== JOB POSTED CONFIRMATION EMAIL ====================
+
+const getJobPostedConfirmationHTML = (jobData, clientName = '') => {
+  const {
+    title,
+    job_id,
+    status,
+    posted_date,
+    job_type,
+    budget,
+    category
+  } = jobData;
+
+  const content = `
+    <div class="content">
+      <div style="background: #e8f5e9; padding: 12px 20px; border-radius: 8px; border-left: 4px solid #00C9A7; margin-bottom: 20px;">
+        <p style="margin: 0; font-size: 14px; color: #1e7e34;">
+          <strong>✅ Job Posted Successfully!</strong>
+        </p>
+      </div>
+      
+      <h2 style="color: #071B2E; font-size: 24px; margin-bottom: 15px;">
+        Your job "${title}" is now live!
+      </h2>
+      
+      <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 15px 0;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">📋 Job ID</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${job_id}</p>
+          </div>
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">📅 Posted Date</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${posted_date || new Date().toLocaleDateString()}</p>
+          </div>
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">📊 Status</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${status || 'Open'}</p>
+          </div>
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">📂 Category</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${category || 'Not specified'}</p>
+          </div>
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">📋 Job Type</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">${job_type || 'Project'}</p>
+          </div>
+          <div>
+            <span style="color: #8BA5BC; font-size: 12px;">💰 Budget</span>
+            <p style="color: #071B2E; font-weight: 600; margin: 2px 0;">
+              ${budget?.type === 'fixed' ? '₱' : '₱'}
+              ${budget?.min ? budget.min : ''} 
+              ${budget?.max ? `- ${budget.max}` : ''}
+              ${budget?.type === 'hourly' ? '/hour' : ''}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; border-left: 4px solid #2196f3; margin: 15px 0;">
+        <p style="margin: 0; color: #0d47a1; font-size: 14px;">
+          <strong>📌 What's Next?</strong>
+        </p>
+        <ul style="color: #0d47a1; margin: 10px 0 0 20px; font-size: 14px;">
+          <li>Freelancers will start applying to your job</li>
+          <li>Review applications in your dashboard</li>
+          <li>Shortlist and interview candidates</li>
+          <li>Hire the best freelancer for the job</li>
+        </ul>
+      </div>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/client/jobs/${job_id}" 
+           style="display: inline-block; background: #00C9A7; color: #ffffff; padding: 14px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+          View Your Job
+        </a>
+        <br><br>
+        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/client/jobs" 
+           style="display: inline-block; background: #071B2E; color: #ffffff; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+          Manage All Jobs
+        </a>
+      </div>
+
+      <p style="font-size: 14px; color: #8BA5BC; text-align: center;">
+        Need help? 
+        <a href="mailto:support@taskra.com" style="color: #00C9A7; text-decoration: none;">
+          Contact support
+        </a>
+      </p>
+    </div>
+  `;
+  
+  return getBaseTemplate(content, 'Job Posted Successfully - Taskra');
+};
+
 // ==================== MAIN EMAIL FUNCTIONS ====================
 
-// Send email with retry logic
 export const sendEmail = async (to, subject, html, retries = 3) => {
   const transporter = createTransporter();
   
-  // Validate email
   if (!to || !to.trim()) {
     throw new Error('Recipient email is required');
   }
@@ -314,7 +579,6 @@ export const sendEmail = async (to, subject, html, retries = 3) => {
     html: html,
   };
 
-  // Retry logic
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const info = await transporter.sendMail(mailOptions);
@@ -325,11 +589,9 @@ export const sendEmail = async (to, subject, html, retries = 3) => {
       console.error(`❌ Email attempt ${attempt} failed for ${to}:`, error.message);
       
       if (attempt === retries) {
-        // Last attempt failed, throw error
         throw new Error(`Failed to send email after ${retries} attempts: ${error.message}`);
       }
       
-      // Wait before retry (exponential backoff)
       const waitTime = Math.pow(2, attempt) * 1000;
       console.log(`⏳ Waiting ${waitTime}ms before retry...`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -337,7 +599,6 @@ export const sendEmail = async (to, subject, html, retries = 3) => {
   }
 };
 
-// Send verification email (with optional business flag)
 export const sendVerificationEmail = async (email, code, name = '', isBusiness = false, businessEmail = '') => {
   const subject = isBusiness 
     ? 'Verify Your Business Email - Taskra' 
@@ -348,7 +609,6 @@ export const sendVerificationEmail = async (email, code, name = '', isBusiness =
   return await sendEmail(email, subject, html);
 };
 
-// Send password reset email
 export const sendPasswordResetEmail = async (email, code, name = '') => {
   const subject = 'Reset Your Password - Taskra';
   const html = getPasswordResetHTML(name, code);
@@ -356,7 +616,6 @@ export const sendPasswordResetEmail = async (email, code, name = '') => {
   return await sendEmail(email, subject, html);
 };
 
-// Send welcome email
 export const sendWelcomeEmail = async (email, name = '', role = '') => {
   const subject = '🎉 Welcome to Taskra!';
   const html = getWelcomeEmailHTML(name, role);
@@ -364,14 +623,77 @@ export const sendWelcomeEmail = async (email, name = '', role = '') => {
   return await sendEmail(email, subject, html);
 };
 
-// Send business verification email (alias)
 export const sendBusinessVerificationEmail = async (email, code, companyName = '') => {
   return await sendVerificationEmail(email, code, companyName, true, email);
 };
 
+// ==================== JOB NOTIFICATION EMAIL FUNCTIONS ====================
+
+export const sendNewJobNotification = async (freelancerEmail, jobData, freelancerName = '') => {
+  const subject = `📢 New Job: ${jobData.title}`;
+  const html = getNewJobNotificationHTML(jobData, freelancerName);
+  
+  return await sendEmail(freelancerEmail, subject, html);
+};
+
+export const sendJobPostedConfirmation = async (clientEmail, jobData, clientName = '') => {
+  const subject = `✅ Job Posted: ${jobData.title}`;
+  const html = getJobPostedConfirmationHTML(jobData, clientName);
+  
+  return await sendEmail(clientEmail, subject, html);
+};
+
+export const sendBulkJobNotifications = async (freelancers, jobData) => {
+  const results = [];
+  const batchSize = 10;
+  const delayBetweenBatches = 1000;
+  
+  for (let i = 0; i < freelancers.length; i += batchSize) {
+    const batch = freelancers.slice(i, i + batchSize);
+    
+    const batchPromises = batch.map(async (freelancer) => {
+      try {
+        const html = getNewJobNotificationHTML(jobData, freelancer.first_name);
+        const result = await sendEmail(
+          freelancer.email_address, 
+          `📢 New Job: ${jobData.title}`, 
+          html
+        );
+        return { 
+          email: freelancer.email_address, 
+          freelancer_id: freelancer._id,
+          success: true, 
+          result 
+        };
+      } catch (error) {
+        console.error(`Failed to send job notification to ${freelancer.email_address}:`, error.message);
+        return { 
+          email: freelancer.email_address, 
+          freelancer_id: freelancer._id,
+          success: false, 
+          error: error.message 
+        };
+      }
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    
+    if (i + batchSize < freelancers.length) {
+      await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+    }
+  }
+  
+  const successful = results.filter(r => r.success).length;
+  const failed = results.filter(r => !r.success).length;
+  
+  console.log(`📊 Job notification summary: ${successful} sent, ${failed} failed`);
+  
+  return results;
+};
+
 // ==================== BULK EMAIL FUNCTIONS ====================
 
-// Send bulk emails with rate limiting
 export const sendBulkEmails = async (recipients, subject, htmlTemplate, dataMapper = null) => {
   const results = [];
   const batchSize = 10;
@@ -409,7 +731,6 @@ export const sendBulkEmails = async (recipients, subject, htmlTemplate, dataMapp
 
 // ==================== TEMPLATE HELPERS ====================
 
-// Get email template by name
 export const getEmailTemplate = (templateName, data = {}) => {
   switch (templateName) {
     case 'verification':
@@ -418,6 +739,10 @@ export const getEmailTemplate = (templateName, data = {}) => {
       return getPasswordResetHTML(data.name, data.code);
     case 'welcome':
       return getWelcomeEmailHTML(data.name, data.role || '');
+    case 'new-job':
+      return getNewJobNotificationHTML(data.jobData, data.freelancerName);
+    case 'job-posted':
+      return getJobPostedConfirmationHTML(data.jobData, data.clientName);
     default:
       throw new Error(`Unknown email template: ${templateName}`);
   }
@@ -425,7 +750,6 @@ export const getEmailTemplate = (templateName, data = {}) => {
 
 // ==================== TEST FUNCTION ====================
 
-// Test email configuration
 export const testEmailConfig = async () => {
   try {
     const transporter = createTransporter();
@@ -451,6 +775,9 @@ export default {
   sendPasswordResetEmail,
   sendWelcomeEmail,
   sendBusinessVerificationEmail,
+  sendNewJobNotification,
+  sendJobPostedConfirmation,
+  sendBulkJobNotifications,
   sendBulkEmails,
   getEmailTemplate,
   testEmailConfig,

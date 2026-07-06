@@ -7,7 +7,9 @@ import Contract from "../models/Contract.js";
 import Job from "../models/Job.js";
 import Client from "../models/Client.js";
 import Freelancer from "../models/Freelancer.js";
-import { upload } from "../config/cloudinary.js";
+import { cloudinary, upload } from "../config/cloudinary.js";
+import ProjectUpdateService from "../services/projectUpdateService.js";
+import NotificationService from "../services/notificationService.js";
 
 const router = express.Router();
 
@@ -53,7 +55,7 @@ const validateContract = async (contractId, userId, userRole) => {
 
 // ==================== CREATE PROJECT UPDATE ====================
 
-// Create a new project update (Client or Freelancer)
+// Create a new project update (Client or Freelancer) - Using Service
 router.post("/project-updates", authMiddleware, upload.array('attachments', 10), async (req, res) => {
   try {
     const {
@@ -109,8 +111,8 @@ router.post("/project-updates", authMiddleware, upload.array('attachments', 10),
       uploaded_at: new Date()
     })) : [];
 
-    // Create project update
-    const updateData = {
+    // Use ProjectUpdateService to create
+    const projectUpdate = await ProjectUpdateService.createProjectUpdate({
       contract_id,
       job_id,
       client_id: contract.client_id,
@@ -118,20 +120,29 @@ router.post("/project-updates", authMiddleware, upload.array('attachments', 10),
       title: title.trim(),
       description: description || "",
       update_type: update_type || "progress",
-      status: status || "pending",
-      delivery_status: delivery_status || "not_submitted",
-      progress: progress !== undefined ? Math.min(100, Math.max(0, progress)) : 0,
-      priority: priority || "normal",
-      freelancer_comment: freelancer_comment || null,
-      client_comment: client_comment || null,
       attachments,
-      due_date: due_date ? new Date(due_date) : null,
       created_by: req.user.id,
       created_by_role: req.user.role,
-      last_updated_by: req.user.id
-    };
+      due_date: due_date ? new Date(due_date) : null,
+      priority: priority || "normal"
+    });
 
-    const projectUpdate = new ProjectUpdate(updateData);
+    // Update additional fields if provided
+    if (status) {
+      projectUpdate.status = status;
+    }
+    if (delivery_status) {
+      projectUpdate.delivery_status = delivery_status;
+    }
+    if (progress !== undefined) {
+      projectUpdate.progress = Math.min(100, Math.max(0, progress));
+    }
+    if (freelancer_comment) {
+      projectUpdate.freelancer_comment = freelancer_comment;
+    }
+    if (client_comment) {
+      projectUpdate.client_comment = client_comment;
+    }
     await projectUpdate.save();
 
     // Update contract progress if progress is provided
@@ -345,7 +356,7 @@ router.get("/client/updates", authMiddleware, async (req, res) => {
   }
 });
 
-// Get single project update by ID
+// Get single project update by ID - Using Service
 router.get("/project-updates/:id", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
@@ -381,124 +392,11 @@ router.get("/project-updates/:id", authMiddleware, async (req, res) => {
 
 // ==================== UPDATE PROJECT UPDATE ====================
 
-// Update project update
-router.put("/project-updates/:id", authMiddleware, upload.array('attachments', 10), async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid update ID" });
-    }
-
-    const { error, update, isClient, isFreelancer, status: errorStatus } = 
-      await checkUpdateAuthorization(id, req.user.id, req.user.role);
-    
-    if (error) {
-      return res.status(errorStatus).json({ message: error });
-    }
-
-    const {
-      title,
-      description,
-      update_type,
-      status,
-      delivery_status,
-      progress,
-      priority,
-      freelancer_comment,
-      client_comment,
-      due_date
-    } = req.body;
-
-    const updates = { last_updated_by: req.user.id };
-
-    // Allowed fields to update
-    if (title) updates.title = title.trim();
-    if (description !== undefined) updates.description = description;
-    if (update_type) updates.update_type = update_type;
-    if (status) updates.status = status;
-    if (delivery_status) updates.delivery_status = delivery_status;
-    if (priority) updates.priority = priority;
-    if (due_date !== undefined) updates.due_date = due_date ? new Date(due_date) : null;
-
-    // Progress update - only if higher than current
-    if (progress !== undefined && progress > update.progress) {
-      updates.progress = progress;
-      
-      // Update contract progress
-      const contract = await Contract.findById(update.contract_id);
-      if (contract && progress > contract.progress) {
-        contract.progress = progress;
-        if (progress === 100) {
-          contract.status = "completed";
-        }
-        await contract.save();
-      }
-    }
-
-    // Comments - only owner can update their own comment
-    if (freelancer_comment !== undefined && isFreelancer) {
-      updates.freelancer_comment = freelancer_comment;
-    }
-    if (client_comment !== undefined && isClient) {
-      updates.client_comment = client_comment;
-    }
-
-    // Process new attachments
-    if (req.files && req.files.length > 0) {
-      const newAttachments = req.files.map(file => ({
-        file_name: file.originalname,
-        file_url: file.path,
-        public_id: file.filename,
-        mime_type: file.mimetype,
-        file_size: file.size,
-        uploaded_by: req.user.id,
-        uploaded_by_role: req.user.role,
-        uploaded_at: new Date()
-      }));
-      
-      // Append new attachments
-      const currentAttachments = update.attachments || [];
-      updates.attachments = [...currentAttachments, ...newAttachments];
-    }
-
-    // Mark as completed if progress is 100
-    if (progress === 100) {
-      updates.completed_at = new Date();
-      updates.status = "completed";
-      updates.delivery_status = "approved";
-    }
-
-    const updatedUpdate = await ProjectUpdate.findByIdAndUpdate(
-      id,
-      updates,
-      { new: true, runValidators: true }
-    )
-    .populate("contract_id", "status progress")
-    .populate("job_id", "title description")
-    .populate("client_id", "first_name last_name company_name")
-    .populate("freelancer_id", "first_name last_name username")
-    .populate("created_by", "first_name last_name username")
-    .populate("last_updated_by", "first_name last_name username");
-
-    res.json({
-      message: "Project update updated successfully",
-      projectUpdate: updatedUpdate
-    });
-  } catch (error) {
-    console.error("Error updating project update:", error);
-    res.status(500).json({ 
-      message: "Error updating project update", 
-      error: error.message 
-    });
-  }
-});
-
-// Update project update status only
+// Update project update status - Using Service
 router.patch("/project-updates/:id/status", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, comment } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid update ID" });
@@ -511,26 +409,26 @@ router.patch("/project-updates/:id/status", authMiddleware, async (req, res) => 
       });
     }
 
-    const { error, update, status: errorStatus } = 
-      await checkUpdateAuthorization(id, req.user.id, req.user.role);
-    
-    if (error) {
-      return res.status(errorStatus).json({ message: error });
-    }
-
-    update.status = status;
-    if (status === "completed") {
-      update.completed_at = new Date();
-    }
-    update.last_updated_by = req.user.id;
-    await update.save();
+    // Use ProjectUpdateService
+    const updatedUpdate = await ProjectUpdateService.updateProjectStatus({
+      project_update_id: id,
+      status: status,
+      user_id: req.user.id,
+      comment: comment || null
+    });
 
     res.json({
       message: `Project update status updated to ${status}`,
-      projectUpdate: update
+      projectUpdate: updatedUpdate
     });
   } catch (error) {
     console.error("Error updating project update status:", error);
+    if (error.message === 'Project update not found') {
+      return res.status(404).json({ message: error.message });
+    }
+    if (error.message === 'Unauthorized') {
+      return res.status(403).json({ message: error.message });
+    }
     res.status(500).json({ 
       message: "Error updating status", 
       error: error.message 
@@ -538,11 +436,11 @@ router.patch("/project-updates/:id/status", authMiddleware, async (req, res) => 
   }
 });
 
-// Update delivery status
+// Update delivery status - Using Service
 router.patch("/project-updates/:id/delivery", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { delivery_status } = req.body;
+    const { delivery_status, comment } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid update ID" });
@@ -575,29 +473,33 @@ router.patch("/project-updates/:id/delivery", authMiddleware, async (req, res) =
       });
     }
 
-    update.delivery_status = delivery_status;
-    update.last_updated_by = req.user.id;
-    
-    // If approved, mark as completed
+    // Use ProjectUpdateService to update
+    const updatedUpdate = await ProjectUpdateService.updateProjectStatus({
+      project_update_id: id,
+      status: delivery_status === "approved" ? "completed" : "in_progress",
+      user_id: req.user.id,
+      comment: comment || null
+    });
+
+    // Update delivery status
+    updatedUpdate.delivery_status = delivery_status;
     if (delivery_status === "approved") {
-      update.status = "completed";
-      update.completed_at = new Date();
-      update.progress = 100;
+      updatedUpdate.completed_at = new Date();
+      updatedUpdate.progress = 100;
       
       // Update contract
-      const contract = await Contract.findById(update.contract_id);
+      const contract = await Contract.findById(updatedUpdate.contract_id);
       if (contract) {
         contract.progress = 100;
         contract.status = "completed";
         await contract.save();
       }
     }
-
-    await update.save();
+    await updatedUpdate.save();
 
     res.json({
       message: `Delivery status updated to ${delivery_status}`,
-      projectUpdate: update
+      projectUpdate: updatedUpdate
     });
   } catch (error) {
     console.error("Error updating delivery status:", error);
@@ -642,6 +544,16 @@ router.delete("/project-updates/:updateId/attachments/:attachmentId", authMiddle
       return res.status(403).json({ 
         message: "You can only delete your own attachments" 
       });
+    }
+
+    // Delete from Cloudinary if public_id exists
+    if (attachment.public_id) {
+      try {
+        await cloudinary.uploader.destroy(attachment.public_id);
+      } catch (cloudinaryError) {
+        console.error("Error deleting from Cloudinary:", cloudinaryError);
+        // Continue with database deletion even if Cloudinary fails
+      }
     }
 
     // Remove attachment
@@ -699,6 +611,12 @@ router.get("/project-updates/stats/:contractId", authMiddleware, async (req, res
       breakdown[item._id] = item.count;
     });
 
+    // Get recent updates
+    const recentUpdates = await ProjectUpdate.find(query)
+      .sort({ created_at: -1 })
+      .limit(5)
+      .populate("created_by", "first_name last_name username");
+
     res.json({
       total,
       completed,
@@ -706,12 +624,80 @@ router.get("/project-updates/stats/:contractId", authMiddleware, async (req, res
       blocked,
       pending,
       typeBreakdown: breakdown,
-      contractProgress: contract.progress || 0
+      contractProgress: contract.progress || 0,
+      recentUpdates
     });
   } catch (error) {
     console.error("Error fetching project update statistics:", error);
     res.status(500).json({ 
       message: "Error fetching statistics", 
+      error: error.message 
+    });
+  }
+});
+
+// ==================== ADD COMMENT TO UPDATE ====================
+
+// Add comment to project update
+router.post("/project-updates/:id/comments", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { comment } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid update ID" });
+    }
+
+    if (!comment || !comment.trim()) {
+      return res.status(400).json({ message: "Comment is required" });
+    }
+
+    const { error, update, isClient, isFreelancer, status: errorStatus } = 
+      await checkUpdateAuthorization(id, req.user.id, req.user.role);
+    
+    if (error) {
+      return res.status(errorStatus).json({ message: error });
+    }
+
+    // Add comment based on role
+    if (isFreelancer) {
+      update.freelancer_comment = comment.trim();
+    } else if (isClient) {
+      update.client_comment = comment.trim();
+    } else {
+      return res.status(403).json({ message: "Unauthorized to comment" });
+    }
+
+    update.last_updated_by = req.user.id;
+    await update.save();
+
+    // Notify the other party
+    const recipient_id = isFreelancer ? update.client_id : update.freelancer_id;
+    const recipient_model = isFreelancer ? 'Client' : 'Freelancer';
+    const sender_id = req.user.id;
+    const sender_model = isFreelancer ? 'Freelancer' : 'Client';
+
+    await NotificationService.createNotification({
+      recipient_id,
+      recipient_model,
+      sender_id,
+      sender_model,
+      type: 'project_update_comment',
+      title: 'New Comment on Project Update',
+      message: `${req.user.role} added a comment: "${comment.substring(0, 100)}${comment.length > 100 ? '...' : ''}"`,
+      reference_id: update._id,
+      reference_model: 'ProjectUpdate',
+      priority: 'medium'
+    });
+
+    res.json({
+      message: "Comment added successfully",
+      projectUpdate: update
+    });
+  } catch (error) {
+    console.error("Error adding comment:", error);
+    res.status(500).json({ 
+      message: "Error adding comment", 
       error: error.message 
     });
   }

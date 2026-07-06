@@ -5,7 +5,8 @@ import applicationReducer from '../slices/applicationSlice';
 import messageReducer from '../slices/messageSlice';
 import ratingReducer from '../slices/ratingSlice';
 import contractReducer from '../slices/contractSlice';
-import projectUpdateReducer from '../slices/projectUpdateSlice'; // Renamed import
+import projectUpdateReducer from '../slices/projectUpdateSlice'; 
+import notificationReducer from '../slices/notificationSlice';
 
 export const store = configureStore({
   reducer: {
@@ -15,6 +16,7 @@ export const store = configureStore({
     messages: messageReducer,
     ratings: ratingReducer,
     contracts: contractReducer,
-    projectUpdates: projectUpdateReducer, // ← Change this to match selectors
+    projectUpdates: projectUpdateReducer, 
+    notifications: notificationReducer,
   },
 });

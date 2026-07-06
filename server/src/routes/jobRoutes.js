@@ -1,3 +1,4 @@
+// src/routes/jobRoutes.js
 import express from "express";
 import mongoose from "mongoose";
 import { authMiddleware } from "../middleware/authMiddleware.js";
@@ -7,10 +8,17 @@ import Freelancer from "../models/Freelancer.js";
 import Application from "../models/Application.js";
 import SavedJob from "../models/SavedJob.js";
 import { upload } from "../config/cloudinary.js";
+import { 
+  sendNewJobNotification, 
+  sendJobPostedConfirmation,
+  sendBulkJobNotifications 
+} from "../services/emailService.js";
+import NotificationService from "../services/notificationService.js";
 
 const router = express.Router();
 
-// Helper function to safely parse JSON fields
+// ==================== HELPER FUNCTIONS ====================
+
 const parseJSONField = (value) => {
   if (!value) return null;
   if (typeof value === 'object') return value;
@@ -21,7 +29,6 @@ const parseJSONField = (value) => {
   }
 };
 
-// Helper function to parse array fields
 const parseArrayField = (field) => {
   if (!field) return [];
   if (Array.isArray(field)) return field;
@@ -36,7 +43,6 @@ const parseArrayField = (field) => {
   return [];
 };
 
-// Helper function to check if client owns the job
 const checkJobOwnership = async (jobId, clientId) => {
   const job = await Job.findById(jobId);
   if (!job) return { error: "Job not found", status: 404 };
@@ -46,12 +52,10 @@ const checkJobOwnership = async (jobId, clientId) => {
   return { job };
 };
 
-// Helper function to calculate profile insights
 const calculateProfileInsights = async (job, freelancerId) => {
   const freelancer = await Freelancer.findById(freelancerId);
   if (!freelancer) return null;
 
-  // 1. Skill Match Calculation
   const freelancerSkills = freelancer.skills || [];
   const jobSkills = job.required_skills || [];
   
@@ -67,16 +71,13 @@ const calculateProfileInsights = async (job, freelancerId) => {
     ? (matchingSkills.length / jobSkills.length) * 100 
     : 100;
 
-  // 2. Experience Match
   const freelancerYears = freelancer.years_of_experience || 0;
-  const requiredExperience = freelancer.experience || {};
-  const requiredYears = requiredExperience.min_years || 0;
+  const requiredYears = job.requirements?.min_years || 0;
   const experienceMatchPercentage = requiredYears > 0 
     ? Math.min((freelancerYears / requiredYears) * 100, 100)
     : 100;
   const isExperienceSufficient = freelancerYears >= requiredYears;
 
-  // 3. Education Match - using schema requirements.education
   const freelancerEducation = freelancer.education || [];
   const requiredEducation = job.requirements?.education || 'none';
   
@@ -102,7 +103,6 @@ const calculateProfileInsights = async (job, freelancerId) => {
     educationMatchPercentage = 0;
   }
 
-  // 4. Location Match
   let locationMatchPercentage = 100;
   let locationMessage = "";
   
@@ -130,7 +130,6 @@ const calculateProfileInsights = async (job, freelancerId) => {
     locationMessage = "Remote position - work from anywhere";
   }
 
-  // 5. Overall Match Percentage
   const overallMatchPercentage = Math.round(
     (skillMatchPercentage * 0.4) +
     (experienceMatchPercentage * 0.25) +
@@ -190,7 +189,7 @@ const calculateProfileInsights = async (job, freelancerId) => {
 
 // ==================== CLIENT ROUTES ====================
 
-// Create a new job posting (Client only)
+// Create a new job posting (Client only) - WITH EMAIL NOTIFICATIONS
 router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
   try {
     console.log("=== CREATE JOB REQUEST ===");
@@ -228,7 +227,6 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
     const budgetNegotiable = req.body.budget_negotiable === 'true' || req.body.budget_negotiable === true;
     const hideBudget = req.body.hide_budget === 'true' || req.body.hide_budget === true;
     
-    // Validate budget
     if (!budgetType) {
       return res.status(400).json({ message: "Budget type is required" });
     }
@@ -269,7 +267,7 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
       return res.status(400).json({ message: "Job category is required" });
     }
 
-    // Build the job data object matching the schema
+    // Build the job data object
     const jobData = {
       client_id: req.user.id,
       title,
@@ -284,7 +282,6 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
       vacancies,
       timezone,
       
-      // ===== BUDGET =====
       budget: {
         type: budgetType,
         min: budgetMin,
@@ -294,7 +291,6 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
         hide_budget: hideBudget
       },
       
-      // ===== TIMELINE =====
       timeline: {
         duration_value: durationValue,
         duration_unit: durationUnit,
@@ -304,7 +300,6 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
         end_date: endDate
       },
       
-      // ===== REQUIREMENTS =====
       requirements: requirements || {
         education: 'none',
         portfolio_required: false,
@@ -314,13 +309,11 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
         preferred_certifications: []
       },
       
-      // ===== SCREENING QUESTIONS =====
       screening_questions: screeningQuestions.map(q => ({
         question: q.question || q,
         required: q.required !== undefined ? q.required : true
       })),
       
-      // ===== HIRING SETTINGS =====
       hiring: {
         max_applicants: maxApplicants,
         auto_accept: autoAccept,
@@ -332,7 +325,6 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
       visibility
     };
 
-    // Add optional fields if provided
     if (location && typeof location === 'object') {
       jobData.location = {
         country: location.country || "Philippines",
@@ -354,6 +346,117 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
 
     const job = new Job(jobData);
     await job.save();
+
+    // ==================== SEND EMAIL NOTIFICATIONS ====================
+    
+    try {
+      // 1. Send confirmation to client
+      const clientJobData = {
+        title: job.title,
+        job_id: job._id,
+        status: job.status,
+        posted_date: new Date().toLocaleDateString(),
+        job_type: job.job_type,
+        budget: job.budget,
+        category: job.category
+      };
+      
+      await sendJobPostedConfirmation(
+        client.email_address,
+        clientJobData,
+        client.first_name
+      );
+      console.log(`✅ Job confirmation email sent to client: ${client.email_address}`);
+      
+      // 2. Find freelancers with matching skills
+      const matchingFreelancers = await Freelancer.find({
+        account_status: 'active',
+        is_email_verified: true,
+        'rating.average': { $gte: 3 },
+        skills: { $in: required_skills || [] },
+        availability_status: 'available'
+      }).limit(100);
+      
+      console.log(`🔍 Found ${matchingFreelancers.length} matching freelancers`);
+      
+      // 3. Send job notifications to matching freelancers
+      if (matchingFreelancers.length > 0) {
+        const jobNotificationData = {
+          title: job.title,
+          description: job.description,
+          category: job.category,
+          job_type: job.job_type,
+          budget: job.budget,
+          company_name: client.company_name || `${client.first_name} ${client.last_name}`,
+          client_name: `${client.first_name} ${client.last_name}`,
+          client_email: client.email_address,
+          client_phone: client.phone_number,
+          client_company: client.company_name,
+          client_profile_picture: client.profile_picture,
+          client_bio: client.bio_about,
+          client_rating: client.rating,
+          posted_date: new Date().toLocaleDateString(),
+          job_id: job._id,
+          required_skills: job.required_skills,
+          experience_level: job.experience_level,
+          work_setup: job.work_setup,
+          application_deadline: job.application_deadline,
+          location: job.location
+        };
+        
+        // Send bulk emails
+        const results = await sendBulkJobNotifications(matchingFreelancers, jobNotificationData);
+        
+        const successful = results.filter(r => r.success).length;
+        console.log(`📧 Job notifications sent to ${successful} freelancers`);
+        
+        // 4. Create in-app notifications for freelancers
+        for (const freelancer of matchingFreelancers.slice(0, 20)) {
+          await NotificationService.createNotification({
+            recipient_id: freelancer._id,
+            recipient_model: 'Freelancer',
+            sender_id: client._id,
+            sender_model: 'Client',
+            type: 'job_posted',
+            title: 'New Job Matching Your Skills',
+            message: `${job.title} - ${job.budget?.type} job with budget ${job.budget?.min}-${job.budget?.max}`,
+            reference_id: job._id,
+            reference_model: 'Job',
+            priority: 'medium',
+            actions: [
+              {
+                label: 'View & Apply',
+                action_type: 'view_job',
+                data: { job_id: job._id },
+              },
+            ],
+          });
+        }
+      }
+      
+      // 5. Create in-app notification for client
+      await NotificationService.createNotification({
+        recipient_id: client._id,
+        recipient_model: 'Client',
+        type: 'job_posted',
+        title: 'Job Posted Successfully',
+        message: `Your job "${job.title}" is now live and open for applications`,
+        reference_id: job._id,
+        reference_model: 'Job',
+        priority: 'high',
+        actions: [
+          {
+            label: 'View Job',
+            action_type: 'view_job',
+            data: { job_id: job._id },
+          },
+        ],
+      });
+      
+    } catch (emailError) {
+      console.error('❌ Email notification error:', emailError.message);
+      // Don't fail job creation if email fails
+    }
 
     res.status(201).json({
       message: "Job posted successfully",
@@ -383,7 +486,10 @@ router.get("/client/jobs", authMiddleware, async (req, res) => {
     if (status) query.status = status;
 
     const jobs = await Job.find(query)
-      .populate("assigned_freelancer_id", "first_name last_name email_address")
+      .populate({
+        path: "assigned_freelancer_id",
+        select: "first_name last_name email_address profile_picture username rating"
+      })
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -405,7 +511,7 @@ router.get("/client/jobs", authMiddleware, async (req, res) => {
   }
 });
 
-// Get a single job by ID
+// Get a single job by ID - WITH FULL CLIENT INFORMATION
 router.get("/jobs/:id", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
@@ -415,8 +521,52 @@ router.get("/jobs/:id", authMiddleware, async (req, res) => {
     }
 
     const job = await Job.findOne({ _id: id, is_deleted: false })
-      .populate("client_id", "first_name last_name email_address company_name profile_picture")
-      .populate("assigned_freelancer_id", "first_name last_name email_address profile_picture");
+      .populate({
+        path: "client_id",
+        select: [
+          "first_name",
+          "last_name",
+          "email_address",
+          "company_name",
+          "company_logo",
+          "company_logo_public_id",
+          "company_size",
+          "business_type",
+          "industry",
+          "business_email",
+          "is_company_email_verified",
+          "profile_picture",
+          "profile_picture_public_id",
+          "phone_number",
+          "country",
+          "city",
+          "address",
+          "bio_about",
+          "website",
+          "client_type",
+          "rating",
+          "total_jobs_completed",
+          "account_status",
+          "created_at",
+          "updated_at"
+        ]
+      })
+      .populate({
+        path: "assigned_freelancer_id",
+        select: [
+          "first_name",
+          "last_name",
+          "username",
+          "email_address",
+          "profile_picture",
+          "skills",
+          "experience_level",
+          "rating",
+          "hourly_rate",
+          "availability_status",
+          "total_jobs_completed"
+        ]
+      });
 
     if (!job) {
       return res.status(404).json({ message: "Job not found" });
@@ -436,7 +586,69 @@ router.get("/jobs/:id", authMiddleware, async (req, res) => {
     job.analytics.views = (job.analytics.views || 0) + 1;
     await job.save();
 
-    res.json({ job });
+    // Format client response with ALL information
+    const clientData = job.client_id ? {
+      id: job.client_id._id,
+      first_name: job.client_id.first_name,
+      last_name: job.client_id.last_name,
+      full_name: `${job.client_id.first_name} ${job.client_id.last_name}`,
+      email_address: job.client_id.email_address,
+      phone_number: job.client_id.phone_number,
+      profile_picture: job.client_id.profile_picture,
+      
+      // Company Information
+      company_name: job.client_id.company_name,
+      company_logo: job.client_id.company_logo,
+      company_logo_public_id: job.client_id.company_logo_public_id,
+      company_size: job.client_id.company_size,
+      business_type: job.client_id.business_type,
+      industry: job.client_id.industry,
+      business_email: job.client_id.business_email,
+      is_company_email_verified: job.client_id.is_company_email_verified,
+      client_type: job.client_id.client_type,
+      
+      // Location
+      country: job.client_id.country,
+      city: job.client_id.city,
+      address: job.client_id.address,
+      
+      // Bio & Website
+      bio_about: job.client_id.bio_about,
+      website: job.client_id.website,
+      
+      // Rating
+      rating: job.client_id.rating || { average: 0, count: 0 },
+      total_jobs_completed: job.client_id.total_jobs_completed || 0,
+      
+      // Status
+      account_status: job.client_id.account_status,
+      
+      // Joined date
+      joined_at: job.client_id.created_at,
+      updated_at: job.client_id.updated_at,
+      
+      // Display name (virtual)
+      display_name: job.client_id.client_type === 'business' && job.client_id.company_name 
+        ? job.client_id.company_name 
+        : `${job.client_id.first_name} ${job.client_id.last_name}`
+    } : null;
+
+    const response = {
+      job: {
+        ...job.toObject(),
+        client: clientData,
+        client_id: job.client_id ? {
+          _id: job.client_id._id,
+          display_name: clientData?.display_name,
+          profile_picture: job.client_id.profile_picture,
+          company_name: job.client_id.company_name,
+          rating: job.client_id.rating,
+          client_type: job.client_id.client_type
+        } : null
+      }
+    };
+
+    res.json(response);
   } catch (error) {
     console.error("Error fetching job:", error);
     res.status(500).json({ 
@@ -503,7 +715,6 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
     // Build update object
     const updates = {};
     
-    // Simple fields
     const simpleFields = [
       "title", "description", "category", "subcategory", 
       "job_type", "work_setup", "experience_level", "visibility",
@@ -523,7 +734,6 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       }
     });
 
-    // Array fields
     if (req.body.required_skills !== undefined) {
       updates.required_skills = parseArrayField(req.body.required_skills);
     }
@@ -531,7 +741,7 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       updates.tags = parseArrayField(req.body.tags);
     }
 
-    // ===== BUDGET UPDATES =====
+    // Budget updates
     if (req.body.budget_type !== undefined || req.body.budget_min !== undefined || 
         req.body.budget_max !== undefined || req.body.budget_currency !== undefined || 
         req.body.budget_negotiable !== undefined || req.body.hide_budget !== undefined) {
@@ -558,7 +768,7 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       }
     }
 
-    // ===== TIMELINE UPDATES =====
+    // Timeline updates
     if (req.body.duration_value !== undefined || req.body.duration_unit !== undefined || 
         req.body.estimated_hours !== undefined || req.body.weekly_limit !== undefined ||
         req.body.start_date !== undefined || req.body.end_date !== undefined) {
@@ -585,7 +795,7 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       }
     }
 
-    // ===== HIRING UPDATES =====
+    // Hiring updates
     if (req.body.max_applicants !== undefined || req.body.auto_accept !== undefined || 
         req.body.allow_multiple_hires !== undefined) {
       
@@ -602,7 +812,7 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       }
     }
 
-    // ===== REQUIREMENTS UPDATES =====
+    // Requirements updates
     if (req.body.requirements !== undefined) {
       const reqData = parseJSONField(req.body.requirements);
       updates.requirements = {
@@ -615,7 +825,7 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       };
     }
 
-    // ===== LOCATION UPDATES =====
+    // Location updates
     if (req.body.location !== undefined) {
       const loc = parseJSONField(req.body.location);
       updates.location = {
@@ -627,7 +837,7 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       };
     }
 
-    // ===== SCREENING QUESTIONS UPDATES =====
+    // Screening questions updates
     if (req.body.screening_questions !== undefined) {
       const questions = parseArrayField(req.body.screening_questions);
       updates.screening_questions = questions.map(q => ({
@@ -636,7 +846,7 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       }));
     }
 
-    // ===== ATTACHMENTS UPDATES =====
+    // Attachments updates
     if (req.body.attachments !== undefined) {
       const attachments = parseArrayField(req.body.attachments);
       updates.attachments = attachments.map(att => ({
@@ -646,7 +856,7 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       }));
     }
 
-    // ===== FEATURES =====
+    // Features
     if (req.body.featured !== undefined) {
       updates.featured = req.body.featured === 'true' || req.body.featured === true;
     }
@@ -730,7 +940,6 @@ router.delete("/jobs/:id", authMiddleware, async (req, res) => {
       return res.status(errorStatus).json({ message: error });
     }
 
-    // Soft delete
     await Job.findByIdAndUpdate(id, { is_deleted: true });
 
     res.json({ 
@@ -747,7 +956,7 @@ router.delete("/jobs/:id", authMiddleware, async (req, res) => {
 
 // ==================== FREELANCER ROUTES ====================
 
-// Get all open jobs with enhanced filters
+// Get all open jobs with enhanced filters - WITH FULL CLIENT INFO
 router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "freelancer") {
@@ -781,19 +990,16 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
       visibility: "public"
     };
 
-    // Text search using MongoDB text index
     if (search) {
       query.$text = { $search: search };
     }
 
-    // Filters
     if (job_type) query.job_type = job_type;
     if (work_setup) query.work_setup = work_setup;
     if (experience_level) query.experience_level = experience_level;
     if (category) query.category = category;
     if (subcategory) query.subcategory = subcategory;
     
-    // Budget filters
     if (budget_type) query["budget.type"] = budget_type;
     if (min_budget || max_budget) {
       query["budget.max"] = {};
@@ -801,13 +1007,11 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
       if (max_budget) query["budget.max"].$lte = parseFloat(max_budget);
     }
 
-    // Skills filter
     if (skills) {
       const skillsArray = skills.split(",");
       query.required_skills = { $in: skillsArray };
     }
 
-    // Location filters
     if (city) {
       query["location.city"] = { $regex: city, $options: "i" };
     }
@@ -818,7 +1022,6 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
       query["location.country"] = { $regex: country, $options: "i" };
     }
 
-    // Sort options
     const sortOptions = {};
     if (sort_by === 'recent') {
       sortOptions.createdAt = -1;
@@ -833,15 +1036,57 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
     }
 
     const jobs = await Job.find(query)
-      .populate("client_id", "first_name last_name company_name profile_picture")
+      .populate({
+        path: "client_id",
+        select: [
+          "first_name", "last_name", "email_address", "company_name",
+          "company_logo", "company_size", "business_type", "industry",
+          "business_email", "profile_picture", "phone_number",
+          "country", "city", "address", "bio_about", "website",
+          "client_type", "rating", "total_jobs_completed",
+          "account_status", "created_at"
+        ]
+      })
       .sort(sortOptions)
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
+    // Format response with full client info
+    const formattedJobs = jobs.map(job => {
+      const client = job.client_id;
+      return {
+        ...job.toObject(),
+        client: client ? {
+          id: client._id,
+          first_name: client.first_name,
+          last_name: client.last_name,
+          full_name: `${client.first_name} ${client.last_name}`,
+          email: client.email_address,
+          phone: client.phone_number,
+          company_name: client.company_name,
+          company_logo: client.company_logo,
+          profile_picture: client.profile_picture,
+          business_type: client.business_type,
+          industry: client.industry,
+          client_type: client.client_type,
+          rating: client.rating || { average: 0, count: 0 },
+          total_jobs_completed: client.total_jobs_completed || 0,
+          bio_about: client.bio_about,
+          website: client.website,
+          country: client.country,
+          city: client.city,
+          address: client.address,
+          display_name: client.client_type === 'business' && client.company_name 
+            ? client.company_name 
+            : `${client.first_name} ${client.last_name}`
+        } : null
+      };
+    });
+
     const total = await Job.countDocuments(query);
 
     res.json({
-      jobs,
+      jobs: formattedJobs,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
       totalJobs: total
@@ -873,7 +1118,6 @@ router.get("/jobs/stats/dashboard", authMiddleware, async (req, res) => {
       const totalViews = jobs.reduce((sum, job) => sum + (job.analytics?.views || 0), 0);
       const totalSaves = jobs.reduce((sum, job) => sum + (job.analytics?.saves || 0), 0);
 
-      // Additional stats
       const jobsByType = {};
       const jobsByCategory = {};
       jobs.forEach(job => {
@@ -899,7 +1143,6 @@ router.get("/jobs/stats/dashboard", authMiddleware, async (req, res) => {
       const appliedJobs = await Application.countDocuments({ freelancer_id: req.user.id });
       const savedJobs = await SavedJob.countDocuments({ freelancer_id: req.user.id });
       
-      // Get application status breakdown
       const applicationStatuses = await Application.aggregate([
         { $match: { freelancer_id: new mongoose.Types.ObjectId(req.user.id) } },
         { $group: { _id: "$status", count: { $sum: 1 } } }

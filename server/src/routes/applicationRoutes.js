@@ -9,17 +9,24 @@ import Job from "../models/Job.js";
 import Client from "../models/Client.js";
 import Freelancer from "../models/Freelancer.js";
 import SavedJob from "../models/SavedJob.js";
+import ApplicationService from "../services/applicationService.js";
 
 const router = express.Router();
 
-// Configure multer for memory storage
+// ── Configure multer for memory storage ──────────────────────────────────────
 const storage = multer.memoryStorage();
 
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { 
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const allowedTypes = [
+      'application/pdf', 
+      'application/msword', 
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
@@ -28,7 +35,7 @@ const upload = multer({
   }
 });
 
-// Helper function to upload file to Cloudinary from buffer
+// ── Helper function to upload file to Cloudinary from buffer ──────────────────
 const uploadToCloudinary = async (fileBuffer, originalName, mimetype) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
@@ -47,7 +54,33 @@ const uploadToCloudinary = async (fileBuffer, originalName, mimetype) => {
   });
 };
 
-// ==================== FREELANCER ROUTES ====================
+// ── Helper to log FormData fields ─────────────────────────────────────────────
+const logFormData = (req) => {
+  console.log("=== FORM DATA RECEIVED ===");
+  console.log("Body keys:", Object.keys(req.body));
+  console.log("File:", req.file ? {
+    originalname: req.file.originalname,
+    mimetype: req.file.mimetype,
+    size: req.file.size,
+    fieldname: req.file.fieldname
+  } : 'NO FILE');
+  
+  // Log each body field
+  Object.keys(req.body).forEach(key => {
+    const value = req.body[key];
+    if (key === 'education' || key === 'experiences') {
+      try {
+        console.log(`${key}:`, JSON.parse(value));
+      } catch (e) {
+        console.log(`${key}:`, value);
+      }
+    } else {
+      console.log(`${key}:`, value);
+    }
+  });
+};
+
+// ── ==================== FREELANCER ROUTES ==================== ──
 
 // Apply for a job WITHOUT file upload (JSON only)
 router.post("/applications", authMiddleware, async (req, res) => {
@@ -67,72 +100,53 @@ router.post("/applications", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Cover letter is required" });
     }
 
-    const freelancer = await Freelander.findById(req.user.id);
-    if (!freelancer) {
-      return res.status(404).json({ message: "Freelancer not found" });
+    // Parse education and experiences if they are strings
+    let educationData = null;
+    let experiencesData = null;
+    
+    if (education) {
+      try {
+        educationData = typeof education === 'string' ? JSON.parse(education) : education;
+      } catch (e) {
+        educationData = education;
+      }
+    }
+    
+    if (experiences) {
+      try {
+        experiencesData = typeof experiences === 'string' ? JSON.parse(experiences) : experiences;
+      } catch (e) {
+        experiencesData = experiences;
+      }
     }
 
-    const job = await Job.findById(job_id);
+    // Check if job exists
+    const job = await Job.findOne({ _id: job_id, is_deleted: false });
     if (!job) {
       return res.status(404).json({ message: "Job not found" });
     }
-    if (job.status !== "open") {
-      return res.status(400).json({ message: "This job is no longer accepting applications" });
-    }
 
+    // Check if freelancer already applied
     const existingApplication = await Application.findOne({
-      job_id,
-      freelancer_id: req.user.id
+      job_id: job_id,
+      freelancer_id: req.user.id,
+      status: { $nin: ['withdrawn', 'rejected'] }
     });
-
+    
     if (existingApplication) {
       return res.status(400).json({ message: "You have already applied for this job" });
     }
 
-    const newApplicationData = {
+    // Use ApplicationService
+    const application = await ApplicationService.submitApplication({
       job_id,
       freelancer_id: req.user.id,
       cover_letter: cover_letter.trim(),
       proposed_rate: proposed_rate ? parseFloat(proposed_rate) : 0,
-      status: "pending",
-      viewed_by_client: false,
-    };
-
-    // Handle education if provided
-    if (education) {
-      if (typeof education === 'string') {
-        try {
-          newApplicationData.education = JSON.parse(education);
-        } catch (e) {
-          newApplicationData.education = education;
-        }
-      } else {
-        newApplicationData.education = education;
-      }
-    }
-
-    // Handle experiences if provided
-    if (experiences) {
-      if (typeof experiences === 'string') {
-        try {
-          newApplicationData.experiences = JSON.parse(experiences);
-        } catch (e) {
-          // If parsing fails, treat as single experience
-          newApplicationData.experiences = [experiences];
-        }
-      } else if (Array.isArray(experiences)) {
-        newApplicationData.experiences = experiences;
-      } else {
-        newApplicationData.experiences = [experiences];
-      }
-    }
-
-    const application = new Application(newApplicationData);
-    await application.save();
-
-    // Update job analytics
-    job.analytics.applications = (job.analytics.applications || 0) + 1;
-    await job.save();
+      resume: null,
+      education: educationData,
+      experiences: experiencesData
+    });
 
     const populatedApplication = await Application.findById(application._id)
       .populate("job_id", "title budget category job_type work_setup")
@@ -152,20 +166,26 @@ router.post("/applications", authMiddleware, async (req, res) => {
 router.post("/applications/with-resume", authMiddleware, upload.single('resume'), async (req, res) => {
   try {
     console.log("=== START APPLICATION WITH RESUME SUBMISSION ===");
+    logFormData(req);
     
     if (req.user.role !== "freelancer") {
       if (req.file) {
-        await cloudinary.uploader.destroy(req.file.filename);
+        try {
+          await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
+        } catch (e) {}
       }
       return res.status(403).json({ message: "Only freelancers can apply for jobs" });
     }
 
+    // Parse education and experiences
     let educationData = null;
     let experiencesData = null;
     
     if (req.body.education) {
       try {
-        educationData = JSON.parse(req.body.education);
+        educationData = typeof req.body.education === 'string' 
+          ? JSON.parse(req.body.education) 
+          : req.body.education;
       } catch (e) {
         educationData = req.body.education;
       }
@@ -173,7 +193,9 @@ router.post("/applications/with-resume", authMiddleware, upload.single('resume')
     
     if (req.body.experiences) {
       try {
-        experiencesData = JSON.parse(req.body.experiences);
+        experiencesData = typeof req.body.experiences === 'string' 
+          ? JSON.parse(req.body.experiences) 
+          : req.body.experiences;
       } catch (e) {
         experiencesData = req.body.experiences;
       }
@@ -181,90 +203,99 @@ router.post("/applications/with-resume", authMiddleware, upload.single('resume')
 
     const { job_id, cover_letter, proposed_rate } = req.body;
 
+    // Validate required fields
     if (!job_id) {
-      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      if (req.file) {
+        try {
+          await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
+        } catch (e) {}
+      }
       return res.status(400).json({ message: "Job ID is required" });
     }
+    
     if (!cover_letter || !cover_letter.trim()) {
-      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      if (req.file) {
+        try {
+          await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
+        } catch (e) {}
+      }
       return res.status(400).json({ message: "Cover letter is required" });
     }
 
-    const freelancer = await Freelancer.findById(req.user.id);
-    if (!freelancer) {
-      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
-      return res.status(404).json({ message: "Freelancer not found" });
-    }
-
-    const job = await Job.findById(job_id);
+    // Check if job exists
+    const job = await Job.findOne({ _id: job_id, is_deleted: false });
     if (!job) {
-      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      if (req.file) {
+        try {
+          await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
+        } catch (e) {}
+      }
       return res.status(404).json({ message: "Job not found" });
     }
-    if (job.status !== "open") {
-      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
-      return res.status(400).json({ message: "This job is no longer accepting applications" });
-    }
 
+    // Check if freelancer already applied
     const existingApplication = await Application.findOne({
-      job_id,
-      freelancer_id: req.user.id
+      job_id: job_id,
+      freelancer_id: req.user.id,
+      status: { $nin: ['withdrawn', 'rejected'] }
     });
-
+    
     if (existingApplication) {
-      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
+      if (req.file) {
+        try {
+          await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
+        } catch (e) {}
+      }
       return res.status(400).json({ message: "You have already applied for this job" });
     }
 
+    // Upload resume to Cloudinary if file exists
     let resumeData = null;
     if (req.file) {
       try {
+        console.log(`Uploading resume: ${req.file.originalname} (${req.file.size} bytes)`);
         const result = await uploadToCloudinary(req.file.buffer, req.file.originalname, req.file.mimetype);
         resumeData = {
           name: req.file.originalname,
           url: result.secure_url,
-          public_id: result.public_id,
           mime_type: req.file.mimetype,
           size: req.file.size,
         };
+        console.log("Resume uploaded successfully:", result.secure_url);
       } catch (uploadError) {
         console.error("Cloudinary upload error:", uploadError);
-        return res.status(500).json({ message: "Failed to upload resume" });
+        if (req.file) {
+          try {
+            await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
+          } catch (e) {}
+        }
+        return res.status(500).json({ message: "Failed to upload resume. Please try again." });
       }
+    } else {
+      return res.status(400).json({ message: "Resume file is required" });
     }
 
-    const newApplicationData = {
+    // Create application
+    const application = await ApplicationService.submitApplication({
       job_id,
       freelancer_id: req.user.id,
       cover_letter: cover_letter.trim(),
       proposed_rate: proposed_rate ? parseFloat(proposed_rate) : 0,
-      status: "pending",
-      viewed_by_client: false,
       resume: resumeData,
-    };
-
-    if (educationData) {
-      newApplicationData.education = educationData;
-    }
-
-    if (experiencesData) {
-      if (Array.isArray(experiencesData)) {
-        newApplicationData.experiences = experiencesData;
-      } else {
-        newApplicationData.experiences = [experiencesData];
-      }
-    }
-
-    const application = new Application(newApplicationData);
-    await application.save();
+      education: educationData,
+      experiences: experiencesData
+    });
 
     // Update job analytics
     job.analytics.applications = (job.analytics.applications || 0) + 1;
     await job.save();
 
+    // Populate application
     const populatedApplication = await Application.findById(application._id)
       .populate("job_id", "title budget category job_type work_setup")
       .populate("freelancer_id", "first_name last_name username profile_picture rating");
+
+    console.log("Application created successfully with ID:", application._id);
 
     res.status(201).json({
       message: "Application submitted successfully",
@@ -274,10 +305,14 @@ router.post("/applications/with-resume", authMiddleware, upload.single('resume')
     console.error("Error creating application with resume:", error);
     if (req.file) {
       try {
-        await cloudinary.uploader.destroy(req.file.filename);
+        await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
       } catch (e) {}
     }
-    res.status(500).json({ message: "Error submitting application", error: error.message });
+    res.status(500).json({ 
+      message: "Error submitting application", 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -311,7 +346,7 @@ router.get("/freelancer/applications", authMiddleware, async (req, res) => {
     res.json({
       applications,
       totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      currentPage: parseInt(page),
       totalApplications: total
     });
   } catch (error) {
@@ -369,7 +404,7 @@ router.patch("/applications/:applicationId/withdraw", authMiddleware, async (req
   }
 });
 
-// ==================== SAVED JOBS ROUTES ====================
+// ── ==================== SAVED JOBS ROUTES ==================== ──
 
 // Save a job for later (Freelancer only)
 router.post("/applications/save", authMiddleware, async (req, res) => {
@@ -467,7 +502,7 @@ router.get("/applications/saved", authMiddleware, async (req, res) => {
     res.json({
       savedJobs: validSavedJobs,
       totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      currentPage: parseInt(page),
       totalSaved: total
     });
   } catch (error) {
@@ -543,7 +578,7 @@ router.get("/applications/saved/check/:jobId", authMiddleware, async (req, res) 
   }
 });
 
-// ==================== CLIENT ROUTES ====================
+// ── ==================== CLIENT ROUTES ==================== ──
 
 // Get applications for a specific job (Client only)
 router.get("/jobs/:jobId/applications", authMiddleware, async (req, res) => {
@@ -588,7 +623,7 @@ router.get("/jobs/:jobId/applications", authMiddleware, async (req, res) => {
     res.json({
       applications,
       totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      currentPage: parseInt(page),
       totalApplications: total
     });
   } catch (error) {
@@ -597,11 +632,11 @@ router.get("/jobs/:jobId/applications", authMiddleware, async (req, res) => {
   }
 });
 
-// Update application status (Client only)
+// Update application status (Client only) - Using ApplicationService
 router.patch("/applications/:applicationId/status", authMiddleware, async (req, res) => {
   try {
     const { applicationId } = req.params;
-    const { status, interview } = req.body;
+    const { status, interview, offer, notes } = req.body;
 
     if (req.user.role !== "client") {
       return res.status(403).json({ message: "Access denied. Clients only." });
@@ -617,6 +652,7 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
       return res.status(400).json({ message: "Invalid status" });
     }
 
+    // Get application to check ownership
     const application = await Application.findById(applicationId)
       .populate("job_id", "client_id title status")
       .populate("freelancer_id", "first_name last_name email_address");
@@ -629,28 +665,46 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
       return res.status(403).json({ message: "Access denied" });
     }
 
-    application.status = status;
-    
-    // If status is 'interview', save interview data
+    // Handle offer creation separately if status is 'offered'
+    if (status === 'offered') {
+      if (!offer || !offer.amount) {
+        return res.status(400).json({ message: "Offer amount is required" });
+      }
+      
+      // Use ApplicationService to send offer
+      const updatedApplication = await ApplicationService.sendOffer({
+        application_id: applicationId,
+        client_id: req.user.id,
+        amount: offer.amount,
+        message: offer.message || "We would like to offer you this position."
+      });
+      
+      return res.json({ 
+        message: "Offer sent successfully", 
+        application: updatedApplication 
+      });
+    }
+
+    // For other status updates, use updateApplicationStatus
+    const updatedApplication = await ApplicationService.updateApplicationStatus({
+      application_id: applicationId,
+      status: status,
+      client_id: req.user.id,
+      notes: notes || null
+    });
+
+    // Handle interview data if status is 'interview'
     if (status === 'interview' && interview) {
-      application.interview = {
+      updatedApplication.interview = {
         scheduled_date: interview.scheduled_date ? new Date(interview.scheduled_date) : null,
         meeting_link: interview.meeting_link || null,
         notes: interview.notes || null,
         sent_at: new Date(),
       };
+      await updatedApplication.save();
     }
 
-    // If status is 'offered', update offer data
-    if (status === 'offered' && req.body.offer) {
-      application.offer = {
-        amount: req.body.offer.amount || null,
-        message: req.body.offer.message || null,
-        sent_at: new Date(),
-      };
-    }
-
-    // If status is 'hired', update job status to 'in_progress' and assign freelancer
+    // If status is 'hired', update job status
     if (status === 'hired') {
       const job = await Job.findById(application.job_id._id);
       if (job) {
@@ -669,11 +723,9 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
       }
     }
 
-    await application.save();
-
     res.json({ 
       message: `Application status updated to ${status}`, 
-      application 
+      application: updatedApplication 
     });
   } catch (error) {
     console.error("Error updating application status:", error);
@@ -681,7 +733,36 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
   }
 });
 
-// Get application details (Client or Freelancer)
+// Accept offer (Freelancer only) - Using ApplicationService
+router.post("/applications/:applicationId/accept-offer", authMiddleware, async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+
+    if (req.user.role !== "freelancer") {
+      return res.status(403).json({ message: "Only freelancers can accept offers" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(applicationId)) {
+      return res.status(400).json({ message: "Invalid application ID" });
+    }
+
+    // Use ApplicationService to accept offer
+    const contract = await ApplicationService.acceptOffer({
+      application_id: applicationId,
+      freelancer_id: req.user.id
+    });
+
+    res.json({
+      message: "Offer accepted successfully",
+      contract: contract
+    });
+  } catch (error) {
+    console.error("Error accepting offer:", error);
+    res.status(500).json({ message: "Error accepting offer", error: error.message });
+  }
+});
+
+// Get application details (Client or Freelancer) - With full data
 router.get("/applications/:applicationId", authMiddleware, async (req, res) => {
   try {
     const { applicationId } = req.params;
@@ -691,12 +772,12 @@ router.get("/applications/:applicationId", authMiddleware, async (req, res) => {
     }
 
     const application = await Application.findById(applicationId)
-      .populate("job_id", "title description budget category required_skills work_setup job_type experience_level")
+      .populate("job_id", "title description budget category required_skills work_setup job_type experience_level client_id")
       .populate({
         path: "job_id",
         populate: {
           path: "client_id",
-          select: "first_name last_name company_name profile_picture rating"
+          select: "first_name last_name company_name profile_picture rating email_address phone_number"
         }
       })
       .populate("freelancer_id", "first_name last_name username email_address profile_picture skills experience_level years_of_experience hourly_rate bio_about_me rating portfolio");
@@ -713,7 +794,24 @@ router.get("/applications/:applicationId", authMiddleware, async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    res.json({ application });
+    // If client is viewing, mark as viewed
+    if (isClient) {
+      application.viewed_by_client = true;
+      await application.save();
+    }
+
+    // Return full application data with resume URL
+    res.json({ 
+      application: {
+        ...application.toObject(),
+        resume: application.resume ? {
+          name: application.resume.name,
+          url: application.resume.url,
+          mime_type: application.resume.mime_type,
+          size: application.resume.size
+        } : null
+      }
+    });
   } catch (error) {
     console.error("Error fetching application:", error);
     res.status(500).json({ message: "Error fetching application", error: error.message });
@@ -741,8 +839,9 @@ router.get("/client/applications", authMiddleware, async (req, res) => {
       return res.json({
         applications: [],
         totalPages: 0,
-        currentPage: page,
-        totalApplications: 0
+        currentPage: parseInt(page),
+        totalApplications: 0,
+        statusBreakdown: {}
       });
     }
 
@@ -772,13 +871,84 @@ router.get("/client/applications", authMiddleware, async (req, res) => {
     res.json({
       applications,
       totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      currentPage: parseInt(page),
       totalApplications: total,
       statusBreakdown: breakdown
     });
   } catch (error) {
     console.error("Error fetching client applications:", error);
     res.status(500).json({ message: "Error fetching applications", error: error.message });
+  }
+});
+
+// Upload resume for an existing application (Update)
+router.post("/applications/:applicationId/upload-resume", authMiddleware, upload.single('resume'), async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(applicationId)) {
+      if (req.file) {
+        try {
+          await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
+        } catch (e) {}
+      }
+      return res.status(400).json({ message: "Invalid application ID" });
+    }
+
+    const application = await Application.findById(applicationId);
+    if (!application) {
+      if (req.file) {
+        try {
+          await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
+        } catch (e) {}
+      }
+      return res.status(404).json({ message: "Application not found" });
+    }
+
+    // Check if user owns the application
+    if (application.freelancer_id.toString() !== req.user.id) {
+      if (req.file) {
+        try {
+          await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
+        } catch (e) {}
+      }
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Resume file is required" });
+    }
+
+    let resumeData = null;
+    try {
+      const result = await uploadToCloudinary(req.file.buffer, req.file.originalname, req.file.mimetype);
+      resumeData = {
+        name: req.file.originalname,
+        url: result.secure_url,
+        mime_type: req.file.mimetype,
+        size: req.file.size,
+      };
+    } catch (uploadError) {
+      console.error("Cloudinary upload error:", uploadError);
+      if (req.file) {
+        try {
+          await cloudinary.uploader.destroy(`resumes/${req.file.filename}`);
+        } catch (e) {}
+      }
+      return res.status(500).json({ message: "Failed to upload resume" });
+    }
+
+    // Update application with resume
+    application.resume = resumeData;
+    await application.save();
+
+    res.json({
+      message: "Resume uploaded successfully",
+      resume: resumeData
+    });
+  } catch (error) {
+    console.error("Error uploading resume:", error);
+    res.status(500).json({ message: "Error uploading resume", error: error.message });
   }
 });
 

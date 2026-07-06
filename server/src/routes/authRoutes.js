@@ -1,7 +1,7 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { upload, cloudinary } from "../config/cloudinary.js";
+import { upload, uploadProfile, uploadResume, cloudinary } from "../config/cloudinary.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import Client from "../models/Client.js";
 import Freelancer from "../models/Freelancer.js";
@@ -50,24 +50,8 @@ const parseFormDataBooleans = (req, res, next) => {
   next();
 };
 
-// Handle profile picture upload
-const handleProfilePictureUpload = async (file, existingPublicId = null) => {
-  if (existingPublicId) {
-    await cloudinary.uploader.destroy(existingPublicId);
-  }
-  
-  if (file) {
-    return {
-      url: file.path,
-      public_id: file.filename,
-    };
-  }
-  
-  return null;
-};
-
-// ==================== CLIENT REGISTRATION (UPDATED) ====================
-router.post("/register/client", upload.single('profile_picture'), parseFormDataBooleans, async (req, res) => {
+// ==================== CLIENT REGISTRATION ====================
+router.post("/register/client", uploadProfile.single('profile_picture'), parseFormDataBooleans, async (req, res) => {
   const {
     first_name,
     last_name,
@@ -79,8 +63,8 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
     country,
     city,
     address,
-    client_type = 'personal', // NEW: 'personal' or 'business'
-    business_email, // NEW: Company email (required for business)
+    client_type = 'personal',
+    business_email,
     business_type,
     industry,
     company_size,
@@ -153,7 +137,6 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
   // ==================== BUSINESS VALIDATION ====================
   
   if (client_type === 'business') {
-    // Business requires company name
     if (!company_name || !company_name.trim()) {
       if (req.file) await cloudinary.uploader.destroy(req.file.filename);
       return res.status(400).json({ 
@@ -161,7 +144,6 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
       });
     }
 
-    // Business requires business email
     if (!business_email || !business_email.trim()) {
       if (req.file) await cloudinary.uploader.destroy(req.file.filename);
       return res.status(400).json({ 
@@ -169,7 +151,6 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
       });
     }
 
-    // Validate business email is NOT from free providers
     if (!isBusinessEmail(business_email)) {
       if (req.file) await cloudinary.uploader.destroy(req.file.filename);
       return res.status(400).json({ 
@@ -177,7 +158,6 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
       });
     }
 
-    // Business requires business type
     if (!business_type || !business_type.trim()) {
       if (req.file) await cloudinary.uploader.destroy(req.file.filename);
       return res.status(400).json({ 
@@ -185,7 +165,6 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
       });
     }
 
-    // Business requires industry
     if (!industry || !industry.trim()) {
       if (req.file) await cloudinary.uploader.destroy(req.file.filename);
       return res.status(400).json({ 
@@ -193,7 +172,6 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
       });
     }
 
-    // Business requires company size
     if (!company_size) {
       if (req.file) await cloudinary.uploader.destroy(req.file.filename);
       return res.status(400).json({ 
@@ -201,7 +179,6 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
       });
     }
 
-    // Check if business email is already used
     const existingBusinessEmail = await Client.findOne({ 
       business_email: business_email.toLowerCase().trim() 
     });
@@ -213,23 +190,7 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
     }
   }
 
-  // ==================== PERSONAL VALIDATION ====================
-  
-  if (client_type === 'personal') {
-    // Personal accounts don't need business email
-    // But if they provide one, validate it's not a free email
-    if (business_email && business_email.trim()) {
-      if (!isBusinessEmail(business_email)) {
-        if (req.file) await cloudinary.uploader.destroy(req.file.filename);
-        return res.status(400).json({ 
-          message: "If providing a business email, please use a company email address (e.g., name@company.com)" 
-        });
-      }
-    }
-  }
-
   try {
-    // Check if user already exists
     const existingUser = await Client.findOne({ 
       email_address: email_address.toLowerCase() 
     });
@@ -238,7 +199,6 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
       return res.status(400).json({ message: "User with this email already exists" });
     }
 
-    // Check if business email is already used (if provided)
     if (business_email && business_email.trim()) {
       const existingBusiness = await Client.findOne({ 
         business_email: business_email.toLowerCase().trim() 
@@ -254,7 +214,6 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
     const hashedPassword = await bcrypt.hash(password, 10);
     const verificationCode = generateVerificationCode();
 
-    // Handle profile picture upload
     let profilePictureData = null;
     if (req.file) {
       profilePictureData = {
@@ -263,14 +222,9 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
       };
     }
 
-    // Set expiration to 10 minutes from now
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
-    // Determine if business email is verified
-    const isBusinessEmailVerified = client_type === 'business' && business_email ? false : false;
-
-    // Build client data
     const clientData = {
       first_name: first_name.trim(),
       last_name: last_name.trim(),
@@ -304,12 +258,10 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
     const client = new Client(clientData);
     await client.save();
 
-    // Send verification email
     try {
       await sendVerificationEmail(email_address, verificationCode);
       console.log('Verification email sent successfully');
       
-      // If business, send verification to business email too
       if (client_type === 'business' && business_email) {
         await sendVerificationEmail(business_email, verificationCode);
         console.log('Business verification email sent successfully');
@@ -344,7 +296,7 @@ router.post("/register/client", upload.single('profile_picture'), parseFormDataB
 });
 
 // ==================== FREELANCER REGISTRATION ====================
-router.post("/register/freelancer", upload.single('profile_picture'), parseFormDataBooleans, async (req, res) => {
+router.post("/register/freelancer", uploadProfile.single('profile_picture'), parseFormDataBooleans, async (req, res) => {
   let {
     first_name,
     last_name,
@@ -359,8 +311,6 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
     skills,
     experience_level,
     years_of_experience,
-    portfolio_link,
-    resume_cv_url,
     hourly_rate,
     fixed_rate,
     bio_about_me,
@@ -383,8 +333,6 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
     skills,
     experience_level,
     years_of_experience,
-    portfolio_link,
-    resume_cv_url,
     hourly_rate,
     fixed_rate,
     bio_about_me,
@@ -395,7 +343,6 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
     role
   });
 
-  // Parse arrays if they come as strings
   let parsedSkills = skills;
   let parsedLanguages = languages;
   let parsedCertifications = certifications;
@@ -424,7 +371,6 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
     }
   }
 
-  // Validate required fields
   if (!first_name || !first_name.trim()) {
     if (req.file) await cloudinary.uploader.destroy(req.file.filename);
     return res.status(400).json({ message: "First name is required" });
@@ -466,14 +412,12 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
   }
 
   try {
-    // Check if user already exists
     const existingUser = await Freelancer.findOne({ email_address: email_address.toLowerCase() });
     if (existingUser) {
       if (req.file) await cloudinary.uploader.destroy(req.file.filename);
       return res.status(400).json({ message: "User with this email already exists" });
     }
 
-    // Check if username is taken
     const existingUsername = await Freelancer.findOne({ username: username.toLowerCase().trim() });
     if (existingUsername) {
       if (req.file) await cloudinary.uploader.destroy(req.file.filename);
@@ -483,7 +427,6 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
     const hashedPassword = await bcrypt.hash(password, 10);
     const verificationCode = generateVerificationCode();
 
-    // Handle profile picture upload
     let profilePictureData = null;
     if (req.file) {
       profilePictureData = {
@@ -492,11 +435,9 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
       };
     }
 
-    // Set expiration to 10 minutes from now
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
-    // Prepare the data for saving
     const freelancerData = {
       first_name: first_name.trim(),
       last_name: last_name.trim(),
@@ -509,16 +450,14 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
       address: address && address.trim() ? address.trim() : null,
       profile_picture: profilePictureData?.url || null,
       profile_picture_public_id: profilePictureData?.public_id || null,
-      skills: parsedSkills && Array.isArray(parsedSkills) && parsedSkills.length > 0 ? parsedSkills : null,
-      experience_level: experience_level && experience_level.trim() ? experience_level.trim() : null,
-      years_of_experience: years_of_experience ? parseInt(years_of_experience) : null,
-      portfolio_link: portfolio_link && portfolio_link.trim() ? portfolio_link.trim() : null,
-      resume_cv_url: resume_cv_url && resume_cv_url.trim() ? resume_cv_url.trim() : null,
-      hourly_rate: hourly_rate ? parseFloat(hourly_rate) : null,
-      fixed_rate: fixed_rate ? parseFloat(fixed_rate) : null,
+      skills: parsedSkills && Array.isArray(parsedSkills) && parsedSkills.length > 0 ? parsedSkills : [],
+      experience_level: experience_level && experience_level.trim() ? experience_level.trim() : 'Entry',
+      years_of_experience: years_of_experience ? parseInt(years_of_experience) : 0,
+      hourly_rate: hourly_rate ? parseFloat(hourly_rate) : 0,
+      fixed_rate: fixed_rate ? parseFloat(fixed_rate) : 0,
       bio_about_me: bio_about_me && bio_about_me.trim() ? bio_about_me.trim() : null,
-      languages: parsedLanguages && Array.isArray(parsedLanguages) && parsedLanguages.length > 0 ? parsedLanguages : null,
-      certifications: parsedCertifications && Array.isArray(parsedCertifications) && parsedCertifications.length > 0 ? parsedCertifications : null,
+      languages: parsedLanguages && Array.isArray(parsedLanguages) && parsedLanguages.length > 0 ? parsedLanguages : [],
+      certifications: parsedCertifications && Array.isArray(parsedCertifications) && parsedCertifications.length > 0 ? parsedCertifications : [],
       availability_status: availability_status || "available",
       terms_accepted: true,
       role: role,
@@ -536,7 +475,6 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
     const freelancer = new Freelancer(freelancerData);
     await freelancer.save();
 
-    // Send verification email
     try {
       await sendVerificationEmail(email_address, verificationCode);
       console.log('Verification email sent successfully');
@@ -565,7 +503,7 @@ router.post("/register/freelancer", upload.single('profile_picture'), parseFormD
   }
 });
 
-// ==================== VERIFY EMAIL (UPDATED) ====================
+// ==================== VERIFY EMAIL ====================
 router.post("/verify-email", async (req, res) => {
   const { email, code } = req.body;
 
@@ -574,7 +512,6 @@ router.post("/verify-email", async (req, res) => {
   }
 
   try {
-    // Check both models
     let user = await Client.findOne({ 
       email_address: email.toLowerCase(),
       verification_code: code,
@@ -598,19 +535,16 @@ router.post("/verify-email", async (req, res) => {
       });
     }
 
-    // Update user as verified
     user.is_email_verified = true;
     user.verification_code = null;
     user.verification_code_expires = null;
     
-    // If business client, also verify business email
     if (userRole === "client" && user.client_type === "business") {
       user.is_company_email_verified = true;
     }
     
     await user.save();
 
-    // Generate token for auto-login
     const token = jwt.sign(
       {
         id: user._id,
@@ -624,7 +558,6 @@ router.post("/verify-email", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    // Prepare user response
     let userResponse = {
       id: user._id,
       first_name: user.first_name,
@@ -676,7 +609,7 @@ router.post("/verify-email", async (req, res) => {
   }
 });
 
-// ==================== CHECK EMAIL TYPE (NEW) ====================
+// ==================== CHECK EMAIL TYPE ====================
 router.post("/check-email-type", async (req, res) => {
   const { email } = req.body;
 
@@ -717,7 +650,6 @@ router.post("/resend-verification", async (req, res) => {
   }
 
   try {
-    // Check both models
     let user = await Client.findOne({ email_address: email.toLowerCase() });
     let userModel = "Client";
 
@@ -734,7 +666,6 @@ router.post("/resend-verification", async (req, res) => {
       return res.status(400).json({ message: "Email is already verified" });
     }
 
-    // Generate new verification code
     const newCode = generateVerificationCode();
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
@@ -743,7 +674,6 @@ router.post("/resend-verification", async (req, res) => {
     user.verification_code_expires = expiresAt;
     await user.save();
 
-    // Send new verification email
     await sendVerificationEmail(email, newCode);
 
     res.json({
@@ -764,7 +694,6 @@ router.post("/forgot-password", async (req, res) => {
   }
 
   try {
-    // Check both models
     let user = await Client.findOne({ email_address: email.toLowerCase() });
     let userModel = "Client";
 
@@ -777,7 +706,6 @@ router.post("/forgot-password", async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Generate reset code
     const resetCode = generateVerificationCode();
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
@@ -786,7 +714,6 @@ router.post("/forgot-password", async (req, res) => {
     user.reset_password_expires = expiresAt;
     await user.save();
 
-    // Send password reset email
     await sendPasswordResetEmail(email, resetCode);
 
     res.json({
@@ -817,7 +744,6 @@ router.post("/reset-password", async (req, res) => {
   }
 
   try {
-    // Check both models
     let user = await Client.findOne({ 
       email_address: email.toLowerCase(),
       reset_password_code: code,
@@ -841,7 +767,6 @@ router.post("/reset-password", async (req, res) => {
       });
     }
 
-    // Hash new password
     const hashedPassword = await bcrypt.hash(new_password, 10);
     user.password = hashedPassword;
     user.reset_password_code = null;
@@ -857,7 +782,7 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
-// ==================== LOGIN (Unified for both roles) ====================
+// ==================== LOGIN ====================
 router.post("/login", async (req, res) => {
   const { email_address, password } = req.body;
 
@@ -866,12 +791,10 @@ router.post("/login", async (req, res) => {
   }
 
   try {
-    // First try to find in clients table
     let userData = await Client.findOne({ email_address: email_address.toLowerCase() });
     let userRole = "client";
     let userModel = "Client";
 
-    // If not found in clients, try freelancers
     if (!userData) {
       userData = await Freelancer.findOne({ email_address: email_address.toLowerCase() });
       userRole = "freelancer";
@@ -882,9 +805,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Check if email is verified
     if (!userData.is_email_verified) {
-      // Check if verification code is expired, resend if needed
       if (!userData.verification_code_expires || userData.verification_code_expires < new Date()) {
         const newCode = generateVerificationCode();
         const expiresAt = new Date();
@@ -914,7 +835,6 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Update last login
     userData.last_login = new Date();
     userData.is_online = true;
     await userData.save();
@@ -932,7 +852,6 @@ router.post("/login", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    // Prepare user response based on role
     let userResponse = {
       id: userData._id,
       first_name: userData.first_name,
@@ -982,7 +901,7 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// ==================== GET PROFILE (Role-based) ====================
+// ==================== GET PROFILE ====================
 router.get("/profile", authMiddleware, async (req, res) => {
   try {
     let userData;
@@ -1003,137 +922,207 @@ router.get("/profile", authMiddleware, async (req, res) => {
   }
 });
 
-// ==================== UPDATE PROFILE (Role-based) ====================
-router.put("/profile", authMiddleware, upload.single('profile_picture'), async (req, res) => {
-  try {
-    console.log('=== UPDATE PROFILE START ===');
-    console.log('User from token:', req.user);
-    console.log('Request body:', req.body);
-    console.log('Request file:', req.file);
-    
-    let updateData = {};
-    let user;
-    
-    if (req.user.role === "client") {
-      user = await Client.findById(req.user.id);
-      console.log('Found client:', user ? 'YES' : 'NO');
-      
-      const allowedFields = [
-        "first_name", "last_name", "company_name", "phone_number", 
-        "country", "city", "address", "business_type",
-        "industry", "bio_about", "website", "budget_range", 
-        "preferred_communication_method",
-        "company_size"
-      ];
-      
-      allowedFields.forEach(field => {
-        if (req.body[field] !== undefined && req.body[field] !== null) {
-          updateData[field] = typeof req.body[field] === 'string' ? req.body[field].trim() : req.body[field];
-        }
+// ==================== UPDATE PROFILE (WITH RESUME UPLOAD) ====================
+router.put(
+  "/profile",
+  authMiddleware,
+  uploadProfile.single('profile_picture'),
+  uploadResume.single('resume'),
+  parseFormDataBooleans,
+  async (req, res) => {
+    try {
+      console.log('=== UPDATE PROFILE START ===');
+      console.log('User from token:', req.user);
+      console.log('Request body:', req.body);
+      console.log('Files received:', {
+        profile_picture: req.file ? 'YES' : 'NO',
+        resume: req.files?.resume ? 'YES' : 'NO'
       });
-    } else {
-      user = await Freelancer.findById(req.user.id);
-      console.log('Found freelancer:', user ? 'YES' : 'NO');
-      
-      const allowedFields = [
-        "first_name", "last_name", "username", "phone_number", "country",
-        "city", "address", "skills", "experience_level",
-        "years_of_experience", "portfolio_link", "resume_cv_url", "hourly_rate",
-        "fixed_rate", "bio_about_me", "languages", "certifications", "availability_status"
-      ];
-      
-      allowedFields.forEach(field => {
-        if (req.body[field] !== undefined && req.body[field] !== null) {
-          if (field === "skills" || field === "languages" || field === "certifications") {
-            if (typeof req.body[field] === 'string') {
-              try {
-                updateData[field] = JSON.parse(req.body[field]);
-              } catch (e) {
-                updateData[field] = req.body[field].split(',').map(item => item.trim()).filter(item => item);
-              }
-            } else {
-              updateData[field] = req.body[field];
-            }
-          } else if (field === "years_of_experience") {
-            updateData[field] = req.body[field] ? parseInt(req.body[field]) : null;
-          } else if (field === "hourly_rate" || field === "fixed_rate") {
-            updateData[field] = req.body[field] ? parseFloat(req.body[field]) : null;
-          } else {
+
+      let updateData = {};
+      let user;
+
+      // Initialize files
+      let profilePictureFile = req.file;
+      let resumeFile = req.files?.resume;
+
+      // If using single file upload
+      if (req.file && req.file.fieldname === 'resume') {
+        resumeFile = req.file;
+        profilePictureFile = null;
+      }
+
+      if (req.user.role === "client") {
+        user = await Client.findById(req.user.id);
+        console.log('Found client:', user ? 'YES' : 'NO');
+        
+        const allowedFields = [
+          "first_name", "last_name", "company_name", "phone_number", 
+          "country", "city", "address", "business_type",
+          "industry", "bio_about", "website", "budget_range", 
+          "preferred_communication_method",
+          "company_size"
+        ];
+        
+        allowedFields.forEach(field => {
+          if (req.body[field] !== undefined && req.body[field] !== null) {
             updateData[field] = typeof req.body[field] === 'string' ? req.body[field].trim() : req.body[field];
           }
+        });
+      } else {
+        user = await Freelancer.findById(req.user.id);
+        console.log('Found freelancer:', user ? 'YES' : 'NO');
+        
+        const allowedFields = [
+          "first_name", "last_name", "username", "phone_number", "country",
+          "city", "address", "skills", "experience_level",
+          "years_of_experience", "hourly_rate",
+          "fixed_rate", "bio_about_me", "languages", "certifications", 
+          "availability_status", "portfolio_link"
+        ];
+        
+        allowedFields.forEach(field => {
+          if (req.body[field] !== undefined && req.body[field] !== null) {
+            if (field === "skills" || field === "languages" || field === "certifications") {
+              if (typeof req.body[field] === 'string') {
+                try {
+                  updateData[field] = JSON.parse(req.body[field]);
+                } catch (e) {
+                  updateData[field] = req.body[field].split(',').map(item => item.trim()).filter(item => item);
+                }
+              } else {
+                updateData[field] = req.body[field];
+              }
+            } else if (field === "years_of_experience") {
+              updateData[field] = req.body[field] ? parseInt(req.body[field]) : null;
+            } else if (field === "hourly_rate" || field === "fixed_rate") {
+              updateData[field] = req.body[field] ? parseFloat(req.body[field]) : null;
+            } else {
+              updateData[field] = typeof req.body[field] === 'string' ? req.body[field].trim() : req.body[field];
+            }
+          }
+        });
+      }
+
+      console.log('Update data prepared:', updateData);
+
+      // ============ HANDLE PROFILE PICTURE UPLOAD ============
+      if (profilePictureFile) {
+        if (user.profile_picture_public_id) {
+          try {
+            await cloudinary.uploader.destroy(user.profile_picture_public_id);
+            console.log('Old profile picture deleted:', user.profile_picture_public_id);
+          } catch (err) {
+            console.error('Error deleting old profile picture:', err);
+          }
         }
+        updateData.profile_picture = profilePictureFile.path;
+        updateData.profile_picture_public_id = profilePictureFile.filename;
+      }
+
+      // ============ HANDLE RESUME/CV UPLOAD ============
+      if (resumeFile) {
+        if (user.resume?.public_id) {
+          try {
+            await cloudinary.uploader.destroy(user.resume.public_id, { resource_type: 'raw' });
+            console.log('Old resume deleted:', user.resume.public_id);
+          } catch (err) {
+            console.error('Error deleting old resume:', err);
+          }
+        }
+
+        updateData.resume = {
+          file_name: resumeFile.originalname || resumeFile.filename,
+          file_url: resumeFile.path,
+          public_id: resumeFile.filename,
+        };
+        console.log('Resume uploaded:', updateData.resume);
+      }
+
+      // ============ HANDLE RESUME DELETION ============
+      if (req.body.remove_resume === 'true' || req.body.remove_resume === true) {
+        if (user.resume?.public_id) {
+          try {
+            await cloudinary.uploader.destroy(user.resume.public_id, { resource_type: 'raw' });
+            console.log('Resume deleted:', user.resume.public_id);
+          } catch (err) {
+            console.error('Error deleting resume:', err);
+          }
+        }
+        updateData.resume = null;
+      }
+
+      // ============ UPDATE USER ============
+      let updatedUser;
+      if (req.user.role === "client") {
+        updatedUser = await Client.findByIdAndUpdate(
+          req.user.id,
+          { ...updateData, updated_at: new Date() },
+          { new: true, runValidators: true }
+        ).select('-password');
+      } else {
+        updatedUser = await Freelancer.findByIdAndUpdate(
+          req.user.id,
+          { ...updateData, updated_at: new Date() },
+          { new: true, runValidators: true }
+        ).select('-password');
+      }
+
+      console.log('Updated user:', updatedUser ? 'SUCCESS' : 'NOT FOUND');
+
+      if (!updatedUser) {
+        if (profilePictureFile) {
+          await cloudinary.uploader.destroy(profilePictureFile.filename);
+        }
+        if (resumeFile) {
+          await cloudinary.uploader.destroy(resumeFile.filename, { resource_type: 'raw' });
+        }
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // ============ RESPONSE ============
+      const responseData = {
+        message: "Profile updated successfully",
+        user: updatedUser,
+      };
+
+      if (updatedUser.resume) {
+        responseData.resume = updatedUser.resume;
+      }
+
+      res.json(responseData);
+
+    } catch (err) {
+      console.error('=== UPDATE PROFILE ERROR ===');
+      console.error('Error name:', err.name);
+      console.error('Error message:', err.message);
+      console.error('Error code:', err.code);
+      console.error('Stack:', err.stack);
+
+      // Clean up uploaded files on error
+      if (req.file) {
+        try {
+          await cloudinary.uploader.destroy(req.file.filename);
+        } catch (cleanupErr) {
+          console.error('Cleanup error:', cleanupErr);
+        }
+      }
+      if (req.files?.resume) {
+        try {
+          await cloudinary.uploader.destroy(req.files.resume.filename, { resource_type: 'raw' });
+        } catch (cleanupErr) {
+          console.error('Cleanup error:', cleanupErr);
+        }
+      }
+
+      res.status(500).json({ 
+        error: err.message,
+        name: err.name,
+        ...(err.code && { code: err.code })
       });
     }
-
-    console.log('Update data prepared:', updateData);
-
-    // Handle profile picture update
-    if (req.file) {
-      if (user.profile_picture_public_id) {
-        await cloudinary.uploader.destroy(user.profile_picture_public_id);
-      }
-      updateData.profile_picture = req.file.path;
-      updateData.profile_picture_public_id = req.file.filename;
-    }
-
-    let updatedUser;
-    if (req.user.role === "client") {
-      updatedUser = await Client.findByIdAndUpdate(
-        req.user.id,
-        { ...updateData, updated_at: new Date() },
-        { new: true, runValidators: true }
-      ).select('-password');
-    } else {
-      updatedUser = await Freelancer.findByIdAndUpdate(
-        req.user.id,
-        { ...updateData, updated_at: new Date() },
-        { new: true, runValidators: true }
-      ).select('-password');
-    }
-
-    console.log('Updated user:', updatedUser ? 'SUCCESS' : 'NOT FOUND');
-
-    if (!updatedUser) {
-      if (req.file) await cloudinary.uploader.destroy(req.file.filename);
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    res.json({
-      message: "Profile updated successfully",
-      user: updatedUser,
-    });
-  } catch (err) {
-    console.error('=== UPDATE PROFILE ERROR ===');
-    console.error('Error name:', err.name);
-    console.error('Error message:', err.message);
-    console.error('Error code:', err.code);
-    console.error('Full error:', JSON.stringify(err, null, 2));
-    console.error('Stack:', err.stack);
-    
-    if (req.file) await cloudinary.uploader.destroy(req.file.filename);
-    
-    res.status(500).json({ 
-      error: err.message,
-      name: err.name,
-      ...(err.code && { code: err.code })
-    });
   }
-});
-
-// ==================== GET FREELANCERS LIST ====================
-router.get("/freelancers", authMiddleware, async (req, res) => {
-  try {
-    const freelancers = await Freelancer.find(
-      { availability_status: "available", is_email_verified: true },
-      "id first_name last_name username profile_picture skills experience_level hourly_rate fixed_rate bio_about_me availability_status country city rating total_jobs_completed"
-    );
-
-    res.json({ freelancers });
-  } catch (err) {
-    console.error('Get freelancers error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
+);
 
 // ==================== DELETE PROFILE PICTURE ====================
 router.delete("/profile/picture", authMiddleware, async (req, res) => {
@@ -1160,6 +1149,79 @@ router.delete("/profile/picture", authMiddleware, async (req, res) => {
     res.json({ message: "Profile picture deleted successfully" });
   } catch (err) {
     console.error('Delete profile picture error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== DELETE RESUME/CV ====================
+router.delete("/profile/resume", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "freelancer") {
+      return res.status(403).json({ message: "Only freelancers can have resumes" });
+    }
+
+    const user = await Freelancer.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.resume || !user.resume.public_id) {
+      return res.status(404).json({ message: "No resume found to delete" });
+    }
+
+    // Delete from Cloudinary
+    try {
+      await cloudinary.uploader.destroy(user.resume.public_id, { resource_type: 'raw' });
+      console.log('Resume deleted from Cloudinary:', user.resume.public_id);
+    } catch (err) {
+      console.error('Error deleting resume from Cloudinary:', err);
+      return res.status(500).json({ message: "Failed to delete resume from Cloudinary" });
+    }
+
+    // Remove from database
+    user.resume = null;
+    await user.save();
+
+    res.json({ 
+      message: "Resume deleted successfully",
+      resume: null
+    });
+  } catch (err) {
+    console.error('Delete resume error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== GET FREELANCERS LIST ====================
+router.get("/freelancers", authMiddleware, async (req, res) => {
+  try {
+    const freelancers = await Freelancer.find(
+      { availability_status: "available", is_email_verified: true },
+      "id first_name last_name username profile_picture skills experience_level hourly_rate fixed_rate bio_about_me availability_status country city rating total_jobs_completed resume"
+    );
+
+    res.json({ freelancers });
+  } catch (err) {
+    console.error('Get freelancers error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== GET SINGLE FREELANCER ====================
+router.get("/freelancers/:id", authMiddleware, async (req, res) => {
+  try {
+    const freelancer = await Freelancer.findById(
+      req.params.id,
+      "id first_name last_name username profile_picture skills experience_level years_of_experience hourly_rate fixed_rate bio_about_me languages certifications availability_status country city address rating total_jobs_completed portfolio_link resume"
+    );
+
+    if (!freelancer) {
+      return res.status(404).json({ message: "Freelancer not found" });
+    }
+
+    res.json({ freelancer });
+  } catch (err) {
+    console.error('Get freelancer error:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -1,4 +1,6 @@
-import React, { useState, useCallback } from 'react';
+// screens/NotificationsScreen.jsx - Updated to remove counts dependency
+
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,9 +10,27 @@ import {
   RefreshControl,
   FlatList,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  getNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  deleteAllNotifications,
+  getNotificationCounts,
+  selectAllNotifications,
+  selectUnreadNotifications,
+  selectNotificationsLoading,
+  selectNotificationsError,
+  selectUnreadCount,
+  selectNotificationsTotal,
+  selectNotificationsTotalPages,
+  selectNotificationsCurrentPage,
+  selectTypeBreakdown,
+} from '../../Redux/slices/notificationSlice';
 
 // ── Vantara Design tokens ──────────────────────────────────────────────────────────
 const NAVY       = '#071A3E';
@@ -35,129 +55,6 @@ const ORANGE     = '#F97316';
 const RED        = '#EF4444';
 // ─────────────────────────────────────────────────────────────────────────────────
 
-const MOCK_NOTIFICATIONS = [
-  {
-    id: '1',
-    type: 'offer',
-    title: 'New Offer Received!',
-    message: 'TechCorp Solutions has sent you an offer for Senior Developer position',
-    time: '2 minutes ago',
-    read: false,
-    icon: 'briefcase',
-    iconColor: BLUE,
-    action: 'view_offer',
-    actionData: { offerId: 'off_001', jobTitle: 'Senior Developer' }
-  },
-  {
-    id: '2',
-    type: 'message',
-    title: 'New Message',
-    message: 'Maria Santos: "Can we schedule a quick call about the project?"',
-    time: '15 minutes ago',
-    read: false,
-    icon: 'chatbubble',
-    iconColor: GREEN,
-    action: 'open_chat',
-    actionData: { userId: 'user_123', userName: 'Maria Santos' }
-  },
-  {
-    id: '3',
-    type: 'application',
-    title: 'Application Viewed',
-    message: 'Your application for UI/UX Designer at Creative Agency PH has been viewed',
-    time: '1 hour ago',
-    read: false,
-    icon: 'eye',
-    iconColor: BLUE,
-    action: 'view_job',
-    actionData: { jobId: 'job_456', jobTitle: 'UI/UX Designer' }
-  },
-  {
-    id: '4',
-    type: 'job',
-    title: 'New Job Match',
-    message: 'New job posted: Full Stack Developer at StartUp Manila',
-    time: '3 hours ago',
-    read: true,
-    icon: 'briefcase',
-    iconColor: GOLD,
-    action: 'view_job',
-    actionData: { jobId: 'job_789', jobTitle: 'Full Stack Developer' }
-  },
-  {
-    id: '5',
-    type: 'milestone',
-    title: 'Milestone Completed',
-    message: 'Client marked "Initial Design" as completed. Payment has been released.',
-    time: '5 hours ago',
-    read: true,
-    icon: 'checkmark-circle',
-    iconColor: GREEN,
-    action: 'view_contract',
-    actionData: { contractId: 'ctr_001' }
-  },
-  {
-    id: '6',
-    type: 'payment',
-    title: 'Payment Received',
-    message: 'You have received ₱15,000 from Digital Marketing Pro',
-    time: 'Yesterday',
-    read: true,
-    icon: 'cash',
-    iconColor: GREEN,
-    action: 'view_transaction',
-    actionData: { transactionId: 'txn_001', amount: 15000 }
-  },
-  {
-    id: '7',
-    type: 'review',
-    title: 'New Review',
-    message: 'Client left a 5-star review for your work on Mobile App project',
-    time: 'Yesterday',
-    read: true,
-    icon: 'star',
-    iconColor: GOLD,
-    action: 'view_review',
-    actionData: { reviewId: 'rev_001' }
-  },
-  {
-    id: '8',
-    type: 'offer',
-    title: 'Offer Accepted',
-    message: 'Client accepted your proposal for E-commerce Website project',
-    time: '2 days ago',
-    read: true,
-    icon: 'checkmark-done',
-    iconColor: GREEN,
-    action: 'view_contract',
-    actionData: { contractId: 'ctr_002' }
-  },
-  {
-    id: '9',
-    type: 'alert',
-    title: 'Profile Completion',
-    message: 'Complete your profile to get more job opportunities! Add your portfolio and certifications.',
-    time: '3 days ago',
-    read: true,
-    icon: 'warning',
-    iconColor: ORANGE,
-    action: 'complete_profile',
-    actionData: {}
-  },
-  {
-    id: '10',
-    type: 'system',
-    title: 'Maintenance Notice',
-    message: 'Scheduled maintenance on March 25, 2024 from 2AM to 4AM',
-    time: '5 days ago',
-    read: true,
-    icon: 'build',
-    iconColor: TEXT_MUTED,
-    action: null,
-    actionData: {}
-  },
-];
-
 const FILTER_TABS = [
   { key: 'all', label: 'All', icon: 'notifications-outline' },
   { key: 'unread', label: 'Unread', icon: 'mail-unread-outline' },
@@ -165,51 +62,154 @@ const FILTER_TABS = [
   { key: 'messages', label: 'Messages', icon: 'chatbubble-outline' },
 ];
 
+// Helper to get icon name based on notification type
+const getIconName = (type) => {
+  switch (type) {
+    case 'offer':
+    case 'offer_received':
+      return 'briefcase-outline';
+    case 'message':
+    case 'new_message':
+      return 'chatbubble-outline';
+    case 'application':
+    case 'application_submitted':
+    case 'application_status_updated':
+      return 'document-text-outline';
+    case 'job':
+    case 'job_posted':
+      return 'briefcase-outline';
+    case 'milestone':
+    case 'milestone_completed':
+      return 'checkmark-circle-outline';
+    case 'payment':
+    case 'payment_received':
+      return 'cash-outline';
+    case 'review':
+    case 'rating_received':
+      return 'star-outline';
+    case 'alert':
+      return 'alert-circle-outline';
+    case 'contract_started':
+      return 'play-circle-outline';
+    case 'contract_completed':
+      return 'checkmark-done-circle-outline';
+    case 'contract_cancelled':
+      return 'close-circle-outline';
+    case 'project_update':
+      return 'refresh-circle-outline';
+    case 'deadline_approaching':
+      return 'time-outline';
+    case 'withdrawal_confirmed':
+      return 'checkmark-done-circle-outline';
+    case 'interview_scheduled':
+      return 'calendar-outline';
+    case 'offer_accepted':
+      return 'checkmark-done-circle-outline';
+    case 'offer_rejected':
+      return 'close-circle-outline';
+    default:
+      return 'notifications-outline';
+  }
+};
+
+// Helper to get icon color based on notification type
+const getIconColor = (type) => {
+  switch (type) {
+    case 'offer':
+    case 'offer_received':
+      return BLUE;
+    case 'message':
+    case 'new_message':
+      return GREEN;
+    case 'application':
+    case 'application_submitted':
+    case 'application_status_updated':
+      return BLUE;
+    case 'job':
+    case 'job_posted':
+      return GOLD;
+    case 'milestone':
+    case 'milestone_completed':
+      return GREEN;
+    case 'payment':
+    case 'payment_received':
+      return GREEN;
+    case 'review':
+    case 'rating_received':
+      return GOLD;
+    case 'alert':
+      return ORANGE;
+    case 'contract_started':
+      return BLUE;
+    case 'contract_completed':
+      return GREEN;
+    case 'contract_cancelled':
+      return RED;
+    case 'project_update':
+      return BLUE;
+    case 'deadline_approaching':
+      return ORANGE;
+    case 'withdrawal_confirmed':
+      return GREEN;
+    case 'interview_scheduled':
+      return BLUE;
+    case 'offer_accepted':
+      return GREEN;
+    case 'offer_rejected':
+      return RED;
+    default:
+      return TEXT_MUTED;
+  }
+};
+
 function NotificationItem({ notification, onPress, onMarkRead }) {
-  const getIconName = () => {
-    switch (notification.type) {
-      case 'offer': return 'briefcase-outline';
-      case 'message': return 'chatbubble-outline';
-      case 'application': return 'document-text-outline';
-      case 'job': return 'briefcase-outline';
-      case 'milestone': return 'checkmark-circle-outline';
-      case 'payment': return 'cash-outline';
-      case 'review': return 'star-outline';
-      case 'alert': return 'alert-circle-outline';
-      default: return 'notifications-outline';
-    }
+  const iconName = getIconName(notification.type);
+  const iconColor = getIconColor(notification.type);
+
+  // Format the time display
+  const formatTime = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
   };
 
   return (
     <TouchableOpacity
-      style={[styles.notificationItem, !notification.read && styles.notificationUnread]}
+      style={[styles.notificationItem, !notification.is_read && styles.notificationUnread]}
       onPress={() => onPress(notification)}
       activeOpacity={0.7}
     >
-      {/* Unread dot — top-right corner, inside the card padding */}
-      {!notification.read && <View style={styles.unreadDot} />}
+      {!notification.is_read && <View style={styles.unreadDot} />}
 
-      <View style={[styles.iconContainer, { backgroundColor: `${notification.iconColor}15` }]}>
-        <Ionicons name={getIconName()} size={22} color={notification.iconColor} />
+      <View style={[styles.iconContainer, { backgroundColor: `${iconColor}15` }]}>
+        <Ionicons name={iconName} size={22} color={iconColor} />
       </View>
 
       <View style={styles.contentContainer}>
-        {/* Title row: title left, time right — both vertically centered */}
         <View style={styles.headerRow}>
-          <Text style={[styles.title, !notification.read && styles.titleUnread]} numberOfLines={1}>
+          <Text style={[styles.title, !notification.is_read && styles.titleUnread]} numberOfLines={1}>
             {notification.title}
           </Text>
-          <Text style={styles.time}>{notification.time}</Text>
+          <Text style={styles.time}>{formatTime(notification.created_at)}</Text>
         </View>
 
         <Text style={styles.message} numberOfLines={2}>
           {notification.message}
         </Text>
 
-        {/* Action row only rendered when there's something to show */}
-        {(notification.action || !notification.read) && (
+        {(notification.actions?.length > 0 || !notification.is_read) && (
           <View style={styles.actionRow}>
-            {notification.action && (
+            {notification.actions?.length > 0 && (
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={() => onPress(notification)}
@@ -220,10 +220,10 @@ function NotificationItem({ notification, onPress, onMarkRead }) {
               </TouchableOpacity>
             )}
 
-            {!notification.read && (
+            {!notification.is_read && (
               <TouchableOpacity
                 style={styles.markReadButton}
-                onPress={() => onMarkRead(notification.id)}
+                onPress={() => onMarkRead(notification._id)}
                 hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
               >
                 <Ionicons name="checkmark-circle-outline" size={14} color={TEXT_MUTED} />
@@ -272,94 +272,230 @@ function EmptyState({ filter }) {
 }
 
 export default function NotificationsScreen({ onNavigate, route }) {
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const dispatch = useDispatch();
+  
+  // Redux state
+  const notifications = useSelector(selectAllNotifications);
+  const unreadNotifications = useSelector(selectUnreadNotifications);
+  const isLoading = useSelector(selectNotificationsLoading);
+  const error = useSelector(selectNotificationsError);
+  const unreadCount = useSelector(selectUnreadCount);
+  const totalCount = useSelector(selectNotificationsTotal);
+  const totalPages = useSelector(selectNotificationsTotalPages);
+  const currentPage = useSelector(selectNotificationsCurrentPage);
+  const typeBreakdown = useSelector(selectTypeBreakdown);
+
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [page, setPage] = useState(1);
 
-  const getFilteredNotifications = () => {
-    switch (activeFilter) {
-      case 'unread':   return notifications.filter(n => !n.read);
-      case 'offers':   return notifications.filter(n => n.type === 'offer');
-      case 'messages': return notifications.filter(n => n.type === 'message');
-      default:         return notifications;
+  // Load notifications on mount
+  useEffect(() => {
+    loadNotifications();
+    // Don't call getNotificationCounts - we get unreadCount from getNotifications
+  }, []);
+
+  // Load notifications with current filter
+  const loadNotifications = useCallback(async (pageNum = 1, refresh = false) => {
+    try {
+      let filterParams = { page: pageNum, limit: 20 };
+      
+      // Apply filters
+      if (activeFilter === 'unread') {
+        filterParams.is_read = false;
+      } else if (activeFilter === 'offers') {
+        filterParams.type = 'offer';
+      } else if (activeFilter === 'messages') {
+        filterParams.type = 'message';
+      }
+
+      const result = await dispatch(getNotifications(filterParams)).unwrap();
+      
+      if (refresh) {
+        setPage(1);
+      } else {
+        setPage(pageNum);
+      }
+    } catch (err) {
+      console.error('Failed to load notifications:', err);
     }
-  };
+  }, [dispatch, activeFilter]);
 
-  const filteredNotifications = getFilteredNotifications();
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Handle refresh
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadNotifications(1, true);
+    setRefreshing(false);
+  }, [loadNotifications]);
 
-  const handleNotificationPress = (notification) => {
-    if (!notification.read) markAsRead(notification.id);
+  // Handle filter change
+  const handleFilterChange = useCallback((filterKey) => {
+    setActiveFilter(filterKey);
+    loadNotifications(1, true);
+  }, [loadNotifications]);
 
-    switch (notification.action) {
-      case 'view_offer':
-        Alert.alert('Offer Details', `View offer for ${notification.actionData?.jobTitle || 'position'}`, [{ text: 'OK' }]);
-        break;
-      case 'open_chat':
-        onNavigate('Messages', { userId: notification.actionData?.userId, userName: notification.actionData?.userName });
-        break;
-      case 'view_job':
-        Alert.alert('Job Details', `Viewing job: ${notification.actionData?.jobTitle}`);
-        break;
-      case 'view_contract':
-        Alert.alert('Contract', 'View contract details');
-        break;
-      case 'view_transaction':
-        Alert.alert('Transaction', `Amount: ₱${notification.actionData?.amount?.toLocaleString()}`);
-        break;
-      case 'complete_profile':
-        onNavigate('FreelancerProfile');
-        break;
-      default:
-        Alert.alert(notification.title, notification.message);
-        break;
+  // Handle notification press
+  const handleNotificationPress = useCallback((notification) => {
+    // Mark as read if not already
+    if (!notification.is_read) {
+      dispatch(markNotificationAsRead(notification._id));
     }
-  };
 
-  const markAsRead = (notificationId) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
-    );
-  };
+    // Handle action based on notification type and actions
+    if (notification.actions && notification.actions.length > 0) {
+      const action = notification.actions[0];
+      
+      switch (action.action_type) {
+        case 'view_offer':
+          if (onNavigate) {
+            onNavigate('OfferDetails', { 
+              offerId: notification.reference_id,
+              jobTitle: notification.title
+            });
+          } else {
+            Alert.alert('Offer Details', notification.message, [{ text: 'OK' }]);
+          }
+          break;
+          
+        case 'open_chat':
+          if (onNavigate) {
+            onNavigate('Messages', { 
+              userId: notification.sender_id?._id,
+              userName: notification.sender_id?.first_name 
+            });
+          }
+          break;
+          
+        case 'view_job':
+          if (onNavigate) {
+            onNavigate('JobDetails', { jobId: notification.reference_id });
+          } else {
+            Alert.alert('Job Details', notification.message);
+          }
+          break;
+          
+        case 'view_contract':
+          if (onNavigate) {
+            onNavigate('ContractDetails', { contractId: notification.reference_id });
+          }
+          break;
+          
+        case 'view_transaction':
+          if (onNavigate) {
+            onNavigate('TransactionDetails', { transactionId: notification.reference_id });
+          }
+          break;
+          
+        case 'view_review':
+          if (onNavigate) {
+            onNavigate('ReviewDetails', { reviewId: notification.reference_id });
+          }
+          break;
+          
+        case 'complete_profile':
+          if (onNavigate) {
+            onNavigate('FreelancerProfile');
+          }
+          break;
+          
+        default:
+          Alert.alert(notification.title, notification.message);
+          break;
+      }
+    } else {
+      // Default action - just show the notification details
+      Alert.alert(notification.title, notification.message);
+    }
+  }, [dispatch, onNavigate]);
 
-  const markAllAsRead = () => {
+  // Handle mark as read
+  const handleMarkAsRead = useCallback((notificationId) => {
+    dispatch(markNotificationAsRead(notificationId));
+  }, [dispatch]);
+
+  // Handle mark all as read
+  const handleMarkAllAsRead = useCallback(() => {
     if (unreadCount === 0) return;
+    
     Alert.alert(
       'Mark All as Read',
       `Mark all ${unreadCount} unread notifications as read?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Mark All', onPress: () => setNotifications(prev => prev.map(n => ({ ...n, read: true }))) },
+        { text: 'Mark All', onPress: () => dispatch(markAllNotificationsAsRead()) },
       ]
     );
-  };
+  }, [dispatch, unreadCount]);
 
-  const clearAllNotifications = () => {
+  // Handle clear all notifications
+  const handleClearAll = useCallback(() => {
     if (notifications.length === 0) return;
+    
     Alert.alert(
       'Clear All',
       'Are you sure you want to clear all notifications? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear All', style: 'destructive', onPress: () => setNotifications([]) },
+        { 
+          text: 'Clear All', 
+          style: 'destructive', 
+          onPress: () => {
+            let filter = {};
+            if (activeFilter === 'offers') filter.type = 'offer';
+            else if (activeFilter === 'messages') filter.type = 'message';
+            dispatch(deleteAllNotifications(filter));
+          }
+        },
       ]
     );
-  };
+  }, [dispatch, notifications.length, activeFilter]);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setNotifications(MOCK_NOTIFICATIONS);
-      setRefreshing(false);
-    }, 1500);
-  }, []);
+  // Get filtered notifications based on active filter
+  const getFilteredNotifications = useCallback(() => {
+    if (activeFilter === 'unread') {
+      return unreadNotifications;
+    }
+    return notifications;
+  }, [activeFilter, notifications, unreadNotifications]);
 
-  const getBadgeCount = (filter) => {
-    if (filter === 'unread')   return unreadCount;
-    if (filter === 'offers')   return notifications.filter(n => n.type === 'offer'   && !n.read).length;
-    if (filter === 'messages') return notifications.filter(n => n.type === 'message' && !n.read).length;
+  const filteredNotifications = getFilteredNotifications();
+
+  // Get badge count for filter tabs
+  const getBadgeCount = useCallback((filter) => {
+    if (filter === 'unread') return unreadCount;
+    if (filter === 'offers') {
+      return notifications.filter(n => n.type === 'offer' && !n.is_read).length;
+    }
+    if (filter === 'messages') {
+      return notifications.filter(n => n.type === 'message' && !n.is_read).length;
+    }
     return 0;
-  };
+  }, [notifications, unreadCount]);
+
+  // Render loading state
+  if (isLoading && notifications.length === 0) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.root}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.backIconWrap}
+              onPress={() => onNavigate?.('FreelancerDashboard')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={20} color={WHITE} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Notifications</Text>
+            <View style={styles.headerActions} />
+          </View>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={BLUE} />
+            <Text style={styles.loadingText}>Loading notifications...</Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -369,7 +505,7 @@ export default function NotificationsScreen({ onNavigate, route }) {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backIconWrap}
-            onPress={() => onNavigate('FreelancerDashboard')}
+            onPress={() => onNavigate?.('FreelancerDashboard')}
             activeOpacity={0.7}
           >
             <Ionicons name="arrow-back" size={20} color={WHITE} />
@@ -379,11 +515,11 @@ export default function NotificationsScreen({ onNavigate, route }) {
 
           <View style={styles.headerActions}>
             {unreadCount > 0 && (
-              <TouchableOpacity style={styles.headerActionBtn} onPress={markAllAsRead} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.headerActionBtn} onPress={handleMarkAllAsRead} activeOpacity={0.7}>
                 <Ionicons name="checkmark-done-outline" size={20} color={GOLD} />
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.headerActionBtn} onPress={clearAllNotifications} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.headerActionBtn} onPress={handleClearAll} activeOpacity={0.7}>
               <Ionicons name="trash-outline" size={20} color={SILVER2} />
             </TouchableOpacity>
           </View>
@@ -404,7 +540,7 @@ export default function NotificationsScreen({ onNavigate, route }) {
                 <TouchableOpacity
                   key={tab.key}
                   style={[styles.filterTab, isActive && styles.filterTabActive]}
-                  onPress={() => setActiveFilter(tab.key)}
+                  onPress={() => handleFilterChange(tab.key)}
                   activeOpacity={0.7}
                 >
                   <Ionicons name={tab.icon} size={15} color={isActive ? BLUE : TEXT_MUTED} />
@@ -425,12 +561,12 @@ export default function NotificationsScreen({ onNavigate, route }) {
         {/* ── List ── */}
         <FlatList
           data={filteredNotifications}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item._id || item.id}
           renderItem={({ item }) => (
             <NotificationItem
               notification={item}
               onPress={handleNotificationPress}
-              onMarkRead={markAsRead}
+              onMarkRead={handleMarkAsRead}
             />
           )}
           contentContainerStyle={styles.listContainer}
@@ -441,10 +577,23 @@ export default function NotificationsScreen({ onNavigate, route }) {
           ListEmptyComponent={() => <EmptyState filter={activeFilter} />}
           ListHeaderComponent={
             filteredNotifications.length > 0 && unreadCount > 0 && activeFilter === 'all' ? (
-              <TouchableOpacity style={styles.markAllButton} onPress={markAllAsRead}>
+              <TouchableOpacity style={styles.markAllButton} onPress={handleMarkAllAsRead}>
                 <Ionicons name="checkmark-done-circle-outline" size={18} color={BLUE} />
                 <Text style={styles.markAllText}>Mark all as read</Text>
               </TouchableOpacity>
+            ) : null
+          }
+          onEndReached={() => {
+            if (page < totalPages && !isLoading) {
+              loadNotifications(page + 1);
+            }
+          }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            isLoading && notifications.length > 0 ? (
+              <View style={styles.loadMoreContainer}>
+                <ActivityIndicator size="small" color={BLUE} />
+              </View>
             ) : null
           }
         />
@@ -464,7 +613,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: NAVY,
-    // fixed height so title never shifts
     minHeight: 60,
   },
   backIconWrap: {
@@ -478,8 +626,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    flex: 1,                  // fill middle space
-    textAlign: 'center',      // truly centered between back and actions
+    flex: 1,
+    textAlign: 'center',
     fontSize: 18,
     fontWeight: '700',
     color: WHITE,
@@ -489,8 +637,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    // same width as backIconWrap so title stays centered
-    width: 40 + 4 + 40,      // two buttons + gap
+    width: 84,
     justifyContent: 'flex-end',
   },
   headerActionBtn: {
@@ -509,17 +656,15 @@ const styles = StyleSheet.create({
   filterScrollContent: {
     flexDirection: 'row',
     paddingHorizontal: 12,
-    // no paddingVertical here — controlled by filterTab height
   },
   filterTab: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    // fixed height so active border doesn't cause layout shift
     height: 48,
     paddingHorizontal: 12,
     borderBottomWidth: 2,
-    borderBottomColor: 'transparent',   // always reserve the 2px
+    borderBottomColor: 'transparent',
     marginHorizontal: 2,
   },
   filterTabActive: {
@@ -534,7 +679,6 @@ const styles = StyleSheet.create({
     color: BLUE,
     fontWeight: '600',
   },
-  // Badge sits inline (not absolute) so it never overlaps neighbor tabs
   filterBadge: {
     minWidth: 18,
     height: 18,
@@ -578,21 +722,20 @@ const styles = StyleSheet.create({
   // ── Notification Item ────────────────────────────────────────────────────────
   notificationItem: {
     flexDirection: 'row',
-    alignItems: 'flex-start',    // icon top-aligns with text block
+    alignItems: 'flex-start',
     backgroundColor: CARD,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: BORDER,
-    overflow: 'hidden',          // clips unread left-border properly
+    overflow: 'hidden',
   },
   notificationUnread: {
     backgroundColor: `${BLUE}05`,
     borderLeftWidth: 3,
     borderLeftColor: BLUE,
   },
-  // Unread dot — absolutely positioned inside the card
   unreadDot: {
     position: 'absolute',
     top: 14,
@@ -601,7 +744,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: BLUE,
-    // z above content so it isn't clipped by overflow:hidden
     zIndex: 1,
   },
   iconContainer: {
@@ -611,18 +753,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-    // keeps icon vertically centered with first line of text
     marginTop: 1,
     flexShrink: 0,
   },
   contentContainer: {
     flex: 1,
-    // right padding so text never goes under the unread dot
     paddingRight: 16,
   },
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',        // vertically center title & time on same baseline
+    alignItems: 'center',
     marginBottom: 4,
   },
   title: {
@@ -638,7 +778,7 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 11,
     color: TEXT_LIGHT,
-    flexShrink: 0,               // time never wraps or truncates
+    flexShrink: 0,
   },
   message: {
     fontSize: 13,
@@ -700,5 +840,22 @@ const styles = StyleSheet.create({
     color: TEXT_MUTED,
     textAlign: 'center',
     lineHeight: 20,
+  },
+
+  // ── Loading States ──────────────────────────────────────────────────────────
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: BG,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: TEXT_MUTED,
+  },
+  loadMoreContainer: {
+    paddingVertical: 16,
+    alignItems: 'center',
   },
 });
