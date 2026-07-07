@@ -1,13 +1,15 @@
+// PostJobScreen.js - Full working version with Philippine provinces and cities
+
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, TextInput, Alert, ActivityIndicator,
-  Switch, BackHandler, Platform,
+  Switch, BackHandler, Platform, Modal, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { createJob } from '../../Redux/slices/jobSlice';
+import { createJob, clearJobSuccess } from '../../Redux/slices/jobSlice';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
@@ -30,8 +32,8 @@ const GREEN      = '#059669';
 const GREEN_SOFT = '#D1FAE5';
 const GREEN_MID  = '#86EFAC';
 const GREEN_DARK = '#059669';
-// ─────────────────────────────────────────────────────────────────────────────
 
+// ── Constants ──────────────────────────────────────────────────────────────────
 const TABS = [
   { key: 'Home',          label: 'Home',     icon: 'home',          iconOutline: 'home-outline'          },
   { key: 'Hiredtalents',  label: 'Hired',    icon: 'people',        iconOutline: 'people-outline'        },
@@ -40,7 +42,6 @@ const TABS = [
   { key: 'ClientProfile', label: 'Profile',  icon: 'person',        iconOutline: 'person-outline'        },
 ];
 
-// ── Updated JOB_TYPES to match backend schema ──────────────────────────────
 const JOB_TYPES = [
   { label: 'Full Time',   value: 'full_time',   icon: 'briefcase-outline'      },
   { label: 'Part Time',   value: 'part_time',   icon: 'time-outline'           },
@@ -96,7 +97,6 @@ const DURATION_UNITS = [
   { label: 'Months', value: 'months' },
 ];
 
-// ── Suggested Job Titles ────────────────────────────────────────────────────
 const SUGGESTED_TITLES = [
   'Senior React Native Developer',
   'Full Stack Developer',
@@ -145,11 +145,212 @@ const SKILLS_SUGGESTIONS = [
   'AWS', 'Docker', 'GraphQL', 'TypeScript',
 ];
 
+// ── Philippine Provinces ──────────────────────────────────────────────────────
+const PHILIPPINE_PROVINCES = [
+  'Abra', 'Agusan del Norte', 'Agusan del Sur', 'Aklan', 'Albay',
+  'Antique', 'Apayao', 'Aurora', 'Basilan', 'Bataan',
+  'Batanes', 'Batangas', 'Benguet', 'Biliran', 'Bohol',
+  'Bukidnon', 'Bulacan', 'Cagayan', 'Camarines Norte', 'Camarines Sur',
+  'Camiguin', 'Capiz', 'Catanduanes', 'Cavite', 'Cebu',
+  'Cotabato', 'Davao de Oro', 'Davao del Norte', 'Davao del Sur', 'Davao Occidental',
+  'Davao Oriental', 'Dinagat Islands', 'Eastern Samar', 'Guimaras', 'Ifugao',
+  'Ilocos Norte', 'Ilocos Sur', 'Iloilo', 'Isabela', 'Kalinga',
+  'La Union', 'Laguna', 'Lanao del Norte', 'Lanao del Sur', 'Leyte',
+  'Maguindanao', 'Marinduque', 'Masbate', 'Metro Manila', 'Misamis Occidental',
+  'Misamis Oriental', 'Mountain Province', 'Negros Occidental', 'Negros Oriental', 'Northern Samar',
+  'Nueva Ecija', 'Nueva Vizcaya', 'Occidental Mindoro', 'Oriental Mindoro', 'Palawan',
+  'Pampanga', 'Pangasinan', 'Quezon', 'Quirino', 'Rizal',
+  'Romblon', 'Samar', 'Sarangani', 'Siquijor', 'Sorsogon',
+  'South Cotabato', 'Southern Leyte', 'Sultan Kudarat', 'Sulu', 'Surigao del Norte',
+  'Surigao del Sur', 'Tarlac', 'Tawi-Tawi', 'Zambales', 'Zamboanga del Norte',
+  'Zamboanga del Sur', 'Zamboanga Sibugay',
+];
+
+// ── Philippine Cities (Major) ────────────────────────────────────────────────
+const PHILIPPINE_CITIES = [
+  'Manila', 'Quezon City', 'Caloocan', 'Davao City', 'Cebu City',
+  'Zamboanga City', 'Taguig', 'Antipolo', 'Pasig', 'Cagayan de Oro',
+  'Parañaque', 'Makati', 'Bacolod', 'Muntinlupa', 'Marikina',
+  'Iloilo City', 'Pasay', 'Mandaluyong', 'Angeles City', 'San Jose del Monte',
+  'Baguio', 'Lapu-Lapu City', 'Iligan', 'Mandaue', 'Butuan',
+  'Tacloban', 'Dumaguete', 'Puerto Princesa', 'Naga', 'Ormoc',
+  'Tarlac City', 'General Santos', 'Pagadian', 'Cabanatuan', 'Cagayan de Oro',
+  'Dipolog', 'Ozamiz', 'Surigao City', 'Cotabato City', 'Kidapawan',
+  'Koronadal', 'Digos', 'Tagum', 'Panabo', 'Gingoog',
+  'Tangub', 'Oroquieta', 'Olongapo', 'Malaybalay', 'Valencia',
+  'San Pablo', 'Biñan', 'Santa Rosa', 'Calamba', 'Cabuyao',
+  'Bacoor', 'Imus', 'Dasmariñas', 'General Trias', 'Trece Martires',
+  'Tanauan', 'Lipa', 'Batangas City', 'Lucena', 'Sorsogon City',
+  'Legazpi', 'Tabaco', 'Naga City', 'Iriga', 'Masbate City',
+  'Kalibo', 'Roxas City', 'Iloilo City', 'San Carlos', 'Bago',
+  'Cadiz', 'Sagay', 'La Carlota', 'Himamaylan', 'Kabankalan',
+  'Bayawan', 'Tanjay', 'Bais', 'Dumaguete', 'Canlaon',
+];
+
 const STEPS = [
   { key: 1, label: 'Job Details',   icon: 'document-text-outline' },
   { key: 2, label: 'Requirements',  icon: 'settings-outline'      },
   { key: 3, label: 'Review & Post', icon: 'checkmark-circle-outline' },
 ];
+
+// ── Selection Modal Component ──────────────────────────────────────────────────
+function SelectionModal({ 
+  visible, 
+  onClose, 
+  onSelect, 
+  data, 
+  title, 
+  searchPlaceholder,
+  selectedValue,
+  allowCustom = true,
+}) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredData, setFilteredData] = useState(data);
+
+  useEffect(() => {
+    if (visible) {
+      setSearchQuery('');
+      setFilteredData(data);
+    }
+  }, [visible, data]);
+
+  const handleSearch = (text) => {
+    setSearchQuery(text);
+    if (text.trim()) {
+      const filtered = data.filter(item => 
+        item.toLowerCase().includes(text.toLowerCase())
+      );
+      setFilteredData(filtered);
+    } else {
+      setFilteredData(data);
+    }
+  };
+
+  const handleSelectItem = (item) => {
+    onSelect(item);
+    onClose();
+  };
+
+  const handleUseCustom = () => {
+    if (searchQuery.trim()) {
+      onSelect(searchQuery.trim());
+      onClose();
+    }
+  };
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity 
+      style={[
+        s.selectionItem,
+        item === selectedValue && s.selectionItemActive
+      ]}
+      onPress={() => handleSelectItem(item)}
+    >
+      <Text style={[
+        s.selectionItemText,
+        item === selectedValue && s.selectionItemTextActive
+      ]}>
+        {item}
+      </Text>
+      {item === selectedValue && (
+        <Ionicons name="checkmark-circle" size={20} color={BLUE} />
+      )}
+    </TouchableOpacity>
+  );
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity 
+        style={s.selectionOverlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <View style={s.selectionContainer}>
+          <View style={s.selectionHeader}>
+            <Text style={s.selectionTitle}>{title}</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color={TEXT_MUTED} />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={s.selectionSearchBar}>
+            <Ionicons name="search-outline" size={20} color={TEXT_LIGHT} />
+            <TextInput
+              style={s.selectionSearchInput}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={TEXT_LIGHT}
+              value={searchQuery}
+              onChangeText={handleSearch}
+              autoFocus={true}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => handleSearch('')}>
+                <Ionicons name="close-circle" size={18} color={TEXT_LIGHT} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {allowCustom && searchQuery.trim().length > 0 && filteredData.length === 0 && (
+            <TouchableOpacity 
+              style={s.selectionCustomOption}
+              onPress={handleUseCustom}
+            >
+              <Ionicons name="create-outline" size={20} color={BLUE} />
+              <Text style={s.selectionCustomText}>
+                Type: "{searchQuery.trim()}"
+              </Text>
+              <View style={s.selectionCustomBadge}>
+                <Text style={s.selectionCustomBadgeText}>Custom</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {allowCustom && searchQuery.trim().length > 0 && filteredData.length > 0 && (
+            <TouchableOpacity 
+              style={s.selectionCustomOption}
+              onPress={handleUseCustom}
+            >
+              <Ionicons name="create-outline" size={20} color={BLUE} />
+              <Text style={s.selectionCustomText}>
+                Type: "{searchQuery.trim()}"
+              </Text>
+              <View style={s.selectionCustomBadge}>
+                <Text style={s.selectionCustomBadgeText}>Custom</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          <FlatList
+            data={filteredData}
+            keyExtractor={(item, index) => index.toString()}
+            renderItem={renderItem}
+            contentContainerStyle={s.selectionList}
+            showsVerticalScrollIndicator={true}
+            ListEmptyComponent={
+              !searchQuery.trim() ? (
+                <View style={s.selectionEmpty}>
+                  <Ionicons name="search-outline" size={40} color={TEXT_LIGHT} />
+                  <Text style={s.selectionEmptyText}>Type to search</Text>
+                  <Text style={s.selectionEmptySub}>Or type your own value</Text>
+                </View>
+              ) : (
+                <View style={s.selectionEmpty}>
+                  <Ionicons name="create-outline" size={40} color={TEXT_LIGHT} />
+                  <Text style={s.selectionEmptyText}>No matches found</Text>
+                  <Text style={s.selectionEmptySub}>Type your own value above</Text>
+                </View>
+              )
+            }
+          />
+
+          <TouchableOpacity style={s.selectionCloseBtn} onPress={onClose}>
+            <Text style={s.selectionCloseBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
 
 // ── Step Progress Bar ─────────────────────────────────────────────────────────
 function StepBar({ currentStep }) {
@@ -292,12 +493,12 @@ function TagInput({ tags, onAdd, onRemove, placeholder, value, onChange, icon })
   );
 }
 
-function InputBox({ icon, placeholder, value, onChange, onFocus, onBlur, multiline, keyboardType }) {
+function InputBox({ icon, placeholder, value, onChange, onFocus, onBlur, multiline, keyboardType, editable = true }) {
   return (
-    <View style={[f.inputBox, multiline && { alignItems: 'flex-start', height: 110 }]}>
+    <View style={[f.inputBox, multiline && { alignItems: 'flex-start', height: 110 }, !editable && { backgroundColor: BG }]}>
       {icon && <Ionicons name={icon} size={16} color={TEXT_LIGHT} style={[{ marginRight: 8 }, multiline && { marginTop: 14 }]} />}
       <TextInput
-        style={[f.inputText, multiline && { textAlignVertical: 'top', paddingTop: 14, height: 90 }]}
+        style={[f.inputText, multiline && { textAlignVertical: 'top', paddingTop: 14, height: 90 }, !editable && { color: TEXT_MUTED }]}
         placeholder={placeholder}
         placeholderTextColor={TEXT_LIGHT}
         value={value}
@@ -306,6 +507,7 @@ function InputBox({ icon, placeholder, value, onChange, onFocus, onBlur, multili
         onBlur={onBlur}
         multiline={multiline}
         keyboardType={keyboardType}
+        editable={editable}
       />
     </View>
   );
@@ -369,6 +571,39 @@ const f = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: TEXT_MAIN },
+  // Selection input styles
+  selectionInput: {
+    backgroundColor: WHITE,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectionInputText: {
+    fontSize: 14,
+    color: TEXT_MAIN,
+    flex: 1,
+  },
+  selectionInputPlaceholder: {
+    color: TEXT_LIGHT,
+  },
+  skillPreviewTag: {
+    backgroundColor: 'rgba(0,85,165,0.07)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0,85,165,0.2)',
+  },
+  skillPreviewText: {
+    fontSize: 12,
+    color: BLUE,
+    fontWeight: '500',
+  },
 });
 
 // ── Step 1: Job Details ───────────────────────────────────────────────────────
@@ -384,89 +619,52 @@ function Step1({
   vacancies, setVacancies,
   timezone, setTimezone,
 }) {
-  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
-  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
-
-  const filteredTitles = SUGGESTED_TITLES.filter(t =>
-    t.toLowerCase().includes(title.toLowerCase()) && title.length > 0
-  );
-
-  const filteredCategories = SUGGESTED_CATEGORIES.filter(c =>
-    c.toLowerCase().includes(category.toLowerCase()) && category.length > 0
-  );
+  // ── Modal states ────────────────────────────────────────────────────────────
+  const [showTitleModal, setShowTitleModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showSkillModal, setShowSkillModal] = useState(false);
 
   return (
     <View>
       <SectionCard title="Job Information" icon="briefcase-outline">
         <View style={{ gap: 16 }}>
-          <View style={{ zIndex: 30, elevation: 30 }}>
+          {/* ── Job Title with Modal ── */}
+          <View>
             <FieldLabel label="Job Title" required />
-            <View>
-              <InputBox
-                icon="briefcase-outline"
-                placeholder="e.g. Senior React Native Developer"
-                value={title}
-                onChange={(text) => {
-                  setTitle(text);
-                  setShowTitleSuggestions(text.length > 0);
-                }}
-                onFocus={() => setShowTitleSuggestions(title.length > 0)}
-                onBlur={() => setTimeout(() => setShowTitleSuggestions(false), 150)}
-              />
-              {showTitleSuggestions && filteredTitles.length > 0 && (
-                <View style={s.suggestionContainer}>
-                  {filteredTitles.slice(0, 5).map((suggestion) => (
-                    <TouchableOpacity
-                      key={suggestion}
-                      style={s.suggestionItem}
-                      onPress={() => {
-                        setTitle(suggestion);
-                        setShowTitleSuggestions(false);
-                      }}
-                    >
-                      <Ionicons name="bulb-outline" size={14} color={GOLD} />
-                      <Text style={s.suggestionText}>{suggestion}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+            <TouchableOpacity 
+              style={f.selectionInput}
+              onPress={() => setShowTitleModal(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                f.selectionInputText,
+                !title && f.selectionInputPlaceholder
+              ]}>
+                {title || 'Select or type job title...'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color={TEXT_LIGHT} />
+            </TouchableOpacity>
           </View>
 
-          <View style={{ zIndex: 20, elevation: 20 }}>
+          {/* ── Category with Modal ── */}
+          <View>
             <FieldLabel label="Category" required />
-            <View>
-              <InputBox
-                icon="grid-outline"
-                placeholder="e.g. Technology, Design, Marketing"
-                value={category}
-                onChange={(text) => {
-                  setCategory(text);
-                  setShowCategorySuggestions(text.length > 0);
-                }}
-                onFocus={() => setShowCategorySuggestions(category.length > 0)}
-                onBlur={() => setTimeout(() => setShowCategorySuggestions(false), 150)}
-              />
-              {showCategorySuggestions && filteredCategories.length > 0 && (
-                <View style={s.suggestionContainer}>
-                  {filteredCategories.slice(0, 5).map((suggestion) => (
-                    <TouchableOpacity
-                      key={suggestion}
-                      style={s.suggestionItem}
-                      onPress={() => {
-                        setCategory(suggestion);
-                        setShowCategorySuggestions(false);
-                      }}
-                    >
-                      <Ionicons name="bulb-outline" size={14} color={GOLD} />
-                      <Text style={s.suggestionText}>{suggestion}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+            <TouchableOpacity 
+              style={f.selectionInput}
+              onPress={() => setShowCategoryModal(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                f.selectionInputText,
+                !category && f.selectionInputPlaceholder
+              ]}>
+                {category || 'Select or type category...'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color={TEXT_LIGHT} />
+            </TouchableOpacity>
           </View>
 
+          {/* ── Description ── */}
           <View>
             <FieldLabel label="Description" required />
             <InputBox
@@ -476,6 +674,34 @@ function Step1({
               onChange={setDescription}
               multiline
             />
+          </View>
+
+          {/* ── Required Skills with Modal ── */}
+          <View>
+            <FieldLabel label="Required Skills" />
+            <TouchableOpacity 
+              style={f.selectionInput}
+              onPress={() => setShowSkillModal(true)}
+              activeOpacity={0.7}
+            >
+              <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                {requiredSkills.length > 0 ? (
+                  requiredSkills.slice(0, 3).map((skill, i) => (
+                    <View key={i} style={f.skillPreviewTag}>
+                      <Text style={f.skillPreviewText}>{skill}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={f.selectionInputPlaceholder}>Select or type skills...</Text>
+                )}
+                {requiredSkills.length > 3 && (
+                  <View style={f.skillPreviewTag}>
+                    <Text style={f.skillPreviewText}>+{requiredSkills.length - 3}</Text>
+                  </View>
+                )}
+              </View>
+              <Ionicons name="chevron-down" size={20} color={TEXT_LIGHT} />
+            </TouchableOpacity>
           </View>
 
           <View>
@@ -501,41 +727,6 @@ function Step1({
         </View>
       </SectionCard>
 
-      <SectionCard title="Required Skills" icon="code-slash-outline">
-        <View style={{ gap: 12 }}>
-          <TagInput
-            tags={requiredSkills}
-            value={skillInput}
-            onChange={setSkillInput}
-            onAdd={() => {
-              if (skillInput.trim() && !requiredSkills.includes(skillInput.trim())) {
-                setRequiredSkills([...requiredSkills, skillInput.trim()]);
-                setSkillInput('');
-              }
-            }}
-            onRemove={(s2) => setRequiredSkills(requiredSkills.filter(x => x !== s2))}
-            placeholder="Add a skill..."
-            icon="add-circle-outline"
-          />
-          <View>
-            <Text style={{ fontSize: 11, color: TEXT_LIGHT, marginBottom: 8, fontWeight: '500' }}>SUGGESTED</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {SKILLS_SUGGESTIONS.slice(0, 10).map(sk => (
-                <TouchableOpacity
-                  key={sk}
-                  style={[f.chip, { paddingHorizontal: 10, paddingVertical: 6 }, requiredSkills.includes(sk) && f.chipActive]}
-                  onPress={() => {
-                    if (!requiredSkills.includes(sk)) setRequiredSkills([...requiredSkills, sk]);
-                  }}
-                >
-                  <Text style={[{ fontSize: 11, color: TEXT_LIGHT }, requiredSkills.includes(sk) && { color: BLUE }]}>{sk}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-      </SectionCard>
-
       <SectionCard title="Job Type" icon="layers-outline">
         <View style={{ gap: 16 }}>
           <View>
@@ -552,6 +743,44 @@ function Step1({
           </View>
         </View>
       </SectionCard>
+
+      {/* ── Selection Modals ── */}
+      <SelectionModal
+        visible={showTitleModal}
+        onClose={() => setShowTitleModal(false)}
+        onSelect={setTitle}
+        data={SUGGESTED_TITLES}
+        title="Select Job Title"
+        searchPlaceholder="Search or type job title..."
+        selectedValue={title}
+        allowCustom={true}
+      />
+
+      <SelectionModal
+        visible={showCategoryModal}
+        onClose={() => setShowCategoryModal(false)}
+        onSelect={setCategory}
+        data={SUGGESTED_CATEGORIES}
+        title="Select Category"
+        searchPlaceholder="Search or type category..."
+        selectedValue={category}
+        allowCustom={true}
+      />
+
+      <SelectionModal
+        visible={showSkillModal}
+        onClose={() => setShowSkillModal(false)}
+        onSelect={(skill) => {
+          if (!requiredSkills.includes(skill)) {
+            setRequiredSkills([...requiredSkills, skill]);
+          }
+        }}
+        data={SKILLS_SUGGESTIONS}
+        title="Select Skills"
+        searchPlaceholder="Search or type skill..."
+        selectedValue=""
+        allowCustom={true}
+      />
     </View>
   );
 }
@@ -574,7 +803,6 @@ function Step2({
   location, setLocation,
   workSetup,
   requirements, setRequirements,
-  educationRequirements, setEducationRequirements,
   applicationSettings, setApplicationSettings,
   certificationInput, setCertificationInput,
   screeningQuestions, setScreeningQuestions,
@@ -583,14 +811,20 @@ function Step2({
 }) {
   const [showStartDate, setShowStartDate] = useState(false);
   const [showEndDate, setShowEndDate] = useState(false);
+  const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
+
+  // ── Modal states for location ──────────────────────────────────────────────
+  const [showProvinceModal, setShowProvinceModal] = useState(false);
+  const [showCityModal, setShowCityModal] = useState(false);
 
   const formatDateDisplay = (date) => {
     if (!date) return 'Select date';
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   return (
     <View>
+      {/* ── BUDGET SECTION ── */}
       <SectionCard title="Budget" icon="cash-outline">
         <View style={{ gap: 16 }}>
           <View>
@@ -646,6 +880,78 @@ function Step2({
         </View>
       </SectionCard>
 
+      {/* ── LOCATION SECTION with Province and City Modals ── */}
+      <SectionCard title="Location" icon="location-outline">
+        <View style={{ gap: 12 }}>
+          <View>
+            <FieldLabel label="Country" />
+            <InputBox 
+              icon="location-outline" 
+              placeholder="Country (e.g. Philippines)"
+              value={location.country}
+              onChange={(t) => setLocation({ ...location, country: t })} 
+            />
+          </View>
+          
+          {/* ── Province with Modal ── */}
+          <View>
+            <FieldLabel label="Province/State" />
+            <TouchableOpacity 
+              style={f.selectionInput}
+              onPress={() => setShowProvinceModal(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                f.selectionInputText,
+                !location.province && f.selectionInputPlaceholder
+              ]}>
+                {location.province || 'Select or type province...'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color={TEXT_LIGHT} />
+            </TouchableOpacity>
+          </View>
+
+          {/* ── City with Modal ── */}
+          <View>
+            <FieldLabel label="City" />
+            <TouchableOpacity 
+              style={f.selectionInput}
+              onPress={() => setShowCityModal(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                f.selectionInputText,
+                !location.city && f.selectionInputPlaceholder
+              ]}>
+                {location.city || 'Select or type city...'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color={TEXT_LIGHT} />
+            </TouchableOpacity>
+          </View>
+
+          <View>
+            <FieldLabel label="Full Street Address" />
+            <InputBox 
+              icon="navigate-outline" 
+              placeholder="Street number, street name, building, etc."
+              value={location.address}
+              onChange={(t) => setLocation({ ...location, address: t })} 
+              multiline
+            />
+          </View>
+          <View>
+            <FieldLabel label="Zip/Postal Code" />
+            <InputBox 
+              icon="mail-outline" 
+              placeholder="Zip Code"
+              value={location.zip_code}
+              onChange={(t) => setLocation({ ...location, zip_code: t })} 
+            />
+          </View>
+        </View>
+      </SectionCard>
+
+      {/* ── TIMELINE SECTION ── */}
       <SectionCard title="Timeline" icon="hourglass-outline">
         <View style={{ gap: 16 }}>
           <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -694,7 +1000,7 @@ function Step2({
               >
                 <Ionicons name="calendar-outline" size={18} color={BLUE} />
                 <Text style={s.datePickerText}>
-                  {startDate ? formatDateDisplay(new Date(startDate)) : 'Select start date'}
+                  {startDate ? formatDateDisplay(startDate) : 'Select start date'}
                 </Text>
               </TouchableOpacity>
               {showStartDate && (
@@ -720,7 +1026,7 @@ function Step2({
               >
                 <Ionicons name="calendar-outline" size={18} color={BLUE} />
                 <Text style={s.datePickerText}>
-                  {endDate ? formatDateDisplay(new Date(endDate)) : 'Select end date'}
+                  {endDate ? formatDateDisplay(endDate) : 'Select end date'}
                 </Text>
               </TouchableOpacity>
               {showEndDate && (
@@ -741,12 +1047,13 @@ function Step2({
         </View>
       </SectionCard>
 
+      {/* ── EXPERIENCE LEVEL ── */}
       <SectionCard title="Experience Level" icon="trophy-outline">
         <FieldLabel label="Required Experience" />
         <ChipRow options={EXPERIENCE_LEVELS} selected={experienceLevel} onSelect={setExperienceLevel} />
       </SectionCard>
 
-      {/* Advanced Toggle */}
+      {/* ── Advanced Options Toggle ── */}
       <TouchableOpacity
         style={adv.toggle}
         onPress={() => setShowAdvanced(!showAdvanced)}
@@ -760,29 +1067,6 @@ function Step2({
 
       {showAdvanced && (
         <>
-          {/* Location */}
-          {(workSetup === 'onsite' || workSetup === 'hybrid') && (
-            <SectionCard title="Location" icon="location-outline">
-              <View style={{ gap: 12 }}>
-                <InputBox icon="location-outline" placeholder="Country (e.g. Philippines)"
-                  value={location.country}
-                  onChange={(t) => setLocation({ ...location, country: t })} />
-                <InputBox icon="business-outline" placeholder="Province"
-                  value={location.province}
-                  onChange={(t) => setLocation({ ...location, province: t })} />
-                <InputBox icon="map-outline" placeholder="City"
-                  value={location.city}
-                  onChange={(t) => setLocation({ ...location, city: t })} />
-                <InputBox icon="navigate-outline" placeholder="Full Address"
-                  value={location.address}
-                  onChange={(t) => setLocation({ ...location, address: t })} />
-                <InputBox icon="mail-outline" placeholder="Zip Code"
-                  value={location.zip_code}
-                  onChange={(t) => setLocation({ ...location, zip_code: t })} />
-              </View>
-            </SectionCard>
-          )}
-
           {/* Requirements */}
           <SectionCard title="Requirements" icon="list-outline">
             <View style={{ gap: 16 }}>
@@ -892,7 +1176,7 @@ function Step2({
                 <FieldLabel label="Max Applicants" />
                 <InputBox
                   icon="people-outline"
-                  placeholder="100"
+                  placeholder="100 (max 1000)"
                   value={applicationSettings.max_applicants}
                   onChange={(t) => setApplicationSettings({ ...applicationSettings, max_applicants: t })}
                   keyboardType="numeric"
@@ -920,24 +1204,28 @@ function Step2({
                 <FieldLabel label="Application Deadline" />
                 <TouchableOpacity
                   style={s.datePickerBtn}
-                  onPress={() => setShowStartDate(true)}
+                  onPress={() => setShowDeadlinePicker(true)}
                   activeOpacity={0.7}
                 >
                   <Ionicons name="calendar-outline" size={18} color={BLUE} />
                   <Text style={s.datePickerText}>
                     {applicationSettings.application_deadline
-                      ? formatDateDisplay(new Date(applicationSettings.application_deadline))
-                      : 'Select deadline'}
+                      ? formatDateDisplay(applicationSettings.application_deadline)
+                      : 'Select deadline (must be in future)'}
                   </Text>
                 </TouchableOpacity>
-                {showStartDate && (
+                {showDeadlinePicker && (
                   <DateTimePicker
                     value={applicationSettings.application_deadline ? new Date(applicationSettings.application_deadline) : new Date()}
                     mode="date"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={(event, selectedDate) => {
-                      setShowStartDate(false);
+                      setShowDeadlinePicker(false);
                       if (selectedDate) {
+                        if (selectedDate <= new Date()) {
+                          Alert.alert('Invalid Date', 'Application deadline must be in the future');
+                          return;
+                        }
                         setApplicationSettings({
                           ...applicationSettings,
                           application_deadline: selectedDate.toISOString()
@@ -983,6 +1271,30 @@ function Step2({
           </SectionCard>
         </>
       )}
+
+      {/* ── Province Selection Modal ── */}
+      <SelectionModal
+        visible={showProvinceModal}
+        onClose={() => setShowProvinceModal(false)}
+        onSelect={(province) => setLocation({ ...location, province: province })}
+        data={PHILIPPINE_PROVINCES}
+        title="Select Province"
+        searchPlaceholder="Search or type province..."
+        selectedValue={location.province}
+        allowCustom={true}
+      />
+
+      {/* ── City Selection Modal ── */}
+      <SelectionModal
+        visible={showCityModal}
+        onClose={() => setShowCityModal(false)}
+        onSelect={(city) => setLocation({ ...location, city: city })}
+        data={PHILIPPINE_CITIES}
+        title="Select City"
+        searchPlaceholder="Search or type city..."
+        selectedValue={location.city}
+        allowCustom={true}
+      />
     </View>
   );
 }
@@ -1037,9 +1349,22 @@ function Step3({ title, description, requiredSkills, jobType, workSetup,
   };
 
   const getStatusDisplay = () => {
-    if (applicationSettings.urgent) return '🚨 Urgent';
-    if (applicationSettings.featured) return '⭐ Featured';
-    return 'Open';
+    const statuses = [];
+    if (applicationSettings.urgent) statuses.push('Urgent');
+    if (applicationSettings.featured) statuses.push('Featured');
+    if (applicationSettings.nda_required) statuses.push('NDA Required');
+    return statuses.length > 0 ? statuses.join(' • ') : 'Open';
+  };
+
+  const getFullAddress = () => {
+    if (!location) return null;
+    const parts = [];
+    if (location.address) parts.push(location.address);
+    if (location.city) parts.push(location.city);
+    if (location.province) parts.push(location.province);
+    if (location.country && location.country !== 'Philippines') parts.push(location.country);
+    if (location.zip_code) parts.push(location.zip_code);
+    return parts.length > 0 ? parts.join(', ') : null;
   };
 
   return (
@@ -1079,6 +1404,11 @@ function Step3({ title, description, requiredSkills, jobType, workSetup,
             {applicationSettings.featured && (
               <View style={[rv.badge, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
                 <Text style={[rv.badgeTxt, { color: '#D97706' }]}>Featured</Text>
+              </View>
+            )}
+            {applicationSettings.nda_required && (
+              <View style={[rv.badge, { backgroundColor: '#DBEAFE', borderColor: '#93C5FD' }]}>
+                <Text style={[rv.badgeTxt, { color: '#2563EB' }]}>NDA</Text>
               </View>
             )}
           </View>
@@ -1127,14 +1457,17 @@ function Step3({ title, description, requiredSkills, jobType, workSetup,
         </View>
       </SectionCard>
 
-      {location && (location.country || location.city) && (
+      {(location && (location.country || location.city || location.address)) && (
         <SectionCard title="Location" icon="location-outline">
           <View style={{ gap: 12 }}>
-            {location.country && <ReviewRow icon="location-outline" label="Country" value={location.country} />}
-            {location.province && <ReviewRow icon="business-outline" label="Province" value={location.province} />}
+            {location.address && <ReviewRow icon="navigate-outline" label="Full Address" value={location.address} />}
             {location.city && <ReviewRow icon="map-outline" label="City" value={location.city} />}
-            {location.address && <ReviewRow icon="navigate-outline" label="Address" value={location.address} />}
+            {location.province && <ReviewRow icon="business-outline" label="Province" value={location.province} />}
+            {location.country && <ReviewRow icon="location-outline" label="Country" value={location.country} />}
             {location.zip_code && <ReviewRow icon="mail-outline" label="Zip Code" value={location.zip_code} />}
+            {getFullAddress() && (
+              <ReviewRow icon="location-outline" label="Full Address" value={getFullAddress()} accent={GREEN} />
+            )}
           </View>
         </SectionCard>
       )}
@@ -1165,7 +1498,7 @@ function Step3({ title, description, requiredSkills, jobType, workSetup,
             <ReviewRow icon="checkmark-circle-outline" label="Auto Accept" value={applicationSettings.auto_accept ? 'Yes' : 'No'} accent={applicationSettings.auto_accept ? GREEN : undefined} />
             <ReviewRow icon="people-outline" label="Multiple Hires" value={applicationSettings.allow_multiple_hires ? 'Yes' : 'No'} accent={applicationSettings.allow_multiple_hires ? GREEN : undefined} />
             {applicationSettings.application_deadline && (
-              <ReviewRow icon="calendar-outline" label="Deadline" value={formatDateDisplay(applicationSettings.application_deadline)} />
+              <ReviewRow icon="calendar-outline" label="Application Deadline" value={formatDateDisplay(applicationSettings.application_deadline)} accent={new Date(applicationSettings.application_deadline) < new Date() ? '#EF4444' : GREEN} />
             )}
             <ReviewRow icon="flag-outline" label="Status" value={getStatusDisplay()} />
           </View>
@@ -1217,7 +1550,7 @@ const rv = StyleSheet.create({
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function PostJobScreen({ onNavigate }) {
   const dispatch = useDispatch();
-  const { isLoading, error } = useSelector((state) => state.jobs);
+  const { isLoading, error, createJobSuccess } = useSelector((state) => state.jobs);
   const { token } = useSelector((state) => state.auth);
 
   const [activeTab, setActiveTab] = useState('PostJob');
@@ -1301,6 +1634,25 @@ export default function PostJobScreen({ onNavigate }) {
     return () => backHandler.remove();
   }, [onNavigate]);
 
+  // Reset success state when component unmounts
+  useEffect(() => {
+    return () => {
+      dispatch(clearJobSuccess());
+    };
+  }, [dispatch]);
+
+  // Handle successful job creation
+  useEffect(() => {
+    if (createJobSuccess) {
+      Alert.alert('Posted!', 'Your job is now live.', [
+        { text: 'View My Postings', onPress: () => { resetForm(); onNavigate('Mypostings'); } },
+        { text: 'Post Another',     onPress: () => resetForm() },
+        { text: 'Dashboard',        onPress: () => { resetForm(); onNavigate('ClientDashboard'); } },
+      ]);
+      dispatch(clearJobSuccess());
+    }
+  }, [createJobSuccess]);
+
   const handleTabPress = (key) => {
     setActiveTab(key);
     if (key === 'Home')          onNavigate('ClientDashboard');
@@ -1320,6 +1672,11 @@ export default function PostJobScreen({ onNavigate }) {
   const validateStep2 = () => {
     if (!budgetMin || parseFloat(budgetMin) <= 0) {
       Alert.alert('Missing Info', 'Please enter a valid budget minimum amount');
+      return false;
+    }
+    const maxApps = parseInt(applicationSettings.max_applicants);
+    if (maxApps < 1 || maxApps > 1000) {
+      Alert.alert('Invalid', 'Max applicants must be between 1 and 1000');
       return false;
     }
     return true;
@@ -1394,32 +1751,41 @@ export default function PostJobScreen({ onNavigate }) {
     });
     setCurrentStep(1);
     setShowAdvanced(false);
+    dispatch(clearJobSuccess());
   };
 
-  // ==================== UPDATED handlePost FUNCTION ====================
   const handlePost = async () => {
     if (!token) {
       Alert.alert('Error', 'You must be logged in to post a job');
       return;
     }
 
-    // Prepare job data matching the backend schema
+    const maxApps = parseInt(applicationSettings.max_applicants);
+    if (maxApps < 1 || maxApps > 1000) {
+      Alert.alert('Invalid', 'Max applicants must be between 1 and 1000');
+      return;
+    }
+
+    if (applicationSettings.application_deadline) {
+      const deadline = new Date(applicationSettings.application_deadline);
+      if (deadline <= new Date()) {
+        Alert.alert('Invalid', 'Application deadline must be in the future');
+        return;
+      }
+    }
+
     const jobData = {
-      // Basic Information
       title: title.trim(),
       description: description.trim(),
       category: category.trim(),
       subcategory: null,
       required_skills: requiredSkills,
       tags: [],
-      
-      // Job Details
       job_type: jobType,
       work_setup: workSetup,
       experience_level: experienceLevel,
       vacancies: parseInt(vacancies) || 1,
-      
-      // Location
+      contact_preference: contactPreference,
       location: {
         country: location.country || 'Philippines',
         province: location.province || '',
@@ -1427,26 +1793,19 @@ export default function PostJobScreen({ onNavigate }) {
         address: location.address || '',
         zip_code: location.zip_code || '',
       },
-      
       timezone: timezone || 'Asia/Manila',
-      
-      // Budget
       budget_type: budgetType,
       budget_min: parseFloat(budgetMin) || 0,
       budget_max: budgetMax ? parseFloat(budgetMax) : (parseFloat(budgetMin) || 0),
       budget_currency: budgetCurrency || 'PHP',
       budget_negotiable: budgetNegotiable,
       hide_budget: hideBudget,
-      
-      // Timeline
       duration_value: parseInt(durationValue) || 1,
       duration_unit: durationUnit || 'weeks',
       estimated_hours: estimatedHours ? parseInt(estimatedHours) : null,
       weekly_limit: weeklyLimit ? parseInt(weeklyLimit) : null,
       start_date: startDate || null,
       end_date: endDate || null,
-      
-      // Requirements
       requirements: {
         education: requirements.education || 'none',
         portfolio_required: requirements.portfolio_required || false,
@@ -1454,56 +1813,38 @@ export default function PostJobScreen({ onNavigate }) {
         cover_letter_required: requirements.cover_letter_required || false,
         preferred_languages: requirements.preferred_languages || [],
         preferred_certifications: requirements.preferred_certifications || [],
+        min_years: 0,
       },
-      
-      // Screening Questions
       screening_questions: screeningQuestions.map(q => ({
-        question: q.question,
-        required: q.required !== undefined ? q.required : true
+        question: typeof q === 'string' ? q : q.question,
+        required: typeof q === 'object' ? (q.required !== undefined ? q.required : true) : true
       })),
-      
-      // Hiring Settings
       hiring: {
         max_applicants: parseInt(applicationSettings.max_applicants) || 100,
         auto_accept: applicationSettings.auto_accept || false,
         allow_multiple_hires: applicationSettings.allow_multiple_hires || false,
       },
-      
-      // Features
       featured: applicationSettings.featured || false,
       urgent: applicationSettings.urgent || false,
       nda_required: applicationSettings.nda_required || false,
-      
-      // Visibility
       visibility: 'public',
-      
-      // Application Deadline
       application_deadline: applicationSettings.application_deadline || null,
     };
 
     console.log('=== JOB DATA BEING SENT ===');
-    console.log('Job Data:', JSON.stringify(jobData, null, 2));
+    console.log('Location with address:', jobData.location);
+    console.log('Full Job Data:', JSON.stringify(jobData, null, 2));
 
     try {
       const result = await dispatch(createJob(jobData)).unwrap();
-
-      if (result && result.job) {
-        Alert.alert('Posted!', 'Your job is now live.', [
-          { text: 'View My Postings', onPress: () => { resetForm(); onNavigate('Mypostings'); } },
-          { text: 'Post Another',     onPress: () => resetForm() },
-          { text: 'Dashboard',        onPress: () => { resetForm(); onNavigate('ClientDashboard'); } },
-        ]);
-      } else {
-        Alert.alert('Success', 'Your job has been posted successfully!');
-        resetForm();
-        onNavigate('ClientDashboard');
-      }
+      console.log('Job created successfully:', result);
     } catch (error) {
       console.error('Post job error:', error);
-      Alert.alert('Error', error?.message || 'Failed to post job. Please try again.');
+      Alert.alert('Error', typeof error === 'string' ? error : (error?.message || 'Failed to post job. Please try again.'));
     }
   };
 
+  // Step props
   const stepProps = {
     title, setTitle,
     description, setDescription,
@@ -1529,10 +1870,7 @@ export default function PostJobScreen({ onNavigate }) {
     endDate, setEndDate,
     experienceLevel, setExperienceLevel,
     location, setLocation,
-    workSetup,
     requirements, setRequirements,
-    educationRequirements: requirements, // Reuse requirements for education
-    setEducationRequirements: setRequirements,
     applicationSettings, setApplicationSettings,
     certificationInput, setCertificationInput,
     screeningQuestions, setScreeningQuestions,
@@ -1570,7 +1908,6 @@ export default function PostJobScreen({ onNavigate }) {
           contentContainerStyle={s.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Step header */}
           <View style={s.stepHeader}>
             <View style={s.stepHeaderIcon}>
               <Ionicons name={STEPS[currentStep - 1].icon} size={18} color={BLUE} />
@@ -1585,7 +1922,6 @@ export default function PostJobScreen({ onNavigate }) {
           {currentStep === 2 && <Step2 {...stepProps} />}
           {currentStep === 3 && <Step3 {...stepProps} />}
 
-          {/* Navigation Buttons */}
           <View style={s.navRow}>
             {currentStep > 1 ? (
               <TouchableOpacity style={s.backNavBtn} onPress={handleBack}>
@@ -1619,7 +1955,6 @@ export default function PostJobScreen({ onNavigate }) {
             )}
           </View>
 
-          {/* Show error if any */}
           {error && (
             <View style={s.errorContainer}>
               <Ionicons name="alert-circle-outline" size={18} color="#EF4444" />
@@ -1733,40 +2068,6 @@ const s = StyleSheet.create({
   },
   errorText: { flex: 1, fontSize: 13, color: '#991B1B', lineHeight: 18 },
 
-  suggestionContainer: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    marginTop: 4,
-    backgroundColor: WHITE,
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 8,
-    maxHeight: 160,
-    overflow: 'hidden',
-    zIndex: 999,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 6,
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    backgroundColor: WHITE,
-  },
-  suggestionText: {
-    fontSize: 13,
-    color: TEXT_MAIN,
-    fontWeight: '500',
-  },
   datePickerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1813,4 +2114,140 @@ const s = StyleSheet.create({
   tabLabel:     { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500' },
   tabLabelActive: { color: BLUE, fontWeight: '700' },
   tabLabelPost: { color: GOLD, fontWeight: '700' },
+
+  // ── Selection Modal Styles ──────────────────────────────────────────────
+  selectionOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(7,26,62,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  selectionContainer: {
+    backgroundColor: WHITE,
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  selectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  selectionSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BG,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    marginBottom: 12,
+  },
+  selectionSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: TEXT_MAIN,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  selectionList: {
+    paddingVertical: 4,
+  },
+  selectionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  selectionItemActive: {
+    backgroundColor: `${BLUE}5`,
+  },
+  selectionItemText: {
+    fontSize: 14,
+    color: TEXT_MAIN,
+    flex: 1,
+  },
+  selectionItemTextActive: {
+    color: BLUE,
+    fontWeight: '600',
+  },
+  selectionEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  selectionEmptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+    marginTop: 12,
+  },
+  selectionEmptySub: {
+    fontSize: 13,
+    color: TEXT_LIGHT,
+    marginTop: 4,
+  },
+  selectionCloseBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+  },
+  selectionCloseBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+  },
+  selectionCustomOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: `${BLUE}5`,
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: BLUE,
+    borderStyle: 'dashed',
+  },
+  selectionCustomText: {
+    flex: 1,
+    fontSize: 14,
+    color: BLUE,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  selectionCustomBadge: {
+    backgroundColor: BLUE,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  selectionCustomBadgeText: {
+    fontSize: 10,
+    color: WHITE,
+    fontWeight: '600',
+  },
 });

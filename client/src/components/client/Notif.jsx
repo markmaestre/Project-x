@@ -1,4 +1,7 @@
-import React, { useState, useCallback } from 'react';
+// ClientNotifications.js - Fully connected to Redux notificationSlice (NO MOCK DATA)
+// UPDATED with better error handling and countsLoaded state
+
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,15 +11,30 @@ import {
   RefreshControl,
   StatusBar,
   Alert,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  getNotifications,
+  getNotificationCounts,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  deleteNotification,
+  deleteAllNotifications,
+  clearNotificationError,
+  clearNotificationSuccess,
+  setSelectedNotification,
+  clearSelectedNotification,
+  resetUnreadCount,
+} from '../../Redux/slices/notificationSlice';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const NAVY        = '#061630';
 const BLUE        = '#1A56DB';
 const BLUE_SOFT   = '#EBF2FF';
-const BLUE_MID    = '#2563EB';
 const GOLD        = '#B8860B';
 const GOLD_LT     = '#D4A017';
 const GOLD_SOFT   = '#FDF6E3';
@@ -35,503 +53,95 @@ const ORANGE      = '#C45B0A';
 const ORANGE_SOFT = '#FFF3E4';
 const PURPLE      = '#5B21B6';
 const PURPLE_SOFT = '#F5F3FF';
-// ─────────────────────────────────────────────────────────────────────────────
 
-// YOU are the CLIENT. Mark Ranier Maestre is the FREELANCER messaging/applying to you.
-const CLIENT = { name: 'You (Client Account)' };
-
-const MOCK_NOTIFICATIONS = [
-  // ── TODAY ──
-  {
-    id: 'n1',
-    type: 'message',
-    category: 'today',
-    title: 'New Message',
-    sender: 'Mark Ranier Maestre',
-    senderSub: 'UI/UX Designer · Re: Brand Identity Project',
-    preview: 'Hi! I just finished the first draft of the logo concepts. I\'ve uploaded 3 variations for your review. Please let me know which direction you prefer.',
-    time: '9:41 AM',
-    fullDate: 'Friday, June 13, 2025 at 9:41 AM',
-    read: false,
-    icon: 'mail-outline',
-    accentColor: BLUE,
-    bgColor: BLUE_SOFT,
-    tag: 'Message',
-    tagColor: BLUE,
-    tagBg: BLUE_SOFT,
-    senderInitials: 'MR',
-    senderAvatarColor: BLUE,
-    detail: {
-      subject: 'Re: Brand Identity Project — Logo Draft Ready for Review',
-      greeting: 'Hi!',
-      body: `I just finished the first draft of the logo concepts for the Brand Identity Project and wanted to share them with you right away.
-
-I've uploaded 3 logo variations to the project board, each exploring a different visual direction based on our initial brief:
-
-  Concept A   Clean wordmark — modern, minimalist, corporate feel
-  Concept B   Icon + wordmark — versatile for both print and digital
-  Concept C   Monogram mark — strong, premium, memorable
-
-All three are provided in full color, reversed (white), and single-color (black) formats. I've also attached a quick rationale PDF explaining the thinking behind each concept.
-
-Could you please review them at your earliest convenience and let me know which direction resonates most? Once you pick a direction, I can move into refinements and start working on the brand color palette and typography selection.
-
-Looking forward to your feedback!`,
-      closing: 'Best regards,',
-      sigName: 'Mark Ranier Maestre',
-      sigRole: 'UI/UX Designer & Frontend Developer',
-      actions: [
-        { label: 'Reply',          icon: 'arrow-undo-outline',    color: BLUE,  bg: BLUE_SOFT },
-        { label: 'View Project',   icon: 'folder-open-outline',   color: GOLD,  bg: GOLD_SOFT },
-        { label: 'View Files',     icon: 'document-outline',      color: PURPLE, bg: PURPLE_SOFT },
-      ],
-    },
-  },
-  {
-    id: 'n2',
-    type: 'application',
-    category: 'today',
-    title: 'New Application',
-    sender: 'Mark Ranier Maestre',
-    senderSub: 'Applied for Senior UI/UX Designer',
-    preview: 'Mark Ranier Maestre submitted a proposal for your Senior UI/UX Designer job posting. Bid: ₱120/hr.',
-    time: '8:05 AM',
-    fullDate: 'Friday, June 13, 2025 at 8:05 AM',
-    read: false,
-    icon: 'person-add-outline',
-    accentColor: PURPLE,
-    bgColor: PURPLE_SOFT,
-    tag: 'New Applicant',
-    tagColor: PURPLE,
-    tagBg: PURPLE_SOFT,
-    senderInitials: 'MR',
-    senderAvatarColor: PURPLE,
-    detail: {
-      subject: 'New Application — Senior UI/UX Designer · Mark Ranier Maestre',
-      greeting: 'Hello,',
-      body: `Mark Ranier Maestre has submitted a proposal for your job posting: Senior UI/UX Designer.
-
-Applicant Details:
-  Name             Mark Ranier Maestre
-  Rating           4.9 / 5.0  (47 reviews)
-  Completed Jobs   63 on Vantara
-  Top Skills       UI/UX Design, Figma, React Native, Design Systems
-  Vantara Badge    Verified · Top Rated
-
-Proposal Summary:
-  Bid Rate         ₱120.00 / hour
-  Availability     Full-time, immediate start
-  Cover Letter     (excerpt below)
-
-"Hi! I came across your Senior UI/UX Designer posting and I'm very excited about the opportunity. I have 5+ years of experience designing mobile and web products for clients across fintech, e-commerce, and SaaS. I've attached my portfolio and I'd love to walk you through some relevant case studies on a quick call. I'm confident I can bring both strong design thinking and clean execution to your team."
-
-You can view Mark Ranier's full profile, portfolio, and complete proposal from the Applications tab on your job posting.`,
-      closing: 'Vantara Jobs Team',
-      sigName: '',
-      sigRole: 'jobs@vantara.ph',
-      actions: [
-        { label: 'View Application', icon: 'document-text-outline', color: PURPLE, bg: PURPLE_SOFT },
-        { label: 'Message Applicant', icon: 'chatbubble-outline',   color: BLUE,   bg: BLUE_SOFT },
-        { label: 'Shortlist',         icon: 'ribbon-outline',       color: GOLD,   bg: GOLD_SOFT },
-      ],
-    },
-  },
-  {
-    id: 'n3',
-    type: 'milestone',
-    category: 'today',
-    title: 'Milestone Submitted',
-    sender: 'Mark Ranier Maestre',
-    senderSub: 'Project Alpha · Milestone 2 — UI Screens',
-    preview: 'Mark Ranier submitted Milestone 2 for your review: UI Screens Delivery. Release payment once approved.',
-    time: '7:30 AM',
-    fullDate: 'Friday, June 13, 2025 at 7:30 AM',
-    read: false,
-    icon: 'flag-outline',
-    accentColor: ORANGE,
-    bgColor: ORANGE_SOFT,
-    tag: 'Needs Review',
-    tagColor: ORANGE,
-    tagBg: ORANGE_SOFT,
-    senderInitials: 'MR',
-    senderAvatarColor: ORANGE,
-    detail: {
-      subject: 'Milestone Submitted for Review — Project Alpha · Milestone 2',
-      greeting: 'Hi,',
-      body: `Mark Ranier Maestre has submitted Milestone 2 of Project Alpha for your review and approval.
-
-Milestone Details:
-  Project          Project Alpha — E-commerce Redesign
-  Milestone        Milestone 2 — UI Screens Delivery (Final)
-  Submitted        June 13, 2025 at 7:30 AM
-  Deliverables     28 Figma screens + handoff specs
-  Milestone Value  ₱18,500.00
-  Note from Mark   "All 28 screens are complete and uploaded to the shared Figma file. I've also included an interaction prototype, component notes, and a developer handoff guide. Please review at your convenience — I'm available for a walkthrough call anytime this week."
-
-Next Steps:
-  — Review the submitted deliverables in the project board
-  — If satisfied, approve the milestone to release the payment of ₱18,500.00 to Mark Ranier
-  — If revisions are needed, you may request changes with a note
-
-Note: Milestone payments are held in escrow and will only be released upon your approval. If you have a dispute, please contact Vantara Support within 5 business days of submission.`,
-      closing: 'Vantara Milestone System',
-      sigName: '',
-      sigRole: 'milestones@vantara.ph',
-      actions: [
-        { label: 'Review & Approve', icon: 'checkmark-circle-outline', color: GREEN,  bg: GREEN_SOFT },
-        { label: 'Request Revision', icon: 'create-outline',           color: ORANGE, bg: ORANGE_SOFT },
-        { label: 'View Files',       icon: 'folder-open-outline',      color: BLUE,   bg: BLUE_SOFT },
-      ],
-    },
-  },
-
-  // ── YESTERDAY ──
-  {
-    id: 'n4',
-    type: 'offer_accepted',
-    category: 'yesterday',
-    title: 'Offer Accepted',
-    sender: 'Mark Ranier Maestre',
-    senderSub: 'Senior UI/UX Designer · Job Offer',
-    preview: 'Mark Ranier Maestre has accepted your job offer. The contract is now pending your signature.',
-    time: 'Yesterday, 4:15 PM',
-    fullDate: 'Thursday, June 12, 2025 at 4:15 PM',
-    read: true,
-    icon: 'checkmark-circle-outline',
-    accentColor: GREEN,
-    bgColor: GREEN_SOFT,
-    tag: 'Accepted',
-    tagColor: GREEN,
-    tagBg: GREEN_SOFT,
-    senderInitials: 'MR',
-    senderAvatarColor: GREEN,
-    detail: {
-      subject: 'Offer Accepted — Mark Ranier Maestre · Senior UI/UX Designer',
-      greeting: 'Great news!',
-      body: `Mark Ranier Maestre has accepted your job offer for the Senior UI/UX Designer position. You're one step away from getting started.
-
-Offer Summary:
-  Freelancer       Mark Ranier Maestre
-  Position         Senior UI/UX Designer
-  Rate             ₱120.00 / hour
-  Duration         3 months (with option to extend)
-  Start Date       June 20, 2025
-  Accepted On      June 12, 2025 at 4:15 PM
-
-Next Steps:
-  1. Review and sign the auto-generated freelance contract in your Contracts tab
-  2. Fund the first milestone escrow to officially kick off the project
-  3. Mark Ranier will be notified once the contract is signed and funds are in escrow
-
-The contract must be signed within 48 hours or the offer will expire. Mark Ranier has been notified that the ball is now in your court.`,
-      closing: 'Vantara Jobs Team',
-      sigName: '',
-      sigRole: 'jobs@vantara.ph',
-      actions: [
-        { label: 'Sign Contract',   icon: 'document-text-outline', color: BLUE,  bg: BLUE_SOFT },
-        { label: 'Fund Escrow',     icon: 'wallet-outline',        color: GREEN, bg: GREEN_SOFT },
-        { label: 'Message Mark',    icon: 'chatbubble-outline',    color: GOLD,  bg: GOLD_SOFT },
-      ],
-    },
-  },
-  {
-    id: 'n5',
-    type: 'interview',
-    category: 'yesterday',
-    title: 'Interview Confirmed',
-    sender: 'Mark Ranier Maestre',
-    senderSub: 'Product Designer Role · Interview',
-    preview: 'Mark Ranier confirmed your interview request for tomorrow, June 13 at 10:00 AM.',
-    time: 'Yesterday, 2:00 PM',
-    fullDate: 'Thursday, June 12, 2025 at 2:00 PM',
-    read: true,
-    icon: 'calendar-outline',
-    accentColor: GOLD,
-    bgColor: GOLD_SOFT,
-    tag: 'Confirmed',
-    tagColor: GOLD,
-    tagBg: GOLD_SOFT,
-    senderInitials: 'MR',
-    senderAvatarColor: GOLD,
-    detail: {
-      subject: 'Interview Confirmed — Mark Ranier Maestre · June 13 at 10:00 AM',
-      greeting: 'Hi,',
-      body: `Mark Ranier Maestre has confirmed your interview invitation for the Product Designer role.
-
-Interview Details:
-  Candidate        Mark Ranier Maestre
-  Position         Product Designer
-  Date             Friday, June 13, 2025
-  Time             10:00 AM (Philippine Standard Time)
-  Format           Video Call via Google Meet
-  Meeting Link     meet.google.com/vnt-nxd-2025
-  Duration         ~45 minutes
-
-Mark Ranier's note: "Confirmed! Looking forward to the conversation. I'll have my portfolio and a few relevant case studies ready to walk through. See you then!"
-
-A calendar invite has been sent to your registered email. You will also receive a reminder 30 minutes before the call.
-
-Tip: Review Mark Ranier's profile and portfolio beforehand for a more productive conversation.`,
-      closing: 'Vantara Scheduling',
-      sigName: '',
-      sigRole: 'scheduling@vantara.ph',
-      actions: [
-        { label: 'Join Meeting',    icon: 'videocam-outline',        color: GOLD,  bg: GOLD_SOFT },
-        { label: 'View Profile',    icon: 'person-outline',          color: BLUE,  bg: BLUE_SOFT },
-        { label: 'Reschedule',      icon: 'calendar-outline',        color: ORANGE, bg: ORANGE_SOFT },
-      ],
-    },
-  },
-  {
-    id: 'n6',
-    type: 'message',
-    category: 'yesterday',
-    title: 'New Message',
-    sender: 'Mark Ranier Maestre',
-    senderSub: 'Re: React Native Developer Role',
-    preview: 'Just wanted to follow up on my proposal. Happy to hop on a quick call if you have questions about my background or the project approach.',
-    time: 'Yesterday, 10:20 AM',
-    fullDate: 'Thursday, June 12, 2025 at 10:20 AM',
-    read: true,
-    icon: 'mail-outline',
-    accentColor: BLUE,
-    bgColor: BLUE_SOFT,
-    tag: 'Message',
-    tagColor: BLUE,
-    tagBg: BLUE_SOFT,
-    senderInitials: 'MR',
-    senderAvatarColor: BLUE,
-    detail: {
-      subject: 'Follow-up — React Native Developer Proposal',
-      greeting: 'Hi!',
-      body: `I wanted to follow up on the proposal I submitted for your React Native Developer position a couple of days ago. I know you're probably reviewing a lot of applications, so I'll keep this brief.
-
-I've worked on 8 React Native projects in the past 2 years — ranging from fintech apps to marketplace platforms — and I feel like this role is a strong fit for what I can offer. I'd love to share a couple of relevant case studies if you're interested.
-
-If you have any questions about my background, tech stack, or approach to the project, I'm happy to jump on a quick 20-minute intro call at your convenience. Just send me a time and I'll be there.
-
-Either way, I appreciate you considering my application and I hope to hear from you soon!`,
-      closing: 'Thanks,',
-      sigName: 'Mark Ranier Maestre',
-      sigRole: 'UI/UX Designer & Frontend Developer · Vantara',
-      actions: [
-        { label: 'Reply',            icon: 'arrow-undo-outline',    color: BLUE,   bg: BLUE_SOFT },
-        { label: 'View Application', icon: 'document-text-outline', color: PURPLE, bg: PURPLE_SOFT },
-      ],
-    },
-  },
-
-  // ── OLDER ──
-  {
-    id: 'n7',
-    type: 'contract',
-    category: 'older',
-    title: 'Contract Signed by Freelancer',
-    sender: 'Mark Ranier Maestre',
-    senderSub: 'Brand Identity Project · Contract',
-    preview: 'Mark Ranier has signed the contract for Brand Identity Project. Project is now active.',
-    time: 'Jun 9',
-    fullDate: 'Monday, June 9, 2025',
-    read: true,
-    icon: 'document-text-outline',
-    accentColor: BLUE,
-    bgColor: BLUE_SOFT,
-    tag: 'Contract Active',
-    tagColor: BLUE,
-    tagBg: BLUE_SOFT,
-    senderInitials: 'MR',
-    senderAvatarColor: BLUE,
-    detail: {
-      subject: 'Contract Signed — Brand Identity Project · Now Active',
-      greeting: 'Hi,',
-      body: `Mark Ranier Maestre has signed the freelance contract for the Brand Identity Project. Since both parties have now signed, the contract is officially active and the project has begun.
-
-Contract Summary:
-  Contract ID      VNT-CTR-20250609-004
-  Project          Brand Identity Design
-  Client           Your Account
-  Freelancer       Mark Ranier Maestre
-  Type             Fixed Price
-  Total Value      ₱45,000.00
-  Start Date       June 13, 2025
-  End Date         July 13, 2025
-
-Milestone Schedule:
-  Milestone 1   Logo & Visual Identity     ₱15,000  · Due June 20
-  Milestone 2   Brand Guidelines Doc       ₱15,000  · Due June 30
-  Milestone 3   Final Assets & Handoff     ₱15,000  · Due July 13
-
-All client-freelancer communications must be done through Vantara Messages to ensure coverage under our Payment & Dispute Protection policy.`,
-      closing: 'Vantara Contracts Team',
-      sigName: '',
-      sigRole: 'contracts@vantara.ph',
-      actions: [
-        { label: 'View Project',    icon: 'folder-open-outline',    color: BLUE, bg: BLUE_SOFT },
-        { label: 'View Contract',   icon: 'document-text-outline',  color: GOLD, bg: GOLD_SOFT },
-        { label: 'Message Mark',    icon: 'chatbubble-outline',     color: PURPLE, bg: PURPLE_SOFT },
-      ],
-    },
-  },
-  {
-    id: 'n8',
-    type: 'review_request',
-    category: 'older',
-    title: 'Leave a Review',
-    sender: 'Mark Ranier Maestre',
-    senderSub: 'E-commerce UI Redesign · Project Completed',
-    preview: 'The project has been marked complete. Share your experience working with Mark Ranier by leaving a review.',
-    time: 'Jun 7',
-    fullDate: 'Saturday, June 7, 2025',
-    read: true,
-    icon: 'star-outline',
-    accentColor: GOLD,
-    bgColor: GOLD_SOFT,
-    tag: 'Review Pending',
-    tagColor: GOLD,
-    tagBg: GOLD_SOFT,
-    senderInitials: 'MR',
-    senderAvatarColor: GOLD,
-    detail: {
-      subject: 'How was your experience with Mark Ranier Maestre?',
-      greeting: 'Hi,',
-      body: `Your project with Mark Ranier Maestre has been marked as completed. We'd love to hear about your experience!
-
-Project:  E-commerce Mobile UI Redesign
-Freelancer:  Mark Ranier Maestre
-Completed:  June 7, 2025
-
-Leaving a review helps:
-  — Other clients make informed hiring decisions
-  — Recognize freelancers for great work
-  — Build a trustworthy community on Vantara
-
-Your review is completely within your control. You can rate Mark Ranier on overall quality, communication, timeliness, and whether you'd hire him again. Reviews are public and visible on his Vantara profile.
-
-Note: Mark Ranier has already submitted a review of his experience working with you. You'll be able to see his review only after you submit yours (to ensure fairness).
-
-Please take 2 minutes to leave your review — it means a lot to freelancers like Mark Ranier.`,
-      closing: 'Thank you for using Vantara,',
-      sigName: 'Vantara Review Team',
-      sigRole: 'reviews@vantara.ph',
-      actions: [
-        { label: 'Leave a Review',  icon: 'star-outline',           color: GOLD,  bg: GOLD_SOFT },
-        { label: 'View Project',    icon: 'folder-open-outline',    color: BLUE,  bg: BLUE_SOFT },
-      ],
-    },
-  },
-  {
-    id: 'n9',
-    type: 'payment',
-    category: 'older',
-    title: 'Payment Released to Freelancer',
-    sender: 'Vantara Payments',
-    senderSub: 'Milestone 1 — Logo & Visual Identity',
-    preview: '₱15,000.00 has been released to Mark Ranier Maestre for Milestone 1 approval.',
-    time: 'Jun 5',
-    fullDate: 'Thursday, June 5, 2025',
-    read: true,
-    icon: 'wallet-outline',
-    accentColor: GREEN,
-    bgColor: GREEN_SOFT,
-    tag: '₱15,000 Released',
-    tagColor: GREEN,
-    tagBg: GREEN_SOFT,
-    senderInitials: 'VP',
-    senderAvatarColor: GREEN,
-    detail: {
-      subject: 'Payment Released — ₱15,000.00 to Mark Ranier Maestre · Milestone 1',
-      greeting: 'Hi,',
-      body: `A milestone payment has been successfully released from escrow to Mark Ranier Maestre following your approval.
-
-Payment Summary:
-  Freelancer       Mark Ranier Maestre
-  Project          Brand Identity Design
-  Milestone        Milestone 1 — Logo & Visual Identity
-  Amount Released  ₱15,000.00
-  Transaction ID   VNT-20250605-00781
-  Date             June 5, 2025
-  Released By      Your Account (Milestone Approved)
-
-The funds have been transferred to Mark Ranier's Vantara Wallet. This transaction is now final.
-
-Remaining Milestones:
-  Milestone 2   Brand Guidelines Doc       ₱15,000  · Pending
-  Milestone 3   Final Assets & Handoff     ₱15,000  · Pending
-
-For any questions regarding this payment, please contact Vantara Support.`,
-      closing: 'Vantara Payments Team',
-      sigName: '',
-      sigRole: 'payments@vantara.ph',
-      actions: [
-        { label: 'Download Receipt', icon: 'download-outline',      color: GREEN, bg: GREEN_SOFT },
-        { label: 'View Project',     icon: 'folder-open-outline',   color: BLUE,  bg: BLUE_SOFT },
-      ],
-    },
-  },
-  {
-    id: 'n10',
-    type: 'system',
-    category: 'older',
-    title: 'Job Posting Expiring Soon',
-    sender: 'Vantara Jobs',
-    senderSub: 'Senior React Developer · Job Post',
-    preview: 'Your job posting "Senior React Developer" will expire in 3 days. Renew now to keep receiving applications.',
-    time: 'Jun 3',
-    fullDate: 'Tuesday, June 3, 2025',
-    read: true,
-    icon: 'alert-circle-outline',
-    accentColor: ORANGE,
-    bgColor: ORANGE_SOFT,
-    tag: 'Expiring Soon',
-    tagColor: ORANGE,
-    tagBg: ORANGE_SOFT,
-    senderInitials: 'VJ',
-    senderAvatarColor: ORANGE,
-    detail: {
-      subject: 'Your Job Posting Expires in 3 Days — Senior React Developer',
-      greeting: 'Hi,',
-      body: `Your job posting "Senior React Developer" is set to expire on June 6, 2025 — that's 3 days from now.
-
-Job Posting Summary:
-  Title            Senior React Developer
-  Posted           May 23, 2025
-  Expires          June 6, 2025
-  Applications     14 received
-  Status           Active (Expiring Soon)
-
-To continue receiving applications and keep your post visible to top freelancers on Vantara, please renew your posting before it expires.
-
-Alternatively, if you've already found the right candidate or no longer need to fill this role, you can close the posting from your Jobs Dashboard.
-
-Note: Once a posting expires, it will be removed from search results and freelancers will no longer be able to apply. Existing applications will remain accessible in your account.`,
-      closing: 'Vantara Jobs Team',
-      sigName: '',
-      sigRole: 'jobs@vantara.ph',
-      actions: [
-        { label: 'Renew Posting',   icon: 'refresh-outline',        color: ORANGE, bg: ORANGE_SOFT },
-        { label: 'View Applicants', icon: 'people-outline',         color: BLUE,   bg: BLUE_SOFT },
-        { label: 'Close Post',      icon: 'close-circle-outline',   color: RED,    bg: RED_SOFT },
-      ],
-    },
-  },
-];
-
+// ── Filter definitions ────────────────────────────────────────────────────────
 const FILTERS = [
-  { key: 'All',        label: 'All',          types: null },
-  { key: 'Unread',     label: 'Unread',       types: 'unread' },
-  { key: 'Messages',   label: 'Messages',     types: ['message'] },
-  { key: 'Applicants', label: 'Applicants',   types: ['application'] },
-  { key: 'Projects',   label: 'Projects',     types: ['milestone', 'contract', 'offer_accepted', 'interview'] },
-  { key: 'Payments',   label: 'Payments',     types: ['payment'] },
-  { key: 'System',     label: 'System',       types: ['review_request', 'system'] },
+  { key: 'All',        label: 'All',          type: null },
+  { key: 'Unread',     label: 'Unread',       type: 'unread' },
+  { key: 'Messages',   label: 'Messages',     type: 'message' },
+  { key: 'Applicants', label: 'Applicants',   type: 'application' },
+  { key: 'Projects',   label: 'Projects',     type: 'project_updates' },
+  { key: 'Payments',   label: 'Payments',     type: 'payment_updates' },
+  { key: 'System',     label: 'System',       type: 'system' },
 ];
 
-const SECTION_LABELS = { today: 'Today', yesterday: 'Yesterday', older: 'Earlier' };
+const SECTION_LABELS = { 
+  today: 'Today', 
+  yesterday: 'Yesterday', 
+  older: 'Earlier' 
+};
 
-// ── Detail Screen ─────────────────────────────────────────────────────────────
-function NotificationDetail({ notification: n, onBack }) {
-  const d = n.detail;
-  const avatarBg = n.senderAvatarColor || NAVY;
+const TYPE_COLORS = {
+  message: { bg: BLUE_SOFT, color: BLUE, icon: 'mail-outline' },
+  application: { bg: PURPLE_SOFT, color: PURPLE, icon: 'person-add-outline' },
+  contract_updates: { bg: GREEN_SOFT, color: GREEN, icon: 'document-text-outline' },
+  project_updates: { bg: ORANGE_SOFT, color: ORANGE, icon: 'flag-outline' },
+  payment_updates: { bg: GREEN_SOFT, color: GREEN, icon: 'wallet-outline' },
+  system: { bg: ORANGE_SOFT, color: ORANGE, icon: 'alert-circle-outline' },
+  rating_updates: { bg: GOLD_SOFT, color: GOLD, icon: 'star-outline' },
+  job_posted: { bg: BLUE_SOFT, color: BLUE, icon: 'briefcase-outline' },
+  offer_accepted: { bg: GREEN_SOFT, color: GREEN, icon: 'checkmark-circle-outline' },
+  interview: { bg: GOLD_SOFT, color: GOLD, icon: 'calendar-outline' },
+  review_request: { bg: GOLD_SOFT, color: GOLD, icon: 'star-outline' },
+  milestone: { bg: ORANGE_SOFT, color: ORANGE, icon: 'flag-outline' },
+};
+
+// ── Notification Detail Component ────────────────────────────────────────────
+function NotificationDetail({ notification, onBack, onMarkRead, onDelete }) {
+  const n = notification;
+  const typeColors = TYPE_COLORS[n.type] || { bg: BLUE_SOFT, color: BLUE, icon: 'notifications-outline' };
+  const avatarBg = n.sender?.profile_picture ? null : (n.sender?.avatar_color || NAVY);
+  
+  const senderInitials = n.sender?.first_name && n.sender?.last_name 
+    ? `${n.sender.first_name[0]}${n.sender.last_name[0]}`.toUpperCase()
+    : n.sender?.company_name 
+    ? n.sender.company_name.substring(0, 2).toUpperCase()
+    : 'U';
+
+  const handleMarkRead = () => {
+    if (!n.is_read) {
+      onMarkRead(n._id);
+    }
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Notification',
+      'Are you sure you want to delete this notification?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => onDelete(n._id) },
+      ]
+    );
+  };
+
+  const formatDate = (date) => {
+    if (!date) return '';
+    try {
+      const d = new Date(date);
+      return d.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'Invalid date';
+    }
+  };
+
+  const getDisplayName = (sender) => {
+    if (!sender) return 'Vantara System';
+    if (sender.company_name) return sender.company_name;
+    if (sender.first_name && sender.last_name) {
+      return `${sender.first_name} ${sender.last_name}`;
+    }
+    return sender.username || 'Unknown User';
+  };
+
+  const senderName = n.sender ? getDisplayName(n.sender) : 'Vantara System';
 
   return (
     <SafeAreaView style={ds.safe} edges={['top']}>
@@ -541,84 +151,98 @@ function NotificationDetail({ notification: n, onBack }) {
         <TouchableOpacity style={ds.backBtn} onPress={onBack} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={20} color={WHITE} />
         </TouchableOpacity>
-        <Text style={ds.headerTitle} numberOfLines={1}>{d.subject}</Text>
-        <View style={{ width: 36 }} />
+        <Text style={ds.headerTitle} numberOfLines={1}>{n.title || 'Notification'}</Text>
+        <TouchableOpacity style={ds.deleteBtn} onPress={handleDelete} activeOpacity={0.7}>
+          <Ionicons name="trash-outline" size={18} color={WHITE} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={ds.scroll} contentContainerStyle={ds.scrollContent} showsVerticalScrollIndicator={false}>
-
-        {/* Subject + tag */}
         <View style={ds.subjectCard}>
-          <View style={[ds.typeIcon, { backgroundColor: n.bgColor }]}>
-            <Ionicons name={n.icon} size={22} color={n.accentColor} />
+          <View style={[ds.typeIcon, { backgroundColor: typeColors.bg }]}>
+            <Ionicons name={typeColors.icon} size={22} color={typeColors.color} />
           </View>
           <View style={ds.subjectMeta}>
-            <Text style={ds.subjectText}>{d.subject}</Text>
-            <View style={[ds.tag, { backgroundColor: n.tagBg, borderColor: n.tagColor + '40' }]}>
-              <Text style={[ds.tagText, { color: n.tagColor }]}>{n.tag}</Text>
+            <Text style={ds.subjectText}>{n.title}</Text>
+            <View style={[ds.tag, { backgroundColor: typeColors.bg, borderColor: typeColors.color + '40' }]}>
+              <Text style={[ds.tagText, { color: typeColors.color }]}>
+                {n.type?.replace('_', ' ').toUpperCase() || 'Notification'}
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* Sender row */}
         <View style={ds.metaCard}>
           <View style={ds.senderRow}>
-            <View style={[ds.avatar, { backgroundColor: avatarBg }]}>
-              <Text style={ds.avatarText}>{n.senderInitials}</Text>
-            </View>
+            {n.sender?.profile_picture ? (
+              <Image source={{ uri: n.sender.profile_picture }} style={ds.avatarImage} />
+            ) : (
+              <View style={[ds.avatar, { backgroundColor: avatarBg || NAVY }]}>
+                <Text style={ds.avatarText}>{senderInitials}</Text>
+              </View>
+            )}
             <View style={ds.senderMeta}>
-              <Text style={ds.senderName}>{n.sender}</Text>
-              <Text style={ds.senderSub}>{n.senderSub}</Text>
+              <Text style={ds.senderName}>{senderName}</Text>
             </View>
-            <Text style={ds.dateText}>{n.fullDate}</Text>
+            <Text style={ds.dateText}>{formatDate(n.created_at || n.createdAt)}</Text>
           </View>
 
           <View style={ds.innerDivider} />
-
-          {/* To: You */}
           <View style={ds.toRow}>
             <Text style={ds.toLabel}>To</Text>
             <View style={ds.toChip}>
               <Ionicons name="person-circle-outline" size={14} color={GOLD} />
-              <Text style={ds.toName}>You (Client Account)</Text>
+              <Text style={ds.toName}>You</Text>
             </View>
           </View>
         </View>
 
-        {/* Body */}
         <View style={ds.bodyCard}>
-          {d.greeting ? <Text style={ds.greeting}>{d.greeting}</Text> : null}
-          <Text style={ds.bodyText}>{d.body}</Text>
-          {d.closing ? <Text style={ds.closing}>{d.closing}</Text> : null}
-          {d.sigName ? <Text style={ds.sigName}>{d.sigName}</Text> : null}
-          {d.sigRole ? <Text style={ds.sigRole}>{d.sigRole}</Text> : null}
+          {n.message ? (
+            <Text style={ds.bodyText}>{n.message}</Text>
+          ) : null}
         </View>
 
-        {/* Actions */}
-        {d.actions && d.actions.length > 0 && (
+        {n.actions && n.actions.length > 0 && (
           <View style={ds.actionsCard}>
             <Text style={ds.actionsLabel}>Quick Actions</Text>
             <View style={ds.actionsWrap}>
-              {d.actions.map((a, i) => (
+              {n.actions.map((a, i) => (
                 <TouchableOpacity
                   key={i}
-                  style={[ds.actionBtn, { backgroundColor: a.bg, borderColor: a.color + '35' }]}
+                  style={[ds.actionBtn, { backgroundColor: typeColors.bg, borderColor: typeColors.color + '35' }]}
                   activeOpacity={0.75}
+                  onPress={() => {
+                    // Handle action press - navigate based on action type
+                    if (a.action_type === 'view_job' && a.data?.job_id) {
+                      // Navigate to job detail
+                      onBack();
+                      // You would navigate here
+                    } else if (a.action_type === 'view_application' && a.data?.application_id) {
+                      // Navigate to application detail
+                      onBack();
+                      // You would navigate here
+                    }
+                  }}
                 >
-                  <Ionicons name={a.icon} size={15} color={a.color} />
-                  <Text style={[ds.actionText, { color: a.color }]}>{a.label}</Text>
+                  <Ionicons name={a.icon || 'arrow-forward-outline'} size={15} color={typeColors.color} />
+                  <Text style={[ds.actionText, { color: typeColors.color }]}>{a.label || 'View'}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
         )}
 
-        {/* Footer */}
+        {!n.is_read && (
+          <TouchableOpacity style={ds.markReadBtn} onPress={handleMarkRead} activeOpacity={0.75}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={WHITE} />
+            <Text style={ds.markReadText}>Mark as Read</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={ds.footer}>
           <Ionicons name="shield-checkmark-outline" size={12} color={TEXT_MUTED} />
-          <Text style={ds.footerText}>
-            Sent via Vantara · Notification for your Client Account
-          </Text>
+          <Text style={ds.footerText}>Vantara Notification</Text>
         </View>
 
         <View style={{ height: 40 }} />
@@ -627,57 +251,282 @@ function NotificationDetail({ notification: n, onBack }) {
   );
 }
 
-// ── List Screen ───────────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function ClientNotifications({ onNavigate }) {
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
-  const [refreshing, setRefreshing]       = useState(false);
-  const [activeFilter, setActiveFilter]   = useState('All');
-  const [selected, setSelected]           = useState(null);
+  const dispatch = useDispatch();
+  
+  const {
+    notifications,
+    selectedNotification,
+    isLoading,
+    error,
+    totalCount,
+    totalPages,
+    unreadCount,
+    markSuccess,
+    deleteSuccess,
+    countsLoaded, // NEW: track if counts have been loaded
+  } = useSelector((state) => state.notifications);
+  
+  const { token } = useSelector((state) => state.auth);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [showDetail, setShowDetail] = useState(false);
+  const [page, setPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Load notifications on mount
+  useEffect(() => {
+    if (token && !initialLoadDone) {
+      loadNotifications();
+      dispatch(getNotificationCounts());
+      setInitialLoadDone(true);
+    }
+  }, [token, initialLoadDone]);
+
+  // Handle mark success
+  useEffect(() => {
+    if (markSuccess) {
+      dispatch(getNotificationCounts());
+      dispatch(clearNotificationSuccess());
+    }
+  }, [markSuccess, dispatch]);
+
+  // Handle delete success
+  useEffect(() => {
+    if (deleteSuccess) {
+      dispatch(getNotificationCounts());
+      dispatch(clearNotificationSuccess());
+      if (selectedNotification) {
+        dispatch(clearSelectedNotification());
+        setShowDetail(false);
+      }
+    }
+  }, [deleteSuccess, dispatch, selectedNotification]);
+
+  const loadNotifications = useCallback(() => {
+    if (token) {
+      dispatch(getNotifications({ page: 1, limit: 20 }));
+    }
+  }, [dispatch, token]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1400);
-  }, []);
-
-  const markAsRead = (id) =>
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-
-  const markAllAsRead = () => {
-    Alert.alert('Mark All as Read', 'Mark all notifications as read?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Mark All Read', onPress: () => setNotifications(prev => prev.map(n => ({ ...n, read: true }))) },
-    ]);
-  };
-
-  const handlePress = (n) => {
-    if (!n.read) markAsRead(n.id);
-    setSelected(n);
-  };
-
-  const getFiltered = () => {
-    const f = FILTERS.find(f => f.key === activeFilter);
-    if (!f || f.types === null) return notifications;
-    if (f.types === 'unread') return notifications.filter(n => !n.read);
-    return notifications.filter(n => f.types.includes(n.type));
-  };
-
-  const grouped = () => {
-    const filtered = getFiltered();
-    const out = {};
-    filtered.forEach(n => {
-      if (!out[n.category]) out[n.category] = [];
-      out[n.category].push(n);
+    Promise.all([
+      dispatch(getNotifications({ page: 1, limit: 20 })),
+      dispatch(getNotificationCounts()),
+    ]).finally(() => {
+      setRefreshing(false);
+      setPage(1);
     });
-    return out;
+  }, [dispatch]);
+
+  const loadMore = useCallback(() => {
+    if (loadingMore || page >= totalPages || !token) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    dispatch(getNotifications({ page: nextPage, limit: 20 }))
+      .finally(() => {
+        setLoadingMore(false);
+        setPage(nextPage);
+      });
+  }, [dispatch, page, totalPages, loadingMore, token]);
+
+  const handleMarkRead = useCallback((notificationId) => {
+    if (token) {
+      dispatch(markNotificationAsRead(notificationId));
+    }
+  }, [dispatch, token]);
+
+  const handleMarkAllRead = useCallback(() => {
+    if (unreadCount === 0) {
+      Alert.alert('No Unread', 'You have no unread notifications.');
+      return;
+    }
+    Alert.alert(
+      'Mark All as Read',
+      `Mark all ${unreadCount} unread notifications as read?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Mark All Read', 
+          onPress: () => {
+            dispatch(markAllNotificationsAsRead());
+            dispatch(resetUnreadCount());
+          } 
+        },
+      ]
+    );
+  }, [dispatch, unreadCount]);
+
+  const handleDeleteAll = useCallback(() => {
+    if (notifications.length === 0) {
+      Alert.alert('Empty', 'You have no notifications to delete.');
+      return;
+    }
+    Alert.alert(
+      'Delete All Notifications',
+      `Delete all ${notifications.length} notifications? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete All', 
+          style: 'destructive',
+          onPress: () => {
+            dispatch(deleteAllNotifications({}));
+          } 
+        },
+      ]
+    );
+  }, [dispatch, notifications.length]);
+
+  const handleDelete = useCallback((notificationId) => {
+    if (token) {
+      dispatch(deleteNotification(notificationId));
+    }
+  }, [dispatch, token]);
+
+  const handleSelect = useCallback((notification) => {
+    dispatch(setSelectedNotification(notification));
+    setShowDetail(true);
+    if (!notification.is_read) {
+      handleMarkRead(notification._id);
+    }
+  }, [dispatch, handleMarkRead]);
+
+  const handleBack = useCallback(() => {
+    setShowDetail(false);
+    dispatch(clearSelectedNotification());
+  }, [dispatch]);
+
+  const getFilteredNotifications = useCallback(() => {
+    const filter = FILTERS.find(f => f.key === activeFilter);
+    if (!filter) return notifications;
+    
+    if (filter.key === 'All') return notifications;
+    if (filter.key === 'Unread') return notifications.filter(n => !n.is_read);
+    if (filter.type) return notifications.filter(n => n.type === filter.type);
+    return notifications;
+  }, [notifications, activeFilter]);
+
+  const getGroupedNotifications = useCallback(() => {
+    const filtered = getFilteredNotifications();
+    const groups = {};
+    
+    filtered.forEach(n => {
+      const date = new Date(n.created_at || n.createdAt);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      let key;
+      if (date >= today) key = 'today';
+      else if (date >= yesterday) key = 'yesterday';
+      else key = 'older';
+      
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(n);
+    });
+    
+    return groups;
+  }, [getFilteredNotifications]);
+
+  const getTypeColor = (type) => {
+    return TYPE_COLORS[type] || { bg: BLUE_SOFT, color: BLUE, icon: 'notifications-outline' };
   };
 
-  if (selected) {
-    return <NotificationDetail notification={selected} onBack={() => setSelected(null)} />;
+  const getInitials = (sender) => {
+    if (!sender) return 'U';
+    if (sender.company_name) return sender.company_name.substring(0, 2).toUpperCase();
+    if (sender.first_name && sender.last_name) {
+      return `${sender.first_name[0]}${sender.last_name[0]}`.toUpperCase();
+    }
+    if (sender.username) return sender.username.substring(0, 2).toUpperCase();
+    return 'U';
+  };
+
+  const getSenderName = (sender) => {
+    if (!sender) return 'Vantara System';
+    if (sender.company_name) return sender.company_name;
+    if (sender.first_name && sender.last_name) {
+      return `${sender.first_name} ${sender.last_name}`;
+    }
+    if (sender.username) return sender.username;
+    return 'Unknown User';
+  };
+
+  const renderNotificationRow = (n, isLast) => {
+    const typeColor = getTypeColor(n.type);
+    const isUnread = !n.is_read;
+    const displayName = getSenderName(n.sender);
+
+    return (
+      <TouchableOpacity
+        key={n._id}
+        style={[s.row, isUnread && s.rowUnread, isLast && s.rowLast]}
+        onPress={() => handleSelect(n)}
+        activeOpacity={0.72}
+      >
+        {isUnread && <View style={s.unreadBar} />}
+
+        <View style={[s.avatar, { backgroundColor: typeColor.color }]}>
+          <Text style={s.avatarText}>{getInitials(n.sender)}</Text>
+        </View>
+
+        <View style={s.body}>
+          <View style={s.rowTop}>
+            <Text style={[s.sender, isUnread && s.senderBold]} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={s.time}>
+              {(() => {
+                try {
+                  const d = new Date(n.created_at || n.createdAt);
+                  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                } catch {
+                  return '';
+                }
+              })()}
+            </Text>
+          </View>
+          <Text style={[s.title, isUnread && s.titleBold]} numberOfLines={1}>
+            {n.title}
+          </Text>
+          <Text style={s.preview} numberOfLines={2}>
+            {n.message}
+          </Text>
+          <View style={[s.tag, { backgroundColor: typeColor.bg, borderColor: typeColor.color + '30' }]}>
+            <Text style={[s.tagText, { color: typeColor.color }]}>
+              {n.type?.replace('_', ' ').toUpperCase() || 'Notification'}
+            </Text>
+          </View>
+        </View>
+
+        {isUnread && <View style={[s.dot, { backgroundColor: typeColor.color }]} />}
+      </TouchableOpacity>
+    );
+  };
+
+  // If showing detail
+  if (showDetail && selectedNotification) {
+    return (
+      <NotificationDetail
+        notification={selectedNotification}
+        onBack={handleBack}
+        onMarkRead={handleMarkRead}
+        onDelete={handleDelete}
+      />
+    );
   }
 
-  const unreadCount = notifications.filter(n => !n.read).length;
-  const sections    = grouped();
-  const sectionKeys = Object.keys(sections);
+  const grouped = getGroupedNotifications();
+  const sectionKeys = Object.keys(grouped);
+
+  // Show loading only on initial load, not when refreshing
+  const showLoading = isLoading && notifications.length === 0 && !refreshing;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -690,23 +539,33 @@ export default function ClientNotifications({ onNavigate }) {
         <View style={s.headerCenter}>
           <Text style={s.headerTitle}>Notifications</Text>
           {unreadCount > 0 && (
-            <View style={s.headerBadge}><Text style={s.headerBadgeText}>{unreadCount}</Text></View>
+            <View style={s.headerBadge}>
+              <Text style={s.headerBadgeText}>{unreadCount}</Text>
+            </View>
           )}
         </View>
-        {unreadCount > 0 ? (
-          <TouchableOpacity style={s.markAllBtn} onPress={markAllAsRead} activeOpacity={0.75}>
-            <Ionicons name="checkmark-done-outline" size={14} color={GOLD_LT} />
-            <Text style={s.markAllText}>Mark read</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 84 }} />
-        )}
+        <View style={s.headerActions}>
+          {unreadCount > 0 && (
+            <TouchableOpacity style={s.markAllBtn} onPress={handleMarkAllRead} activeOpacity={0.75}>
+              <Ionicons name="checkmark-done-outline" size={14} color={GOLD_LT} />
+              <Text style={s.markAllText}>Mark read</Text>
+            </TouchableOpacity>
+          )}
+          {notifications.length > 0 && (
+            <TouchableOpacity style={s.deleteAllBtn} onPress={handleDeleteAll} activeOpacity={0.75}>
+              <Ionicons name="trash-outline" size={16} color={RED} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <View style={s.filterBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterScroll}>
           {FILTERS.map(f => {
             const active = activeFilter === f.key;
+            const count = f.key === 'Unread' ? unreadCount : 
+                         f.type ? notifications.filter(n => n.type === f.type).length : 
+                         notifications.length;
             return (
               <TouchableOpacity
                 key={f.key}
@@ -714,10 +573,12 @@ export default function ClientNotifications({ onNavigate }) {
                 onPress={() => setActiveFilter(f.key)}
                 activeOpacity={0.75}
               >
-                <Text style={[s.filterChipText, active && s.filterChipTextActive]}>{f.label}</Text>
-                {f.key === 'Unread' && unreadCount > 0 && (
+                <Text style={[s.filterChipText, active && s.filterChipTextActive]}>
+                  {f.label}
+                </Text>
+                {count > 0 && (
                   <View style={[s.chipBadge, active && s.chipBadgeActive]}>
-                    <Text style={s.chipBadgeText}>{unreadCount}</Text>
+                    <Text style={s.chipBadgeText}>{count}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -726,74 +587,82 @@ export default function ClientNotifications({ onNavigate }) {
         </ScrollView>
       </View>
 
-      <ScrollView
-        style={s.list}
-        contentContainerStyle={s.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />}
-      >
-        {sectionKeys.length === 0 ? (
-          <View style={s.empty}>
-            <View style={s.emptyIcon}>
-              <Ionicons name="notifications-off-outline" size={40} color={TEXT_MUTED} />
-            </View>
-            <Text style={s.emptyTitle}>Nothing here</Text>
-            <Text style={s.emptyBody}>
-              {activeFilter === 'All' ? 'No notifications yet.' : `No ${activeFilter.toLowerCase()} notifications.`}
-            </Text>
-          </View>
-        ) : (
-          sectionKeys.map(sk => (
-            <View key={sk}>
-              <View style={s.sectionHeader}>
-                <Text style={s.sectionLabel}>{SECTION_LABELS[sk] || sk}</Text>
-                <View style={s.sectionLine} />
+      {showLoading ? (
+        <View style={s.loading}>
+          <ActivityIndicator size="large" color={BLUE} />
+          <Text style={s.loadingText}>Loading notifications...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={s.list}
+          contentContainerStyle={s.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh} 
+              tintColor={BLUE}
+              colors={[BLUE]}
+            />
+          }
+          onScroll={({ nativeEvent }) => {
+            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+            if (layoutMeasurement + contentOffset.y >= contentSize.height - 20) {
+              loadMore();
+            }
+          }}
+          scrollEventThrottle={400}
+        >
+          {sectionKeys.length === 0 ? (
+            <View style={s.empty}>
+              <View style={s.emptyIcon}>
+                <Ionicons name="notifications-off-outline" size={40} color={TEXT_MUTED} />
               </View>
-              {sections[sk].map((n, idx) => (
-                <NotifRow
-                  key={n.id}
-                  n={n}
-                  isLast={idx === sections[sk].length - 1}
-                  onPress={() => handlePress(n)}
-                />
-              ))}
+              <Text style={s.emptyTitle}>Nothing here</Text>
+              <Text style={s.emptyBody}>
+                {activeFilter === 'All' ? 'No notifications yet.' : `No ${activeFilter.toLowerCase()} notifications.`}
+              </Text>
             </View>
-          ))
-        )}
-        <View style={{ height: 40 }} />
-      </ScrollView>
+          ) : (
+            sectionKeys.map(sk => (
+              <View key={sk}>
+                <View style={s.sectionHeader}>
+                  <Text style={s.sectionLabel}>{SECTION_LABELS[sk] || sk}</Text>
+                  <View style={s.sectionLine} />
+                </View>
+                {grouped[sk].map((n, idx) => renderNotificationRow(n, idx === grouped[sk].length - 1))}
+              </View>
+            ))
+          )}
+          
+          {loadingMore && (
+            <View style={s.loadingMore}>
+              <ActivityIndicator size="small" color={BLUE} />
+              <Text style={s.loadingMoreText}>Loading more...</Text>
+            </View>
+          )}
+          
+          {notifications.length > 0 && totalCount > notifications.length && !loadingMore && (
+            <TouchableOpacity style={s.loadMoreBtn} onPress={loadMore}>
+              <Text style={s.loadMoreText}>Load More</Text>
+            </TouchableOpacity>
+          )}
+          
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      )}
+
+      {/* Only show error if not a counts error */}
+      {error && error.code !== 'COUNTS_ERROR' && (
+        <View style={s.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={16} color={RED} />
+          <Text style={s.errorText}>{typeof error === 'string' ? error : error.message || 'An error occurred'}</Text>
+          <TouchableOpacity onPress={() => dispatch(clearNotificationError())}>
+            <Ionicons name="close-outline" size={16} color={TEXT_MUTED} />
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
-  );
-}
-
-function NotifRow({ n, isLast, onPress }) {
-  return (
-    <TouchableOpacity
-      style={[s.row, !n.read && s.rowUnread, isLast && s.rowLast]}
-      onPress={onPress}
-      activeOpacity={0.72}
-    >
-      {!n.read && <View style={s.unreadBar} />}
-
-      {/* Avatar with initials */}
-      <View style={[s.avatar, { backgroundColor: n.senderAvatarColor || NAVY }]}>
-        <Text style={s.avatarText}>{n.senderInitials}</Text>
-      </View>
-
-      <View style={s.body}>
-        <View style={s.rowTop}>
-          <Text style={[s.sender, !n.read && s.senderBold]} numberOfLines={1}>{n.sender}</Text>
-          <Text style={s.time}>{n.time}</Text>
-        </View>
-        <Text style={[s.title, !n.read && s.titleBold]} numberOfLines={1}>{n.title}</Text>
-        <Text style={s.preview} numberOfLines={2}>{n.preview}</Text>
-        <View style={[s.tag, { backgroundColor: n.tagBg, borderColor: n.tagColor + '30' }]}>
-          <Text style={[s.tagText, { color: n.tagColor }]}>{n.tag}</Text>
-        </View>
-      </View>
-
-      {!n.read && <View style={[s.dot, { backgroundColor: n.accentColor }]} />}
-    </TouchableOpacity>
   );
 }
 
@@ -819,6 +688,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   headerBadgeText: { fontSize: 11, fontWeight: '700', color: WHITE },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   markAllBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: 'rgba(212,160,23,0.12)', borderRadius: 16,
@@ -826,6 +696,12 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(212,160,23,0.25)',
   },
   markAllText: { fontSize: 11, fontWeight: '600', color: GOLD_LT },
+  deleteAllBtn: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: 'rgba(185,28,28,0.12)',
+    borderWidth: 1, borderColor: 'rgba(185,28,28,0.2)',
+    alignItems: 'center', justifyContent: 'center',
+  },
   filterBar: { backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: DIVIDER },
   filterScroll: { paddingHorizontal: 14, paddingVertical: 10, gap: 8, flexDirection: 'row' },
   filterChip: {
@@ -899,8 +775,63 @@ const s = StyleSheet.create({
   },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: TEXT_DARK, marginBottom: 6 },
   emptyBody: { fontSize: 13, color: TEXT_MUTED, textAlign: 'center', lineHeight: 19 },
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: BG,
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: TEXT_MUTED,
+    fontWeight: '500',
+  },
+  loadingMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  loadingMoreText: {
+    fontSize: 12,
+    color: TEXT_MUTED,
+  },
+  loadMoreBtn: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginHorizontal: 12,
+    marginTop: 4,
+    backgroundColor: SURFACE,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: BLUE,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: RED_SOFT,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: RED + '30',
+    gap: 8,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 12,
+    color: RED,
+  },
 });
 
+// ── Detail Screen Styles ─────────────────────────────────────────────────────
 const ds = StyleSheet.create({
   safe: { flex: 1, backgroundColor: NAVY },
   header: {
@@ -909,6 +840,12 @@ const ds = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)',
   },
   backBtn: {
+    width: 36, height: 36, borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  deleteBtn: {
     width: 36, height: 36, borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
@@ -942,10 +879,12 @@ const ds = StyleSheet.create({
     width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center',
   },
+  avatarImage: {
+    width: 42, height: 42, borderRadius: 21,
+  },
   avatarText: { fontSize: 14, fontWeight: '700', color: WHITE },
   senderMeta: { flex: 1 },
   senderName: { fontSize: 13, fontWeight: '700', color: TEXT_DARK },
-  senderSub: { fontSize: 11, color: TEXT_MUTED, marginTop: 2 },
   dateText: { fontSize: 10, color: TEXT_MUTED },
   innerDivider: { height: 1, backgroundColor: DIVIDER, marginHorizontal: 14 },
   toRow: {
@@ -964,11 +903,7 @@ const ds = StyleSheet.create({
     backgroundColor: SURFACE, borderRadius: 14, padding: 18,
     borderWidth: 1, borderColor: DIVIDER,
   },
-  greeting: { fontSize: 14, fontWeight: '600', color: TEXT_DARK, marginBottom: 12 },
-  bodyText: { fontSize: 13.5, color: TEXT_MED, lineHeight: 22, marginBottom: 20 },
-  closing: { fontSize: 13, color: TEXT_MUTED, marginBottom: 4 },
-  sigName: { fontSize: 14, fontWeight: '700', color: TEXT_DARK },
-  sigRole: { fontSize: 12, color: TEXT_MUTED, marginTop: 2 },
+  bodyText: { fontSize: 13.5, color: TEXT_MED, lineHeight: 22 },
   actionsCard: {
     backgroundColor: SURFACE, borderRadius: 14, padding: 16,
     borderWidth: 1, borderColor: DIVIDER,
@@ -981,6 +916,13 @@ const ds = StyleSheet.create({
     borderRadius: 10, borderWidth: 1,
   },
   actionText: { fontSize: 13, fontWeight: '700' },
+  markReadBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: BLUE, borderRadius: 12,
+    paddingVertical: 14,
+    borderWidth: 1, borderColor: BLUE + '40',
+  },
+  markReadText: { fontSize: 14, fontWeight: '700', color: WHITE },
   footer: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: SURFACE, borderRadius: 10, padding: 12,

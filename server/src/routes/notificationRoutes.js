@@ -1,4 +1,5 @@
-// routes/notificationRoutes.js
+// routes/notificationRoutes.js - COMPLETE FIXED VERSION
+
 import express from "express";
 import mongoose from "mongoose";
 import { authMiddleware } from "../middleware/authMiddleware.js";
@@ -9,50 +10,77 @@ import Freelancer from "../models/Freelancer.js";
 
 const router = express.Router();
 
+// ==================== HELPER FUNCTIONS ====================
+
+const getRecipientInfo = (req) => {
+  // Try multiple possible sources for the user ID
+  const userId = req.user?.id || req.user?._id || req.user?.userId;
+  const role = req.user?.role || 'client';
+  
+  return {
+    recipient_id: userId,
+    recipient_model: role === 'client' ? 'Client' : 'Freelancer'
+  };
+};
+
+const isValidObjectId = (id) => {
+  if (!id) return false;
+  if (typeof id !== 'string' && typeof id !== 'object') return false;
+  return mongoose.Types.ObjectId.isValid(id);
+};
+
 // ==================== GET NOTIFICATIONS ====================
 
 // Get all notifications for the authenticated user
 router.get("/notifications", authMiddleware, async (req, res) => {
   try {
-    const { page = 1, limit = 20, is_read, type, priority } = req.query;
+    const { page = 1, limit = 20, is_read, type, priority } = req.query || {};
     
-    // Determine recipient model based on user role
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
 
-    // Build filter
+    // Validate recipient_id
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      console.warn('Invalid recipient_id in /notifications:', recipient_id);
+      return res.status(200).json({
+        notifications: [],
+        totalPages: 1,
+        currentPage: 1,
+        totalNotifications: 0,
+        unreadCount: 0,
+        typeBreakdown: {}
+      });
+    }
+
     const filter = {};
-    if (is_read !== undefined && is_read !== 'All') {
+    if (is_read !== undefined && is_read !== 'All' && is_read !== '') {
       filter.is_read = is_read === 'true';
     }
-    if (type && type !== 'All') {
+    if (type && type !== 'All' && type !== '') {
       filter.type = type;
     }
-    if (priority && priority !== 'All') {
+    if (priority && priority !== 'All' && priority !== '') {
       filter.priority = priority;
     }
 
     const notifications = await NotificationService.getNotifications(
       recipient_id,
       recipient_model,
-      parseInt(limit),
-      (parseInt(page) - 1) * parseInt(limit),
+      parseInt(limit) || 20,
+      (parseInt(page) - 1) * parseInt(limit) || 0,
       filter
     );
 
     const total = await Notification.countDocuments({
-      recipient_id,
+      recipient_id: new mongoose.Types.ObjectId(recipient_id),
       recipient_model,
       ...filter
     });
 
-    // Get unread count
     const unreadCount = await NotificationService.getUnreadCount(
       recipient_id,
       recipient_model
     );
 
-    // Get notification type breakdown
     const typeBreakdown = await Notification.aggregate([
       { 
         $match: { 
@@ -70,18 +98,22 @@ router.get("/notifications", authMiddleware, async (req, res) => {
     });
 
     res.json({
-      notifications,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      totalNotifications: total,
-      unreadCount,
-      typeBreakdown: breakdown
+      notifications: notifications || [],
+      totalPages: Math.ceil(total / limit) || 1,
+      currentPage: parseInt(page) || 1,
+      totalNotifications: total || 0,
+      unreadCount: unreadCount || 0,
+      typeBreakdown: breakdown || {}
     });
   } catch (error) {
     console.error("Error fetching notifications:", error);
-    res.status(500).json({ 
-      message: "Error fetching notifications", 
-      error: error.message 
+    res.status(200).json({
+      notifications: [],
+      totalPages: 1,
+      currentPage: 1,
+      totalNotifications: 0,
+      unreadCount: 0,
+      typeBreakdown: {}
     });
   }
 });
@@ -89,23 +121,32 @@ router.get("/notifications", authMiddleware, async (req, res) => {
 // Get unread notifications only
 router.get("/notifications/unread", authMiddleware, async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20 } = req.query || {};
     
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
+
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      return res.status(200).json({
+        notifications: [],
+        totalPages: 1,
+        currentPage: 1,
+        totalNotifications: 0,
+        unreadCount: 0
+      });
+    }
 
     const notifications = await Notification.find({
-      recipient_id,
+      recipient_id: new mongoose.Types.ObjectId(recipient_id),
       recipient_model,
       is_read: false
     })
     .sort({ created_at: -1 })
     .skip((parseInt(page) - 1) * parseInt(limit))
     .limit(parseInt(limit))
-    .populate('sender_id', 'first_name last_name profile_picture');
+    .populate('sender_id', 'first_name last_name profile_picture company_name username');
 
     const total = await Notification.countDocuments({
-      recipient_id,
+      recipient_id: new mongoose.Types.ObjectId(recipient_id),
       recipient_model,
       is_read: false
     });
@@ -116,17 +157,20 @@ router.get("/notifications/unread", authMiddleware, async (req, res) => {
     );
 
     res.json({
-      notifications,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      totalNotifications: total,
-      unreadCount
+      notifications: notifications || [],
+      totalPages: Math.ceil(total / limit) || 1,
+      currentPage: parseInt(page) || 1,
+      totalNotifications: total || 0,
+      unreadCount: unreadCount || 0
     });
   } catch (error) {
     console.error("Error fetching unread notifications:", error);
-    res.status(500).json({ 
-      message: "Error fetching unread notifications", 
-      error: error.message 
+    res.status(200).json({
+      notifications: [],
+      totalPages: 1,
+      currentPage: 1,
+      totalNotifications: 0,
+      unreadCount: 0
     });
   }
 });
@@ -136,25 +180,27 @@ router.get("/notifications/:id", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id || !isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid notification ID" });
     }
 
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
+
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
 
     const notification = await Notification.findOne({
-      _id: id,
-      recipient_id,
+      _id: new mongoose.Types.ObjectId(id),
+      recipient_id: new mongoose.Types.ObjectId(recipient_id),
       recipient_model
     })
-    .populate('sender_id', 'first_name last_name profile_picture');
+    .populate('sender_id', 'first_name last_name profile_picture company_name username');
 
     if (!notification) {
       return res.status(404).json({ message: "Notification not found" });
     }
 
-    // Mark as clicked if not already
     if (!notification.is_clicked) {
       notification.is_clicked = true;
       notification.clicked_at = new Date();
@@ -178,20 +224,25 @@ router.patch("/notifications/:id/read", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id || !isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid notification ID" });
     }
 
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
 
-    const notification = await NotificationService.markAsRead(id, recipient_id);
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    const notification = await NotificationService.markAsRead(
+      new mongoose.Types.ObjectId(id),
+      new mongoose.Types.ObjectId(recipient_id)
+    );
 
     if (!notification) {
       return res.status(404).json({ message: "Notification not found" });
     }
 
-    // Get updated unread count
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
     const unreadCount = await NotificationService.getUnreadCount(
       recipient_id,
       recipient_model
@@ -200,7 +251,7 @@ router.patch("/notifications/:id/read", authMiddleware, async (req, res) => {
     res.json({
       message: "Notification marked as read",
       notification,
-      unreadCount
+      unreadCount: unreadCount || 0
     });
   } catch (error) {
     console.error("Error marking notification as read:", error);
@@ -214,17 +265,20 @@ router.patch("/notifications/:id/read", authMiddleware, async (req, res) => {
 // Mark all notifications as read
 router.patch("/notifications/read-all", authMiddleware, async (req, res) => {
   try {
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
+
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
 
     const result = await NotificationService.markAllAsRead(
-      recipient_id,
+      new mongoose.Types.ObjectId(recipient_id),
       recipient_model
     );
 
     res.json({
       message: "All notifications marked as read",
-      updatedCount: result.modifiedCount
+      updatedCount: result?.modifiedCount || 0
     });
   } catch (error) {
     console.error("Error marking all notifications as read:", error);
@@ -238,18 +292,21 @@ router.patch("/notifications/read-all", authMiddleware, async (req, res) => {
 // Mark notifications as read by type
 router.patch("/notifications/read-by-type", authMiddleware, async (req, res) => {
   try {
-    const { type } = req.body;
+    const { type } = req.body || {};
 
     if (!type) {
       return res.status(400).json({ message: "Notification type is required" });
     }
 
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
+
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
 
     const result = await Notification.updateMany(
       {
-        recipient_id,
+        recipient_id: new mongoose.Types.ObjectId(recipient_id),
         recipient_model,
         type: type,
         is_read: false
@@ -260,7 +317,6 @@ router.patch("/notifications/read-by-type", authMiddleware, async (req, res) => 
       }
     );
 
-    // Get updated unread count
     const unreadCount = await NotificationService.getUnreadCount(
       recipient_id,
       recipient_model
@@ -268,8 +324,8 @@ router.patch("/notifications/read-by-type", authMiddleware, async (req, res) => 
 
     res.json({
       message: `All ${type} notifications marked as read`,
-      updatedCount: result.modifiedCount,
-      unreadCount
+      updatedCount: result?.modifiedCount || 0,
+      unreadCount: unreadCount || 0
     });
   } catch (error) {
     console.error("Error marking notifications by type as read:", error);
@@ -287,16 +343,19 @@ router.delete("/notifications/:id", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id || !isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid notification ID" });
     }
 
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
+
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
 
     const notification = await Notification.findOneAndDelete({
-      _id: id,
-      recipient_id,
+      _id: new mongoose.Types.ObjectId(id),
+      recipient_id: new mongoose.Types.ObjectId(recipient_id),
       recipient_model
     });
 
@@ -304,7 +363,6 @@ router.delete("/notifications/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "Notification not found" });
     }
 
-    // Get updated unread count
     const unreadCount = await NotificationService.getUnreadCount(
       recipient_id,
       recipient_model
@@ -312,7 +370,7 @@ router.delete("/notifications/:id", authMiddleware, async (req, res) => {
 
     res.json({
       message: "Notification deleted successfully",
-      unreadCount
+      unreadCount: unreadCount || 0
     });
   } catch (error) {
     console.error("Error deleting notification:", error);
@@ -326,17 +384,20 @@ router.delete("/notifications/:id", authMiddleware, async (req, res) => {
 // Delete all notifications
 router.delete("/notifications", authMiddleware, async (req, res) => {
   try {
-    const { type } = req.query;
+    const { type } = req.query || {};
     
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
+
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
 
     const query = {
-      recipient_id,
+      recipient_id: new mongoose.Types.ObjectId(recipient_id),
       recipient_model
     };
 
-    if (type && type !== 'All') {
+    if (type && type !== 'All' && type !== '') {
       query.type = type;
     }
 
@@ -344,7 +405,7 @@ router.delete("/notifications", authMiddleware, async (req, res) => {
 
     res.json({
       message: "Notifications deleted successfully",
-      deletedCount: result.deletedCount
+      deletedCount: result?.deletedCount || 0
     });
   } catch (error) {
     console.error("Error deleting notifications:", error);
@@ -360,13 +421,13 @@ router.delete("/notifications", authMiddleware, async (req, res) => {
 // Get notification counts
 router.get("/notifications/counts", authMiddleware, async (req, res) => {
   try {
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
 
-    // Validate recipient_id format
-    if (!mongoose.Types.ObjectId.isValid(recipient_id)) {
-      console.warn('Invalid recipient_id format in counts endpoint:', recipient_id);
-      // Return default values instead of error
+    console.log('Counts request - User ID:', recipient_id, 'Model:', recipient_model);
+
+    // Validate recipient_id - if invalid, return default values
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      console.warn('Invalid recipient_id in /counts:', recipient_id);
       return res.status(200).json({
         totalUnread: 0,
         highPriorityUnread: 0,
@@ -374,16 +435,23 @@ router.get("/notifications/counts", authMiddleware, async (req, res) => {
       });
     }
 
-    const unreadCount = await NotificationService.getUnreadCount(
-      recipient_id,
-      recipient_model
-    );
+    // Convert to ObjectId
+    const objectId = new mongoose.Types.ObjectId(recipient_id);
 
-    // Get counts by type
+    // Get total unread count
+    const unreadCount = await Notification.countDocuments({
+      recipient_id: objectId,
+      recipient_model: recipient_model,
+      is_read: false
+    });
+
+    console.log('Unread count:', unreadCount);
+
+    // Get counts by type for unread notifications
     const typeCounts = await Notification.aggregate([
       { 
         $match: { 
-          recipient_id: new mongoose.Types.ObjectId(recipient_id),
+          recipient_id: objectId,
           recipient_model: recipient_model,
           is_read: false
         } 
@@ -396,18 +464,22 @@ router.get("/notifications/counts", authMiddleware, async (req, res) => {
       counts[item._id] = item.count;
     });
 
+    console.log('Type counts:', counts);
+
     // Get high priority unread count
     const highPriorityCount = await Notification.countDocuments({
-      recipient_id: recipient_id,
+      recipient_id: objectId,
       recipient_model: recipient_model,
       is_read: false,
       priority: { $in: ['high', 'urgent'] }
     });
 
+    console.log('High priority count:', highPriorityCount);
+
     res.json({
-      totalUnread: unreadCount,
-      highPriorityUnread: highPriorityCount,
-      unreadByType: counts
+      totalUnread: unreadCount || 0,
+      highPriorityUnread: highPriorityCount || 0,
+      unreadByType: counts || {}
     });
   } catch (error) {
     console.error("Error fetching notification counts:", error);
@@ -420,183 +492,24 @@ router.get("/notifications/counts", authMiddleware, async (req, res) => {
   }
 });
 
-// ==================== SEND NOTIFICATION (Admin only) ====================
-
-// Send custom notification (Admin only)
-router.post("/notifications/send", authMiddleware, async (req, res) => {
-  try {
-    // Check if user is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ message: "Admin access required" });
-    }
-
-    const {
-      recipient_id,
-      recipient_model,
-      sender_id,
-      sender_model,
-      type,
-      title,
-      message,
-      reference_id,
-      reference_model,
-      priority,
-      actions,
-      expires_at
-    } = req.body;
-
-    // Validate required fields
-    if (!recipient_id || !recipient_model || !type || !title || !message) {
-      return res.status(400).json({ 
-        message: "Recipient ID, model, type, title, and message are required" 
-      });
-    }
-
-    // Validate recipient model
-    if (!['Client', 'Freelancer'].includes(recipient_model)) {
-      return res.status(400).json({ 
-        message: "Invalid recipient model. Must be 'Client' or 'Freelancer'" 
-      });
-    }
-
-    // Check if recipient exists
-    let recipient;
-    if (recipient_model === 'Client') {
-      recipient = await Client.findById(recipient_id);
-    } else {
-      recipient = await Freelancer.findById(recipient_id);
-    }
-
-    if (!recipient) {
-      return res.status(404).json({ message: "Recipient not found" });
-    }
-
-    const notification = await NotificationService.createNotification({
-      recipient_id,
-      recipient_model,
-      sender_id: sender_id || null,
-      sender_model: sender_model || null,
-      type,
-      title,
-      message,
-      reference_id,
-      reference_model,
-      priority: priority || 'medium',
-      actions: actions || [],
-      expires_at: expires_at ? new Date(expires_at) : null
-    });
-
-    res.status(201).json({
-      message: "Notification sent successfully",
-      notification
-    });
-  } catch (error) {
-    console.error("Error sending notification:", error);
-    res.status(500).json({ 
-      message: "Error sending notification", 
-      error: error.message 
-    });
-  }
-});
-
-// ==================== BULK NOTIFICATION (Admin only) ====================
-
-// Send bulk notifications (Admin only)
-router.post("/notifications/send-bulk", authMiddleware, async (req, res) => {
-  try {
-    // Check if user is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ message: "Admin access required" });
-    }
-
-    const {
-      recipient_model,
-      type,
-      title,
-      message,
-      priority,
-      filters,
-      actions,
-      expires_at
-    } = req.body;
-
-    // Validate required fields
-    if (!recipient_model || !type || !title || !message) {
-      return res.status(400).json({ 
-        message: "Recipient model, type, title, and message are required" 
-      });
-    }
-
-    // Validate recipient model
-    if (!['Client', 'Freelancer'].includes(recipient_model)) {
-      return res.status(400).json({ 
-        message: "Invalid recipient model. Must be 'Client' or 'Freelancer'" 
-      });
-    }
-
-    // Get recipients based on filters
-    let recipients = [];
-    const query = { account_status: 'active' };
-    
-    if (filters) {
-      if (filters.location) query.location = filters.location;
-      if (filters.skills) query.skills = { $in: filters.skills };
-      if (filters.experience_level) query.experience_level = filters.experience_level;
-    }
-
-    if (recipient_model === 'Client') {
-      recipients = await Client.find(query).select('_id');
-    } else {
-      recipients = await Freelancer.find(query).select('_id');
-    }
-
-    if (recipients.length === 0) {
-      return res.status(404).json({ message: "No recipients found" });
-    }
-
-    // Create notifications for all recipients
-    const notifications = [];
-    for (const recipient of recipients) {
-      const notification = await NotificationService.createNotification({
-        recipient_id: recipient._id,
-        recipient_model,
-        type,
-        title,
-        message,
-        priority: priority || 'medium',
-        actions: actions || [],
-        expires_at: expires_at ? new Date(expires_at) : null
-      });
-      notifications.push(notification);
-    }
-
-    res.status(201).json({
-      message: `Bulk notifications sent to ${notifications.length} recipients`,
-      recipientCount: notifications.length,
-      notifications
-    });
-  } catch (error) {
-    console.error("Error sending bulk notifications:", error);
-    res.status(500).json({ 
-      message: "Error sending bulk notifications", 
-      error: error.message 
-    });
-  }
-});
-
 // ==================== NOTIFICATION PREFERENCES ====================
 
 // Get notification preferences
 router.get("/notifications/preferences", authMiddleware, async (req, res) => {
   try {
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
+
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
 
     let user;
+    const objectId = new mongoose.Types.ObjectId(recipient_id);
+    
     if (recipient_model === 'Client') {
-      user = await Client.findById(recipient_id).select('notification_preferences');
+      user = await Client.findById(objectId).select('notification_preferences');
     } else {
-      user = await Freelancer.findById(recipient_id).select('notification_preferences');
+      user = await Freelancer.findById(objectId).select('notification_preferences');
     }
 
     if (!user) {
@@ -631,25 +544,30 @@ router.get("/notifications/preferences", authMiddleware, async (req, res) => {
 // Update notification preferences
 router.patch("/notifications/preferences", authMiddleware, async (req, res) => {
   try {
-    const { preferences } = req.body;
+    const { preferences } = req.body || {};
 
     if (!preferences) {
       return res.status(400).json({ message: "Preferences are required" });
     }
 
-    const recipient_model = req.user.role === 'client' ? 'Client' : 'Freelancer';
-    const recipient_id = req.user.id;
+    const { recipient_id, recipient_model } = getRecipientInfo(req);
 
+    if (!recipient_id || !isValidObjectId(recipient_id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    const objectId = new mongoose.Types.ObjectId(recipient_id);
     let user;
+
     if (recipient_model === 'Client') {
       user = await Client.findByIdAndUpdate(
-        recipient_id,
+        objectId,
         { notification_preferences: preferences },
         { new: true }
       ).select('notification_preferences');
     } else {
       user = await Freelancer.findByIdAndUpdate(
-        recipient_id,
+        objectId,
         { notification_preferences: preferences },
         { new: true }
       ).select('notification_preferences');

@@ -1,4 +1,4 @@
-// screens/FreelancerScreen.jsx - FIXED state access
+// screens/FreelancerScreen.jsx - UPDATED with Full Client Details
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -15,6 +15,7 @@ import {
   Dimensions,
   FlatList,
   TextInput,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -59,9 +60,11 @@ const formatLocation = (location) => {
   if (!location) return null;
   if (typeof location === 'string') return location;
   const parts = [];
+  if (location.address) parts.push(location.address);
   if (location.city) parts.push(location.city);
   if (location.province) parts.push(location.province);
   if (location.country && location.country !== 'Philippines') parts.push(location.country);
+  if (location.zip_code) parts.push(location.zip_code);
   return parts.length > 0 ? parts.join(', ') : null;
 };
 
@@ -93,8 +96,11 @@ const formatExperienceLevel = (level) => {
 
 const formatBudget = (budget) => {
   if (!budget) return null;
-  const { min, max, currency = 'PHP', type } = budget;
-  if (min && max) {
+  const min = budget.min || 0;
+  const max = budget.max || min;
+  const currency = budget.currency || 'PHP';
+  const type = budget.type || 'fixed';
+  if (min && max && min !== max) {
     return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()} (${type === 'hourly' ? 'per hour' : 'fixed'})`;
   }
   if (min) {
@@ -105,7 +111,8 @@ const formatBudget = (budget) => {
 
 const formatDuration = (timeline) => {
   if (!timeline) return null;
-  const { duration_value, duration_unit } = timeline;
+  const duration_value = timeline.duration_value || timeline.durationValue || 1;
+  const duration_unit = timeline.duration_unit || timeline.durationUnit || 'weeks';
   if (duration_value && duration_unit) {
     return `${duration_value} ${duration_unit}`;
   }
@@ -114,8 +121,10 @@ const formatDuration = (timeline) => {
 
 const formatBudgetForCard = (job) => {
   if (job.budget) {
-    const { min, max, currency = 'PHP' } = job.budget;
-    if (min && max) return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()}`;
+    const min = job.budget.min || 0;
+    const max = job.budget.max || min;
+    const currency = job.budget.currency || 'PHP';
+    if (min && max && min !== max) return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()}`;
     if (min) return `${currency} ${min.toLocaleString()}+`;
   }
   return null;
@@ -187,7 +196,7 @@ function SkeletonCard() {
   );
 }
 
-// ── Client Profile Modal (Rating REMOVED) ────────────────────────────────────
+// ── Client Profile Modal with FULL CONTACT DETAILS ──────────────────────────
 function ClientProfileModal({ visible, client, onClose }) {
   if (!client) return null;
 
@@ -221,47 +230,9 @@ function ClientProfileModal({ visible, client, onClose }) {
     return client.company_name || client.business_name || client.name || 'Independent Client';
   };
 
-  const hasDetails = 
-    client.email_address || 
-    client.email ||
-    client.phone_number || 
-    client.contact_number ||
-    client.location || 
-    client.industry || 
-    client.bio_about_me || 
-    client.about ||
-    client.bio ||
-    client.description ||
-    (client.skills && client.skills.length > 0) ||
-    client.website ||
-    client.address ||
-    client.city ||
-    client.province ||
-    client.country;
-
-  const getLocationDisplay = () => {
-    if (typeof client.location === 'string') return client.location;
-    if (client.location?.city) {
-      const parts = [];
-      if (client.location.city) parts.push(client.location.city);
-      if (client.location.province) parts.push(client.location.province);
-      if (client.location.country) parts.push(client.location.country);
-      return parts.join(', ');
-    }
-    if (client.city || client.province || client.country) {
-      const parts = [];
-      if (client.city) parts.push(client.city);
-      if (client.province) parts.push(client.province);
-      if (client.country) parts.push(client.country);
-      return parts.join(', ');
-    }
-    return null;
-  };
-
-  const locationDisplay = getLocationDisplay();
   const getEmail = () => client.email_address || client.email || null;
   const getPhone = () => client.phone_number || client.contact_number || client.phone || null;
-  const getBio = () => client.bio_about_me || client.about || client.bio || client.description || null;
+  const getBio = () => client.bio_about_me || client.about || client.bio || client.description || client.bio_about || null;
   
   const getMemberSince = () => {
     const date = client.member_since || client.createdAt || client.created_at || client.join_date;
@@ -277,6 +248,50 @@ function ClientProfileModal({ visible, client, onClose }) {
 
   const getIndustry = () => client.industry || client.industry_type || client.business_type || null;
   const getWebsite = () => client.website || client.website_url || client.web_url || null;
+  const getCompanySize = () => client.company_size || client.team_size || null;
+  const getBusinessType = () => client.business_type || client.client_type || null;
+
+  const getLocationDisplay = () => {
+    if (typeof client.location === 'string') return client.location;
+    if (client.location?.city) {
+      const parts = [];
+      if (client.location.address) parts.push(client.location.address);
+      if (client.location.city) parts.push(client.location.city);
+      if (client.location.province) parts.push(client.location.province);
+      if (client.location.country) parts.push(client.location.country);
+      return parts.join(', ');
+    }
+    if (client.city || client.province || client.country) {
+      const parts = [];
+      if (client.address) parts.push(client.address);
+      if (client.city) parts.push(client.city);
+      if (client.province) parts.push(client.province);
+      if (client.country) parts.push(client.country);
+      return parts.join(', ');
+    }
+    return null;
+  };
+
+  const locationDisplay = getLocationDisplay();
+
+  const handleEmailPress = () => {
+    if (getEmail()) {
+      Linking.openURL(`mailto:${getEmail()}`);
+    }
+  };
+
+  const handlePhonePress = () => {
+    if (getPhone()) {
+      Linking.openURL(`tel:${getPhone()}`);
+    }
+  };
+
+  const handleWebsitePress = () => {
+    if (getWebsite()) {
+      const url = getWebsite().startsWith('http') ? getWebsite() : `https://${getWebsite()}`;
+      Linking.openURL(url);
+    }
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -295,37 +310,126 @@ function ClientProfileModal({ visible, client, onClose }) {
             </View>
             <Text style={clientProfileStyles.clientName}>{getFullName()}</Text>
             <Text style={clientProfileStyles.companyName}>{getCompanyName()}</Text>
+            
+            {/* Rating */}
+            {client.rating && client.rating.average > 0 && (
+              <View style={clientProfileStyles.ratingContainer}>
+                <View style={clientProfileStyles.ratingStars}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Ionicons
+                      key={star}
+                      name={star <= Math.round(client.rating.average) ? 'star' : 'star-outline'}
+                      size={14}
+                      color={star <= Math.round(client.rating.average) ? GOLD : TEXT_LIGHT}
+                    />
+                  ))}
+                </View>
+                <Text style={clientProfileStyles.ratingText}>
+                  {client.rating.average.toFixed(1)} ({client.rating.count} reviews)
+                </Text>
+              </View>
+            )}
+
+            {client.total_jobs_completed > 0 && (
+              <Text style={clientProfileStyles.jobsCompleted}>
+                {client.total_jobs_completed} jobs completed
+              </Text>
+            )}
+
             <TouchableOpacity style={clientProfileStyles.closeBtn} onPress={onClose}>
               <Ionicons name="close" size={20} color={TEXT_MUTED} />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={clientProfileStyles.body} showsVerticalScrollIndicator={false}>
+            {/* Bio/About */}
             {getBio() && (
               <View style={clientProfileStyles.section}>
-                <Text style={clientProfileStyles.sectionLabel}>About</Text>
+                <View style={clientProfileStyles.sectionHeader}>
+                  <Ionicons name="person-outline" size={16} color={BLUE} />
+                  <Text style={clientProfileStyles.sectionLabel}>About</Text>
+                </View>
                 <Text style={clientProfileStyles.bioText}>{getBio()}</Text>
               </View>
             )}
 
+            {/* CONTACT DETAILS - Main Section */}
             <View style={clientProfileStyles.section}>
-              <Text style={clientProfileStyles.sectionLabel}>Contact & Details</Text>
-              <View style={clientProfileStyles.detailGrid}>
+              <View style={clientProfileStyles.sectionHeader}>
+                <Ionicons name="call-outline" size={16} color={GOLD_DK} />
+                <Text style={[clientProfileStyles.sectionLabel, { color: GOLD_DK }]}>Contact Details</Text>
+              </View>
+              <View style={clientProfileStyles.contactCard}>
                 {getEmail() && (
+                  <TouchableOpacity style={clientProfileStyles.contactItem} onPress={handleEmailPress} activeOpacity={0.7}>
+                    <View style={clientProfileStyles.contactIconWrap}>
+                      <Ionicons name="mail-outline" size={18} color={WHITE} />
+                    </View>
+                    <View style={clientProfileStyles.contactInfo}>
+                      <Text style={clientProfileStyles.contactLabel}>Email Address</Text>
+                      <Text style={clientProfileStyles.contactValue}>{getEmail()}</Text>
+                    </View>
+                    <Ionicons name="open-outline" size={16} color={BLUE} />
+                  </TouchableOpacity>
+                )}
+                {getPhone() && (
+                  <TouchableOpacity style={clientProfileStyles.contactItem} onPress={handlePhonePress} activeOpacity={0.7}>
+                    <View style={[clientProfileStyles.contactIconWrap, { backgroundColor: GREEN }]}>
+                      <Ionicons name="call-outline" size={18} color={WHITE} />
+                    </View>
+                    <View style={clientProfileStyles.contactInfo}>
+                      <Text style={clientProfileStyles.contactLabel}>Phone Number</Text>
+                      <Text style={clientProfileStyles.contactValue}>{getPhone()}</Text>
+                    </View>
+                    <Ionicons name="open-outline" size={16} color={BLUE} />
+                  </TouchableOpacity>
+                )}
+                {getWebsite() && (
+                  <TouchableOpacity style={clientProfileStyles.contactItem} onPress={handleWebsitePress} activeOpacity={0.7}>
+                    <View style={[clientProfileStyles.contactIconWrap, { backgroundColor: BLUE_MD }]}>
+                      <Ionicons name="globe-outline" size={18} color={WHITE} />
+                    </View>
+                    <View style={clientProfileStyles.contactInfo}>
+                      <Text style={clientProfileStyles.contactLabel}>Website</Text>
+                      <Text style={clientProfileStyles.contactValue}>{getWebsite()}</Text>
+                    </View>
+                    <Ionicons name="open-outline" size={16} color={BLUE} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Company Details */}
+            <View style={clientProfileStyles.section}>
+              <View style={clientProfileStyles.sectionHeader}>
+                <Ionicons name="business-outline" size={16} color={BLUE} />
+                <Text style={clientProfileStyles.sectionLabel}>Company Details</Text>
+              </View>
+              <View style={clientProfileStyles.detailGrid}>
+                {getBusinessType() && (
                   <View style={clientProfileStyles.detailItem}>
-                    <Ionicons name="mail-outline" size={16} color={BLUE} />
+                    <Ionicons name="business-outline" size={16} color={BLUE} />
                     <View style={{ flex: 1 }}>
-                      <Text style={clientProfileStyles.detailLabel}>Email</Text>
-                      <Text style={clientProfileStyles.detailValue}>{getEmail()}</Text>
+                      <Text style={clientProfileStyles.detailLabel}>Business Type</Text>
+                      <Text style={clientProfileStyles.detailValue}>{getBusinessType()}</Text>
                     </View>
                   </View>
                 )}
-                {getPhone() && (
+                {getIndustry() && (
                   <View style={clientProfileStyles.detailItem}>
-                    <Ionicons name="call-outline" size={16} color={BLUE} />
+                    <Ionicons name="pricetag-outline" size={16} color={BLUE} />
                     <View style={{ flex: 1 }}>
-                      <Text style={clientProfileStyles.detailLabel}>Phone</Text>
-                      <Text style={clientProfileStyles.detailValue}>{getPhone()}</Text>
+                      <Text style={clientProfileStyles.detailLabel}>Industry</Text>
+                      <Text style={clientProfileStyles.detailValue}>{getIndustry()}</Text>
+                    </View>
+                  </View>
+                )}
+                {getCompanySize() && (
+                  <View style={clientProfileStyles.detailItem}>
+                    <Ionicons name="people-outline" size={16} color={BLUE} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={clientProfileStyles.detailLabel}>Company Size</Text>
+                      <Text style={clientProfileStyles.detailValue}>{getCompanySize()}</Text>
                     </View>
                   </View>
                 )}
@@ -334,25 +438,7 @@ function ClientProfileModal({ visible, client, onClose }) {
                     <Ionicons name="location-outline" size={16} color={BLUE} />
                     <View style={{ flex: 1 }}>
                       <Text style={clientProfileStyles.detailLabel}>Location</Text>
-                      <Text style={clientProfileStyles.detailValue}>{locationDisplay}</Text>
-                    </View>
-                  </View>
-                )}
-                {getIndustry() && (
-                  <View style={clientProfileStyles.detailItem}>
-                    <Ionicons name="business-outline" size={16} color={BLUE} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={clientProfileStyles.detailLabel}>Industry</Text>
-                      <Text style={clientProfileStyles.detailValue}>{getIndustry()}</Text>
-                    </View>
-                  </View>
-                )}
-                {getWebsite() && (
-                  <View style={clientProfileStyles.detailItem}>
-                    <Ionicons name="globe-outline" size={16} color={BLUE} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={clientProfileStyles.detailLabel}>Website</Text>
-                      <Text style={clientProfileStyles.detailValue}>{getWebsite()}</Text>
+                      <Text style={clientProfileStyles.detailValue} numberOfLines={2}>{locationDisplay}</Text>
                     </View>
                   </View>
                 )}
@@ -370,8 +456,8 @@ function ClientProfileModal({ visible, client, onClose }) {
                     <Ionicons name="shield-checkmark-outline" size={16} color={GREEN} />
                     <View style={{ flex: 1 }}>
                       <Text style={clientProfileStyles.detailLabel}>Verification</Text>
-                      <Text style={[clientProfileStyles.detailValue, { color: GREEN }]}>
-                        {client.verification_status === 'verified' ? 'Verified ✓' : 'Unverified'}
+                      <Text style={[clientProfileStyles.detailValue, { color: client.verification_status === 'verified' ? GREEN : ORANGE }]}>
+                        {client.verification_status === 'verified' ? 'Verified' : 'Unverified'}
                       </Text>
                     </View>
                   </View>
@@ -379,9 +465,13 @@ function ClientProfileModal({ visible, client, onClose }) {
               </View>
             </View>
 
+            {/* Skills */}
             {client.skills && client.skills.length > 0 && (
               <View style={clientProfileStyles.section}>
-                <Text style={clientProfileStyles.sectionLabel}>Skills & Expertise</Text>
+                <View style={clientProfileStyles.sectionHeader}>
+                  <Ionicons name="bulb-outline" size={16} color={BLUE} />
+                  <Text style={clientProfileStyles.sectionLabel}>Skills & Expertise</Text>
+                </View>
                 <View style={clientProfileStyles.skillRow}>
                   {client.skills.map((skill, index) => (
                     <View key={index} style={clientProfileStyles.skillTag}>
@@ -392,11 +482,15 @@ function ClientProfileModal({ visible, client, onClose }) {
               </View>
             )}
 
+            {/* Recent Projects */}
             {client.recent_projects && client.recent_projects.length > 0 && (
               <View style={clientProfileStyles.section}>
-                <Text style={clientProfileStyles.sectionLabel}>Recent Projects</Text>
+                <View style={clientProfileStyles.sectionHeader}>
+                  <Ionicons name="folder-outline" size={16} color={BLUE} />
+                  <Text style={clientProfileStyles.sectionLabel}>Recent Projects</Text>
+                </View>
                 <View style={clientProfileStyles.projectContainer}>
-                  {client.recent_projects.slice(0, 3).map((project, index) => (
+                  {client.recent_projects.slice(0, 5).map((project, index) => (
                     <View key={index} style={clientProfileStyles.projectItem}>
                       <Ionicons name="folder-outline" size={16} color={BLUE} />
                       <Text style={clientProfileStyles.projectText}>{project}</Text>
@@ -406,7 +500,8 @@ function ClientProfileModal({ visible, client, onClose }) {
               </View>
             )}
 
-            {!hasDetails && (
+            {/* No Details */}
+            {!getBio() && !getEmail() && !getPhone() && !getWebsite() && !locationDisplay && !client.skills?.length && (
               <View style={clientProfileStyles.emptyState}>
                 <Ionicons name="person-outline" size={48} color={TEXT_LIGHT} />
                 <Text style={clientProfileStyles.emptyStateTitle}>No Profile Details</Text>
@@ -518,10 +613,15 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
     return client.email_address || client.email || null;
   };
 
+  const getClientPhone = () => {
+    return client.phone_number || client.contact_number || client.phone || null;
+  };
+
   const getClientLocation = () => {
     if (typeof client.location === 'string') return client.location;
     if (client.location?.city) {
       const parts = [];
+      if (client.location.address) parts.push(client.location.address);
       if (client.location.city) parts.push(client.location.city);
       if (client.location.province) parts.push(client.location.province);
       if (client.location.country) parts.push(client.location.country);
@@ -529,6 +629,7 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
     }
     if (client.city || client.province || client.country) {
       const parts = [];
+      if (client.address) parts.push(client.address);
       if (client.city) parts.push(client.city);
       if (client.province) parts.push(client.province);
       if (client.country) parts.push(client.country);
@@ -542,6 +643,13 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
       onApply(job);
     }
   };
+
+  const hasLocation = job?.location && (
+    job.location.address || 
+    job.location.city || 
+    job.location.province || 
+    job.location.country
+  );
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -583,6 +691,29 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
                 </TouchableOpacity>
               </View>
 
+              {/* Features Badges */}
+              <View style={detailStyles.featuresWrap}>
+                {job.urgent && (
+                  <View style={[detailStyles.featureBadge, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
+                    <Ionicons name="flame-outline" size={14} color={RED} />
+                    <Text style={[detailStyles.featureText, { color: RED }]}>Urgent</Text>
+                  </View>
+                )}
+                {job.featured && (
+                  <View style={[detailStyles.featureBadge, { backgroundColor: GOLD_SOFT, borderColor: GOLD_MID }]}>
+                    <Ionicons name="star-outline" size={14} color={GOLD_DK} />
+                    <Text style={[detailStyles.featureText, { color: GOLD_DK }]}>Featured</Text>
+                  </View>
+                )}
+                {job.nda_required && (
+                  <View style={[detailStyles.featureBadge, { backgroundColor: '#DBEAFE', borderColor: '#93C5FD' }]}>
+                    <Ionicons name="document-text-outline" size={14} color={BLUE} />
+                    <Text style={[detailStyles.featureText, { color: BLUE }]}>NDA</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Client Info Card - With Contact Details */}
               <TouchableOpacity 
                 style={detailStyles.clientInfoCard} 
                 onPress={() => onViewClient && onViewClient(client)}
@@ -598,13 +729,28 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
                 <View style={detailStyles.clientInfo}>
                   <Text style={detailStyles.clientName}>{getClientName()}</Text>
                   {getClientEmail() && (
-                    <Text style={detailStyles.clientDetail}>{getClientEmail()}</Text>
+                    <View style={detailStyles.clientContactRow}>
+                      <Ionicons name="mail-outline" size={12} color={TEXT_MUTED} />
+                      <Text style={detailStyles.clientDetail}>{getClientEmail()}</Text>
+                    </View>
+                  )}
+                  {getClientPhone() && (
+                    <View style={detailStyles.clientContactRow}>
+                      <Ionicons name="call-outline" size={12} color={TEXT_MUTED} />
+                      <Text style={detailStyles.clientDetail}>{getClientPhone()}</Text>
+                    </View>
                   )}
                   {getClientLocation() && (
-                    <Text style={detailStyles.clientDetail}>{getClientLocation()}</Text>
+                    <View style={detailStyles.clientContactRow}>
+                      <Ionicons name="location-outline" size={12} color={TEXT_MUTED} />
+                      <Text style={detailStyles.clientDetail} numberOfLines={1}>{getClientLocation()}</Text>
+                    </View>
                   )}
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={TEXT_LIGHT} />
+                <View style={detailStyles.clientInfoAction}>
+                  <Text style={detailStyles.viewProfileText}>View Profile</Text>
+                  <Ionicons name="chevron-forward" size={18} color={BLUE} />
+                </View>
               </TouchableOpacity>
 
               <View style={detailStyles.metaRow}>
@@ -632,16 +778,10 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
                     <Text style={[detailStyles.metaText, { color: GOLD_DK, fontWeight: '600' }]}>{budgetText}</Text>
                   </View>
                 )}
-                {job.urgent && (
-                  <View style={[detailStyles.metaChip, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
-                    <Ionicons name="flame-outline" size={13} color={RED} />
-                    <Text style={[detailStyles.metaText, { color: RED, fontWeight: '600' }]}>Urgent</Text>
-                  </View>
-                )}
-                {job.featured && (
-                  <View style={[detailStyles.metaChip, { backgroundColor: GOLD_SOFT, borderColor: GOLD_MID }]}>
-                    <Ionicons name="star-outline" size={13} color={GOLD} />
-                    <Text style={[detailStyles.metaText, { color: GOLD_DK, fontWeight: '600' }]}>Featured</Text>
+                {job.contact_preference && (
+                  <View style={detailStyles.metaChip}>
+                    <Ionicons name="chatbubble-outline" size={13} color={TEXT_MUTED} />
+                    <Text style={detailStyles.metaText}>Contact: {job.contact_preference}</Text>
                   </View>
                 )}
               </View>
@@ -650,13 +790,19 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
 
               <ScrollView style={detailStyles.body} showsVerticalScrollIndicator={false}>
                 <View style={detailStyles.section}>
-                  <Text style={detailStyles.sectionLabel}>Job Description</Text>
+                  <View style={detailStyles.sectionHeader}>
+                    <Ionicons name="document-text-outline" size={16} color={BLUE} />
+                    <Text style={detailStyles.sectionLabel}>Job Description</Text>
+                  </View>
                   <Text style={detailStyles.descText}>{job.description || 'No description provided.'}</Text>
                 </View>
 
                 {skills.length > 0 && (
                   <View style={detailStyles.section}>
-                    <Text style={detailStyles.sectionLabel}>Required Skills</Text>
+                    <View style={detailStyles.sectionHeader}>
+                      <Ionicons name="bulb-outline" size={16} color={BLUE} />
+                      <Text style={detailStyles.sectionLabel}>Required Skills</Text>
+                    </View>
                     <View style={detailStyles.tagRow}>
                       {skills.map((s, i) => (
                         <View key={i} style={detailStyles.tag}>
@@ -669,7 +815,10 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
 
                 {tags.length > 0 && (
                   <View style={detailStyles.section}>
-                    <Text style={detailStyles.sectionLabel}>Tags</Text>
+                    <View style={detailStyles.sectionHeader}>
+                      <Ionicons name="pricetag-outline" size={16} color={BLUE} />
+                      <Text style={detailStyles.sectionLabel}>Tags</Text>
+                    </View>
                     <View style={detailStyles.tagRow}>
                       {tags.map((tag, i) => (
                         <View key={i} style={[detailStyles.tag, { backgroundColor: GOLD_SOFT, borderColor: GOLD_MID }]}>
@@ -680,9 +829,62 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
                   </View>
                 )}
 
+                {/* Location Section - FULL DETAILS */}
+                {hasLocation && (
+                  <View style={detailStyles.section}>
+                    <View style={detailStyles.sectionHeader}>
+                      <Ionicons name="location-outline" size={16} color={BLUE} />
+                      <Text style={detailStyles.sectionLabel}>Location Details</Text>
+                    </View>
+                    <View style={detailStyles.locationCard}>
+                      {job.location.address && (
+                        <View style={detailStyles.locationRow}>
+                          <Ionicons name="navigate-outline" size={16} color={BLUE} />
+                          <Text style={detailStyles.locationText}>{job.location.address}</Text>
+                        </View>
+                      )}
+                      {job.location.city && (
+                        <View style={detailStyles.locationRow}>
+                          <Ionicons name="map-outline" size={16} color={BLUE} />
+                          <Text style={detailStyles.locationText}>{job.location.city}</Text>
+                        </View>
+                      )}
+                      {job.location.province && (
+                        <View style={detailStyles.locationRow}>
+                          <Ionicons name="business-outline" size={16} color={BLUE} />
+                          <Text style={detailStyles.locationText}>{job.location.province}</Text>
+                        </View>
+                      )}
+                      {job.location.country && (
+                        <View style={detailStyles.locationRow}>
+                          <Ionicons name="location-outline" size={16} color={BLUE} />
+                          <Text style={detailStyles.locationText}>{job.location.country}</Text>
+                        </View>
+                      )}
+                      {job.location.zip_code && (
+                        <View style={detailStyles.locationRow}>
+                          <Ionicons name="mail-outline" size={16} color={BLUE} />
+                          <Text style={detailStyles.locationText}>Zip: {job.location.zip_code}</Text>
+                        </View>
+                      )}
+                      {locationText && (
+                        <View style={[detailStyles.locationRow, detailStyles.locationFull]}>
+                          <Ionicons name="pin-outline" size={16} color={GOLD} />
+                          <Text style={[detailStyles.locationText, detailStyles.locationFullText]}>
+                            Full: {locationText}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                )}
+
                 {job.requirements && (
                   <View style={detailStyles.section}>
-                    <Text style={detailStyles.sectionLabel}>Requirements</Text>
+                    <View style={detailStyles.sectionHeader}>
+                      <Ionicons name="list-outline" size={16} color={BLUE} />
+                      <Text style={detailStyles.sectionLabel}>Requirements</Text>
+                    </View>
                     <View style={{ gap: 6 }}>
                       {job.requirements.education && job.requirements.education !== 'none' && (
                         <Text style={detailStyles.descText}>• Education: {job.requirements.education.replace('_', ' ').toUpperCase()}</Text>
@@ -708,7 +910,10 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
 
                 {job.screening_questions?.length > 0 && (
                   <View style={detailStyles.section}>
-                    <Text style={detailStyles.sectionLabel}>Screening Questions</Text>
+                    <View style={detailStyles.sectionHeader}>
+                      <Ionicons name="help-circle-outline" size={16} color={BLUE} />
+                      <Text style={detailStyles.sectionLabel}>Screening Questions</Text>
+                    </View>
                     {job.screening_questions.map((q, i) => (
                       <View key={i} style={detailStyles.questionItem}>
                         <Text style={detailStyles.questionNumber}>{i + 1}.</Text>
@@ -723,9 +928,30 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
                   </View>
                 )}
 
+                {/* Application Settings */}
+                {job.hiring && (
+                  <View style={detailStyles.section}>
+                    <View style={detailStyles.sectionHeader}>
+                      <Ionicons name="settings-outline" size={16} color={BLUE} />
+                      <Text style={detailStyles.sectionLabel}>Application Settings</Text>
+                    </View>
+                    <View style={{ gap: 4 }}>
+                      <Text style={detailStyles.descText}>• Max Applicants: {job.hiring.max_applicants || 100}</Text>
+                      <Text style={detailStyles.descText}>• Auto Accept: {job.hiring.auto_accept ? 'Yes' : 'No'}</Text>
+                      <Text style={detailStyles.descText}>• Multiple Hires: {job.hiring.allow_multiple_hires ? 'Yes' : 'No'}</Text>
+                      {job.application_deadline && (
+                        <Text style={detailStyles.descText}>• Deadline: {formatFullDate(job.application_deadline)}</Text>
+                      )}
+                    </View>
+                  </View>
+                )}
+
                 {job.timeline && (job.timeline.duration_value || job.timeline.estimated_hours || job.timeline.weekly_limit) && (
                   <View style={detailStyles.section}>
-                    <Text style={detailStyles.sectionLabel}>Timeline</Text>
+                    <View style={detailStyles.sectionHeader}>
+                      <Ionicons name="time-outline" size={16} color={BLUE} />
+                      <Text style={detailStyles.sectionLabel}>Timeline</Text>
+                    </View>
                     <View style={detailStyles.timelineGrid}>
                       {job.timeline.duration_value && job.timeline.duration_unit && (
                         <View style={detailStyles.timelineItem}>
@@ -860,6 +1086,15 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
                       </View>
                     </View>
                   )}
+                  {job.contact_preference && (
+                    <View style={detailStyles.detailItem}>
+                      <Ionicons name="chatbubble-outline" size={16} color={BLUE} />
+                      <View>
+                        <Text style={detailStyles.detailLabel}>Contact</Text>
+                        <Text style={detailStyles.detailValue}>{job.contact_preference}</Text>
+                      </View>
+                    </View>
+                  )}
                 </View>
 
                 <View style={{ height: 80 }} />
@@ -957,7 +1192,6 @@ export default function FreelancerScreen({ onNavigate, route }) {
   const dispatch = useDispatch();
   const { user } = useSelector(s => s.auth);
   
-  // ── FIXED: Properly access jobs from Redux state ──
   const jobsSlice = useSelector(s => s.jobs);
   const jobs = jobsSlice?.jobs?.list || [];
   const jobsLoading = jobsSlice?.jobs?.isLoading || false;
@@ -1114,12 +1348,14 @@ export default function FreelancerScreen({ onNavigate, route }) {
     const skills = job.required_skills?.join(' ').toLowerCase() || '';
     const company = job.client_id?.company_name?.toLowerCase() || '';
     const business = job.client_id?.business_name?.toLowerCase() || '';
+    const category = job.category?.toLowerCase() || '';
     
     return title.includes(query) || 
            description.includes(query) || 
            skills.includes(query) ||
            company.includes(query) ||
-           business.includes(query);
+           business.includes(query) ||
+           category.includes(query);
   });
 
   console.log('📊 Jobs in render:', jobs?.length || 0, 'Filtered:', filteredJobs?.length || 0);
@@ -1133,6 +1369,7 @@ export default function FreelancerScreen({ onNavigate, route }) {
     const timeAgo = getTimeAgo(job.createdAt);
     const isSaved = isJobSaved(job._id);
     const hasApplied = appliedJobIds.includes(job._id);
+    const hasLocation = job.location && (job.location.address || job.location.city || job.location.country);
     
     const getClientName = () => {
       if (client.company_name) return client.company_name;
@@ -1175,6 +1412,12 @@ export default function FreelancerScreen({ onNavigate, route }) {
               <View style={styles.badgeFeatured}>
                 <Ionicons name="star" size={10} color={GOLD} />
                 <Text style={styles.badgeFeaturedText}>Featured</Text>
+              </View>
+            )}
+            {job.nda_required && (
+              <View style={styles.badgeNda}>
+                <Ionicons name="document-text" size={10} color={BLUE} />
+                <Text style={styles.badgeNdaText}>NDA</Text>
               </View>
             )}
             {job.status === 'open' && (
@@ -1223,10 +1466,17 @@ export default function FreelancerScreen({ onNavigate, route }) {
             <Ionicons name="chevron-forward" size={14} color={TEXT_LIGHT} />
           </TouchableOpacity>
 
-          <View style={styles.jobMetaRow}>
-            <Ionicons name="location-outline" size={12} color={TEXT_MUTED} />
-            <Text style={styles.jobLocation}>{locationDisplay}</Text>
-          </View>
+          {hasLocation ? (
+            <View style={styles.jobMetaRow}>
+              <Ionicons name="location-outline" size={12} color={TEXT_MUTED} />
+              <Text style={styles.jobLocation} numberOfLines={1}>{locationDisplay}</Text>
+            </View>
+          ) : (
+            <View style={styles.jobMetaRow}>
+              <Ionicons name="wifi-outline" size={12} color={TEXT_MUTED} />
+              <Text style={styles.jobLocation}>Remote</Text>
+            </View>
+          )}
 
           {job.description && (
             <Text style={styles.descriptionPreview} numberOfLines={2}>
@@ -1238,6 +1488,12 @@ export default function FreelancerScreen({ onNavigate, route }) {
             <View style={styles.budgetChip}>
               <Ionicons name="cash-outline" size={13} color={GOLD_DK} />
               <Text style={styles.budgetText}>{budgetDisplay}</Text>
+            </View>
+          )}
+
+          {job.category && (
+            <View style={styles.categoryChip}>
+              <Text style={styles.categoryText}>{job.category}</Text>
             </View>
           )}
 
@@ -1689,6 +1945,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: GOLD_DK,
   },
+  badgeNda: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+  },
+  badgeNdaText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: BLUE,
+  },
   badgeOpen: {
     backgroundColor: `${GREEN}15`,
     paddingHorizontal: 10,
@@ -1811,12 +2083,25 @@ const styles = StyleSheet.create({
     borderRadius: 20, 
     borderWidth: 1, 
     borderColor: 'rgba(200,149,32,0.2)', 
-    marginBottom: 10 
+    marginBottom: 8 
   },
   budgetText: { 
     fontSize: 12, 
     color: GOLD_DK, 
     fontWeight: '600' 
+  },
+  categoryChip: {
+    backgroundColor: `${BLUE}10`,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  categoryText: {
+    fontSize: 11,
+    color: BLUE,
+    fontWeight: '500',
   },
   tagRow: { 
     flexDirection: 'row', 
@@ -2025,6 +2310,10 @@ const detailStyles = StyleSheet.create({
     justifyContent: 'center' 
   },
   
+  featuresWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginHorizontal: 20, marginBottom: 12 },
+  featureBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1 },
+  featureText: { fontSize: 11, fontWeight: '600' },
+  
   clientInfoCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2065,10 +2354,26 @@ const detailStyles = StyleSheet.create({
     color: TEXT_MAIN,
     marginBottom: 2,
   },
+  clientContactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
   clientDetail: {
     fontSize: 12,
     color: TEXT_MUTED,
     lineHeight: 16,
+  },
+  clientInfoAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewProfileText: {
+    fontSize: 10,
+    color: BLUE,
+    fontWeight: '600',
+    marginBottom: 2,
   },
   
   metaRow: { 
@@ -2111,13 +2416,18 @@ const detailStyles = StyleSheet.create({
   section: { 
     marginBottom: 20 
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
   sectionLabel: { 
     fontSize: 11, 
     fontWeight: '700', 
     color: BLUE, 
     textTransform: 'uppercase', 
     letterSpacing: 0.8, 
-    marginBottom: 10 
   },
   tagRow: { 
     flexDirection: 'row', 
@@ -2177,6 +2487,37 @@ const detailStyles = StyleSheet.create({
     color: BLUE,
     fontWeight: '600',
   },
+  
+  locationCard: {
+    backgroundColor: '#F5F7FA',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    gap: 8,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  locationFull: {
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    paddingTop: 8,
+    marginTop: 4,
+  },
+  locationText: {
+    fontSize: 13,
+    color: TEXT_MAIN,
+    flex: 1,
+  },
+  locationFullText: {
+    fontWeight: '600',
+    color: GOLD_DK,
+  },
+  
   timelineGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -2341,6 +2682,27 @@ const clientProfileStyles = StyleSheet.create({
     color: TEXT_MUTED, 
     marginBottom: 6 
   },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  ratingStars: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  ratingText: {
+    fontSize: 12,
+    color: TEXT_MUTED,
+    fontWeight: '500',
+  },
+  jobsCompleted: {
+    fontSize: 12,
+    color: GREEN,
+    fontWeight: '600',
+    marginTop: 2,
+  },
   closeBtn: { 
     position: 'absolute', 
     top: 0, 
@@ -2360,19 +2722,65 @@ const clientProfileStyles = StyleSheet.create({
   section: { 
     marginBottom: 20 
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
   sectionLabel: { 
     fontSize: 11, 
     fontWeight: '700', 
     color: BLUE, 
     textTransform: 'uppercase', 
     letterSpacing: 0.8, 
-    marginBottom: 10 
   },
   bioText: { 
     fontSize: 14, 
     color: TEXT_MUTED, 
     lineHeight: 22 
   },
+  
+  // Contact Card Styles
+  contactCard: {
+    backgroundColor: WHITE,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    overflow: 'hidden',
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  contactIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: BLUE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  contactLabel: {
+    fontSize: 10,
+    color: TEXT_LIGHT,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  contactValue: {
+    fontSize: 13,
+    color: TEXT_MAIN,
+    fontWeight: '500',
+  },
+  
   detailGrid: { 
     flexDirection: 'row', 
     flexWrap: 'wrap', 

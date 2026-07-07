@@ -218,6 +218,8 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
     const work_setup = req.body.work_setup || "remote";
     const experience_level = req.body.experience_level || "entry";
     const vacancies = req.body.vacancies ? parseInt(req.body.vacancies) : 1;
+    const timezone = req.body.timezone || "Asia/Manila";
+    const contact_preference = req.body.contact_preference || "chat";
     
     // ===== BUDGET FIELDS =====
     const budgetType = req.body.budget_type || "fixed";
@@ -230,8 +232,11 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
     if (!budgetType) {
       return res.status(400).json({ message: "Budget type is required" });
     }
-    if (!budgetMin) {
-      return res.status(400).json({ message: "Minimum budget is required" });
+    if (!budgetMin || budgetMin <= 0) {
+      return res.status(400).json({ message: "Minimum budget must be greater than 0" });
+    }
+    if (budgetMax && budgetMax < budgetMin) {
+      return res.status(400).json({ message: "Maximum budget must be greater than minimum budget" });
     }
     
     // ===== TIMELINE FIELDS =====
@@ -242,11 +247,35 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
     const startDate = req.body.start_date ? new Date(req.body.start_date) : null;
     const endDate = req.body.end_date ? new Date(req.body.end_date) : null;
     
+    // Validate dates
+    if (startDate && endDate && startDate > endDate) {
+      return res.status(400).json({ message: "Start date must be before end date" });
+    }
+    
     // ===== HIRING SETTINGS =====
     const maxApplicants = req.body.max_applicants ? parseInt(req.body.max_applicants) : 100;
     const autoAccept = req.body.auto_accept === 'true' || req.body.auto_accept === true;
     const allowMultipleHires = req.body.allow_multiple_hires === 'true' || req.body.allow_multiple_hires === true;
     const applicationDeadline = req.body.application_deadline ? new Date(req.body.application_deadline) : null;
+    
+    // ===== VALIDATE APPLICATION DEADLINE =====
+    if (applicationDeadline && applicationDeadline <= new Date()) {
+      return res.status(400).json({
+        message: "Application deadline must be in the future",
+      });
+    }
+    
+    // ===== VALIDATE MAX APPLICANTS =====
+    if (maxApplicants < 1 || maxApplicants > 1000) {
+      return res.status(400).json({
+        message: "Max applicants must be between 1 and 1000",
+      });
+    }
+    
+    // ===== JOB FEATURES =====
+    const featured = req.body.featured === 'true' || req.body.featured === true;
+    const urgent = req.body.urgent === 'true' || req.body.urgent === true;
+    const ndaRequired = req.body.nda_required === 'true' || req.body.nda_required === true;
     
     // ===== OPTIONAL FIELDS =====
     const visibility = req.body.visibility || "public";
@@ -254,7 +283,6 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
     const requirements = parseJSONField(req.body.requirements);
     const screeningQuestions = parseArrayField(req.body.screening_questions);
     const attachments = parseArrayField(req.body.attachments);
-    const timezone = req.body.timezone || "Asia/Manila";
 
     // Validate required fields
     if (!title) {
@@ -281,6 +309,7 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
       experience_level,
       vacancies,
       timezone,
+      contact_preference,
       
       budget: {
         type: budgetType,
@@ -306,7 +335,8 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
         resume_required: false,
         cover_letter_required: false,
         preferred_languages: [],
-        preferred_certifications: []
+        preferred_certifications: [],
+        min_years: 0
       },
       
       screening_questions: screeningQuestions.map(q => ({
@@ -322,16 +352,21 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
       
       application_deadline: applicationDeadline,
       status: "open",
-      visibility
+      visibility,
+      
+      // Job Features
+      featured,
+      urgent,
+      nda_required: ndaRequired,
     };
 
     if (location && typeof location === 'object') {
       jobData.location = {
         country: location.country || "Philippines",
-        province: location.province,
-        city: location.city,
-        address: location.address,
-        zip_code: location.zip_code
+        province: location.province || "",
+        city: location.city || "",
+        address: location.address || "",
+        zip_code: location.zip_code || ""
       };
     }
 
@@ -358,7 +393,12 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
         posted_date: new Date().toLocaleDateString(),
         job_type: job.job_type,
         budget: job.budget,
-        category: job.category
+        category: job.category,
+        application_deadline: job.application_deadline,
+        max_applicants: job.hiring?.max_applicants,
+        is_urgent: job.urgent,
+        is_featured: job.featured,
+        nda_required: job.nda_required
       };
       
       await sendJobPostedConfirmation(
@@ -401,7 +441,11 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
           experience_level: job.experience_level,
           work_setup: job.work_setup,
           application_deadline: job.application_deadline,
-          location: job.location
+          location: job.location,
+          is_urgent: job.urgent,
+          is_featured: job.featured,
+          nda_required: job.nda_required,
+          max_applicants: job.hiring?.max_applicants
         };
         
         // Send bulk emails
@@ -418,11 +462,11 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
             sender_id: client._id,
             sender_model: 'Client',
             type: 'job_posted',
-            title: 'New Job Matching Your Skills',
-            message: `${job.title} - ${job.budget?.type} job with budget ${job.budget?.min}-${job.budget?.max}`,
+            title: job.urgent ? '🚨 URGENT: New Job Matching Your Skills' : 'New Job Matching Your Skills',
+            message: `${job.title} - ${job.budget?.type} job with budget ${job.budget?.min}-${job.budget?.max}${job.urgent ? ' ⚡ Urgent' : ''}`,
             reference_id: job._id,
             reference_model: 'Job',
-            priority: 'medium',
+            priority: job.urgent ? 'high' : 'medium',
             actions: [
               {
                 label: 'View & Apply',
@@ -440,7 +484,7 @@ router.post("/jobs", authMiddleware, upload.none(), async (req, res) => {
         recipient_model: 'Client',
         type: 'job_posted',
         title: 'Job Posted Successfully',
-        message: `Your job "${job.title}" is now live and open for applications`,
+        message: `Your job "${job.title}" is now live and open for applications${job.urgent ? ' ⚡ Marked as Urgent' : ''}`,
         reference_id: job._id,
         reference_model: 'Job',
         priority: 'high',
@@ -718,7 +762,7 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
     const simpleFields = [
       "title", "description", "category", "subcategory", 
       "job_type", "work_setup", "experience_level", "visibility",
-      "timezone", "vacancies", "application_deadline"
+      "timezone", "vacancies", "application_deadline", "contact_preference"
     ];
     simpleFields.forEach(field => {
       if (req.body[field] !== undefined && req.body[field] !== null) {
@@ -727,7 +771,13 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
         } else if (field === "vacancies") {
           updates[field] = parseInt(req.body[field]);
         } else if (field === "application_deadline") {
-          updates[field] = req.body[field] ? new Date(req.body[field]) : null;
+          const deadline = req.body[field] ? new Date(req.body[field]) : null;
+          if (deadline && deadline <= new Date()) {
+            return res.status(400).json({
+              message: "Application deadline must be in the future",
+            });
+          }
+          updates[field] = deadline;
         } else {
           updates[field] = req.body[field];
         }
@@ -752,7 +802,11 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
         updates.budget.type = req.body.budget_type;
       }
       if (req.body.budget_min !== undefined) {
-        updates.budget.min = req.body.budget_min ? parseFloat(req.body.budget_min) : null;
+        const min = req.body.budget_min ? parseFloat(req.body.budget_min) : null;
+        if (min && min <= 0) {
+          return res.status(400).json({ message: "Minimum budget must be greater than 0" });
+        }
+        updates.budget.min = min;
       }
       if (req.body.budget_max !== undefined) {
         updates.budget.max = req.body.budget_max ? parseFloat(req.body.budget_max) : null;
@@ -765,6 +819,11 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       }
       if (req.body.hide_budget !== undefined) {
         updates.budget.hide_budget = req.body.hide_budget === 'true' || req.body.hide_budget === true;
+      }
+      
+      // Validate budget
+      if (updates.budget.min && updates.budget.max && updates.budget.max < updates.budget.min) {
+        return res.status(400).json({ message: "Maximum budget must be greater than minimum budget" });
       }
     }
 
@@ -793,6 +852,12 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       if (req.body.end_date !== undefined) {
         updates.timeline.end_date = req.body.end_date ? new Date(req.body.end_date) : null;
       }
+      
+      // Validate dates
+      if (updates.timeline.start_date && updates.timeline.end_date && 
+          updates.timeline.start_date > updates.timeline.end_date) {
+        return res.status(400).json({ message: "Start date must be before end date" });
+      }
     }
 
     // Hiring updates
@@ -802,7 +867,13 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       updates.hiring = {};
       
       if (req.body.max_applicants !== undefined) {
-        updates.hiring.max_applicants = req.body.max_applicants ? parseInt(req.body.max_applicants) : 100;
+        const max = req.body.max_applicants ? parseInt(req.body.max_applicants) : 100;
+        if (max < 1 || max > 1000) {
+          return res.status(400).json({
+            message: "Max applicants must be between 1 and 1000",
+          });
+        }
+        updates.hiring.max_applicants = max;
       }
       if (req.body.auto_accept !== undefined) {
         updates.hiring.auto_accept = req.body.auto_accept === 'true' || req.body.auto_accept === true;
@@ -821,7 +892,8 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
         resume_required: reqData?.resume_required || false,
         cover_letter_required: reqData?.cover_letter_required || false,
         preferred_languages: reqData?.preferred_languages || [],
-        preferred_certifications: reqData?.preferred_certifications || []
+        preferred_certifications: reqData?.preferred_certifications || [],
+        min_years: reqData?.min_years || 0
       };
     }
 
@@ -830,10 +902,10 @@ router.put("/jobs/:id", authMiddleware, upload.none(), async (req, res) => {
       const loc = parseJSONField(req.body.location);
       updates.location = {
         country: loc?.country || "Philippines",
-        province: loc?.province,
-        city: loc?.city,
-        address: loc?.address,
-        zip_code: loc?.zip_code
+        province: loc?.province || "",
+        city: loc?.city || "",
+        address: loc?.address || "",
+        zip_code: loc?.zip_code || ""
       };
     }
 
@@ -981,7 +1053,11 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
       country,
       category,
       subcategory,
-      sort_by
+      sort_by,
+      show_urgent,
+      show_featured,
+      show_nda,
+      deadline_after
     } = req.query;
 
     const query = { 
@@ -989,6 +1065,13 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
       is_deleted: false,
       visibility: "public"
     };
+
+    // Only show jobs that haven't passed deadline
+    query.$or = [
+      { application_deadline: { $exists: false } },
+      { application_deadline: null },
+      { application_deadline: { $gt: new Date() } },
+    ];
 
     if (search) {
       query.$text = { $search: search };
@@ -999,6 +1082,11 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
     if (experience_level) query.experience_level = experience_level;
     if (category) query.category = category;
     if (subcategory) query.subcategory = subcategory;
+    
+    // Job features filters
+    if (show_urgent === 'true') query.urgent = true;
+    if (show_featured === 'true') query.featured = true;
+    if (show_nda === 'true') query.nda_required = true;
     
     if (budget_type) query["budget.type"] = budget_type;
     if (min_budget || max_budget) {
@@ -1031,6 +1119,11 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
       sortOptions["budget.max"] = 1;
     } else if (sort_by === 'relevant') {
       sortOptions["analytics.views"] = -1;
+    } else if (sort_by === 'urgent') {
+      sortOptions.urgent = -1;
+      sortOptions.createdAt = -1;
+    } else if (sort_by === 'deadline') {
+      sortOptions.application_deadline = 1;
     } else {
       sortOptions.createdAt = -1;
     }
@@ -1079,7 +1172,11 @@ router.get("/freelancer/jobs", authMiddleware, async (req, res) => {
           display_name: client.client_type === 'business' && client.company_name 
             ? client.company_name 
             : `${client.first_name} ${client.last_name}`
-        } : null
+        } : null,
+        // Add computed fields
+        is_application_deadline_passed: job.application_deadline ? new Date() > job.application_deadline : false,
+        days_until_deadline: job.application_deadline ? Math.ceil((job.application_deadline - new Date()) / (1000 * 60 * 60 * 24)) : null,
+        can_apply: job.status === 'open' && (!job.application_deadline || new Date() <= job.application_deadline)
       };
     });
 
@@ -1113,6 +1210,18 @@ router.get("/jobs/stats/dashboard", authMiddleware, async (req, res) => {
       const cancelledJobs = await Job.countDocuments({ ...query, status: "cancelled" });
       const pausedJobs = await Job.countDocuments({ ...query, status: "paused" });
       
+      // Additional stats
+      const urgentJobs = await Job.countDocuments({ ...query, urgent: true });
+      const featuredJobs = await Job.countDocuments({ ...query, featured: true });
+      const ndaJobs = await Job.countDocuments({ ...query, nda_required: true });
+      
+      // Expired jobs
+      const expiredJobs = await Job.countDocuments({
+        ...query,
+        application_deadline: { $lt: new Date() },
+        status: "open"
+      });
+      
       const jobs = await Job.find(query);
       const totalApplicants = jobs.reduce((sum, job) => sum + (job.analytics?.applications || 0), 0);
       const totalViews = jobs.reduce((sum, job) => sum + (job.analytics?.views || 0), 0);
@@ -1120,9 +1229,11 @@ router.get("/jobs/stats/dashboard", authMiddleware, async (req, res) => {
 
       const jobsByType = {};
       const jobsByCategory = {};
+      const jobsByStatus = {};
       jobs.forEach(job => {
         jobsByType[job.job_type] = (jobsByType[job.job_type] || 0) + 1;
         jobsByCategory[job.category] = (jobsByCategory[job.category] || 0) + 1;
+        jobsByStatus[job.status] = (jobsByStatus[job.status] || 0) + 1;
       });
 
       res.json({
@@ -1137,7 +1248,13 @@ router.get("/jobs/stats/dashboard", authMiddleware, async (req, res) => {
         totalViews,
         totalSaves,
         jobsByType,
-        jobsByCategory
+        jobsByCategory,
+        jobsByStatus,
+        urgentJobs,
+        featuredJobs,
+        ndaJobs,
+        expiredJobs,
+        message: "Client statistics"
       });
     } else if (req.user.role === "freelancer") {
       const appliedJobs = await Application.countDocuments({ freelancer_id: req.user.id });
@@ -1153,10 +1270,21 @@ router.get("/jobs/stats/dashboard", authMiddleware, async (req, res) => {
         statusBreakdown[item._id] = item.count;
       });
       
+      // Get jobs that match freelancer's skills
+      const freelancer = await Freelancer.findById(req.user.id);
+      const matchingJobs = freelancer?.skills?.length > 0 
+        ? await Job.countDocuments({
+            status: "open",
+            is_deleted: false,
+            required_skills: { $in: freelancer.skills }
+          })
+        : 0;
+      
       res.json({
         appliedJobs,
         savedJobs,
         applicationStatuses: statusBreakdown,
+        matchingJobs,
         message: "Freelancer statistics"
       });
     } else {
@@ -1249,6 +1377,56 @@ router.post("/jobs/:id/application", authMiddleware, async (req, res) => {
     console.error("Error incrementing application count:", error);
     res.status(500).json({ 
       message: "Error updating application count", 
+      error: error.message 
+    });
+  }
+});
+
+// ==================== CHECK JOB AVAILABILITY ====================
+
+// Check if a job is available for application
+router.get("/jobs/:id/check-availability", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid job ID" });
+    }
+
+    const job = await Job.findById(id);
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    const currentApplicants = await Application.countDocuments({
+      job_id: job._id,
+      status: { $ne: "cancelled" }
+    });
+
+    const result = job.canApply(currentApplicants);
+
+    res.json({
+      job_id: job._id,
+      title: job.title,
+      status: job.status,
+      is_available: result.allowed,
+      reason: result.reason,
+      current_applicants: currentApplicants,
+      max_applicants: job.hiring?.max_applicants,
+      application_deadline: job.application_deadline,
+      days_until_deadline: job.application_deadline 
+        ? Math.ceil((job.application_deadline - new Date()) / (1000 * 60 * 60 * 24))
+        : null,
+      features: {
+        urgent: job.urgent,
+        featured: job.featured,
+        nda_required: job.nda_required
+      }
+    });
+  } catch (error) {
+    console.error("Error checking job availability:", error);
+    res.status(500).json({ 
+      message: "Error checking job availability", 
       error: error.message 
     });
   }

@@ -17,7 +17,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../Redux/slices/authSlice';
-import { getClientJobs, updateJobStatus, deleteJob } from '../../Redux/slices/jobSlice';
+import { 
+  getClientJobs, 
+  updateJobStatus, 
+  deleteJob,
+  selectClientJobs,
+  selectJobsLoading,
+  selectFormattedClientJobs
+} from '../../Redux/slices/jobSlice';
 import { getClientApplications } from '../../Redux/slices/applicationSlice';
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -51,14 +58,13 @@ const GREEN_STATUS = '#1A8754';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-const BENEFIT_CONFIG = {
-  health_insurance:        { icon: 'medkit-outline',    label: 'Health Insurance' },
-  paid_time_off:           { icon: 'sunny-outline',     label: 'Paid Time Off' },
-  remote_stipend:          { icon: 'laptop-outline',    label: 'Remote Stipend' },
-  equipment_provided:      { icon: 'desktop-outline',   label: 'Equipment Provided' },
-  bonus_eligible:          { icon: 'trophy-outline',    label: 'Bonus Eligible' },
-  retirement_plan:         { icon: 'wallet-outline',    label: 'Retirement Plan' },
-  professional_development:{ icon: 'school-outline',    label: 'Professional Dev.' },
+const DEGREE_LABELS = {
+  none: 'None',
+  high_school: 'High School',
+  vocational: 'Vocational',
+  college: 'College',
+  masters: 'Masters',
+  doctorate: 'Doctorate',
 };
 
 // ── Time Helper ──────────────────────────────────────────────────────────────
@@ -121,15 +127,57 @@ const formatFullDate = (date) => {
   }
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[date.getMonth()] + ' ' + date.getDate() + ', ' + date.getFullYear();
+};
+
+// ── UPDATED Helpers ───────────────────────────────────────────────────────────
+
+// COMPLETE LOCATION FORMATTING - includes ALL fields
 const formatLocation = (location) => {
   if (!location) return null;
   if (typeof location === 'string') return location;
+  
+  const parts = [];
+  // Full address first
+  if (location.address) parts.push(location.address);
+  if (location.city) parts.push(location.city);
+  if (location.province) parts.push(location.province);
+  if (location.country && location.country !== 'Philippines') parts.push(location.country);
+  if (location.zip_code) parts.push(location.zip_code);
+  
+  return parts.length > 0 ? parts.join(', ') : null;
+};
+
+// Get short location (city, province) for job cards
+const getShortLocation = (location) => {
+  if (!location) return null;
+  if (typeof location === 'string') return location;
+  
   const parts = [];
   if (location.city) parts.push(location.city);
   if (location.province) parts.push(location.province);
   if (location.country && location.country !== 'Philippines') parts.push(location.country);
+  
   return parts.length > 0 ? parts.join(', ') : null;
+};
+
+// Get full address with all details
+const getFullAddress = (location) => {
+  if (!location) return null;
+  if (typeof location === 'string') return location;
+  
+  const parts = [];
+  if (location.address) parts.push(location.address);
+  if (location.city) parts.push(`City: ${location.city}`);
+  if (location.province) parts.push(`Province: ${location.province}`);
+  if (location.country) parts.push(`Country: ${location.country}`);
+  if (location.zip_code) parts.push(`Zip: ${location.zip_code}`);
+  
+  return parts.length > 0 ? parts.join('\n') : null;
 };
 
 const formatJobType = (type) => {
@@ -149,6 +197,7 @@ const formatWorkSetup = (setup) => {
 };
 
 const formatExperienceLevel = (level) => {
+  if (!level) return null;
   const levels = {
     entry: 'Entry',
     intermediate: 'Intermediate',
@@ -160,8 +209,13 @@ const formatExperienceLevel = (level) => {
 
 const formatBudget = (budget) => {
   if (!budget) return null;
-  const { min, max, currency = 'PHP', type } = budget;
-  if (min && max) {
+  
+  const min = budget.min || budget.budget_min || 0;
+  const max = budget.max || budget.budget_max || min;
+  const currency = budget.currency || budget.budget_currency || 'PHP';
+  const type = budget.type || budget.budget_type || 'fixed';
+  
+  if (min && max && min !== max) {
     return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()} (${type === 'hourly' ? 'per hour' : 'fixed'})`;
   }
   if (min) {
@@ -172,7 +226,8 @@ const formatBudget = (budget) => {
 
 const formatDuration = (timeline) => {
   if (!timeline) return null;
-  const { duration_value, duration_unit } = timeline;
+  const duration_value = timeline.duration_value || timeline.durationValue || 1;
+  const duration_unit = timeline.duration_unit || timeline.durationUnit || 'weeks';
   if (duration_value && duration_unit) {
     return `${duration_value} ${duration_unit}`;
   }
@@ -241,6 +296,8 @@ function JobDetailSheet({
   const sColor          = jobStatusColor(job.status);
   const sLabel          = jobStatusLabel(job.status);
   const locationText    = formatLocation(job.location);
+  const shortLocation   = getShortLocation(job.location);
+  const fullAddress     = getFullAddress(job.location);
   const jobTypeText     = formatJobType(job.job_type);
   const workSetupText   = formatWorkSetup(job.work_setup);
   const budgetText      = formatBudget(job.budget);
@@ -259,6 +316,14 @@ function JobDetailSheet({
     setShowDeleteConfirm(false);
     onDeleteJob(job._id);
   };
+
+  // Check if location has any data
+  const hasLocation = job.location && (
+    job.location.address || 
+    job.location.city || 
+    job.location.province || 
+    job.location.country
+  );
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -290,6 +355,28 @@ function JobDetailSheet({
             </TouchableOpacity>
           </View>
 
+          {/* Features Badges */}
+          <View style={sheet.featuresWrap}>
+            {job.urgent && (
+              <View style={[sheet.featureBadge, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
+                <Ionicons name="flame-outline" size={14} color={RED} />
+                <Text style={[sheet.featureText, { color: RED }]}>Urgent</Text>
+              </View>
+            )}
+            {job.featured && (
+              <View style={[sheet.featureBadge, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
+                <Ionicons name="star-outline" size={14} color={GOLD_DARK} />
+                <Text style={[sheet.featureText, { color: GOLD_DARK }]}>Featured</Text>
+              </View>
+            )}
+            {job.nda_required && (
+              <View style={[sheet.featureBadge, { backgroundColor: '#DBEAFE', borderColor: '#93C5FD' }]}>
+                <Ionicons name="document-text-outline" size={14} color={BLUE} />
+                <Text style={[sheet.featureText, { color: BLUE }]}>NDA</Text>
+              </View>
+            )}
+          </View>
+
           {/* Stats Bar */}
           <View style={sheet.statsBar}>
             <View style={sheet.statItem}>
@@ -310,10 +397,10 @@ function JobDetailSheet({
           </View>
 
           <View style={sheet.metaRow}>
-            {locationText && (
+            {shortLocation && (
               <View style={sheet.metaChip}>
                 <Ionicons name="location-outline" size={13} color={TEXT_MUTED} />
-                <Text style={sheet.metaText}>{locationText}</Text>
+                <Text style={sheet.metaText}>{shortLocation}</Text>
               </View>
             )}
             {jobTypeText && (
@@ -332,6 +419,12 @@ function JobDetailSheet({
               <View style={[sheet.metaChip, sheet.metaChipGold]}>
                 <Ionicons name="cash-outline" size={13} color={GOLD} />
                 <Text style={[sheet.metaText, { color: GOLD_DARK, fontWeight: '600' }]}>{budgetText}</Text>
+              </View>
+            )}
+            {job.contact_preference && (
+              <View style={sheet.metaChip}>
+                <Ionicons name="chatbubble-outline" size={13} color={TEXT_MUTED} />
+                <Text style={sheet.metaText}>Contact: {job.contact_preference}</Text>
               </View>
             )}
           </View>
@@ -385,7 +478,7 @@ function JobDetailSheet({
                 <Text style={sheet.sectionLabel}>Requirements</Text>
                 <View style={{ gap: 6 }}>
                   {job.requirements.education && job.requirements.education !== 'none' && (
-                    <Text style={sheet.descText}>• Education: {job.requirements.education}</Text>
+                    <Text style={sheet.descText}>• Education: {DEGREE_LABELS[job.requirements.education] || job.requirements.education}</Text>
                   )}
                   {job.requirements.portfolio_required && (
                     <Text style={sheet.descText}>• Portfolio required</Text>
@@ -406,6 +499,51 @@ function JobDetailSheet({
               </View>
             )}
 
+            {/* ===== LOCATION SECTION - FULL DETAILS ===== */}
+            {hasLocation && (
+              <View style={sheet.section}>
+                <Text style={sheet.sectionLabel}>📍 Location Details</Text>
+                <View style={sheet.locationCard}>
+                  {job.location.address && (
+                    <View style={sheet.locationRow}>
+                      <Ionicons name="navigate-outline" size={16} color={BLUE} />
+                      <Text style={sheet.locationText}>{job.location.address}</Text>
+                    </View>
+                  )}
+                  {job.location.city && (
+                    <View style={sheet.locationRow}>
+                      <Ionicons name="map-outline" size={16} color={BLUE} />
+                      <Text style={sheet.locationText}>{job.location.city}</Text>
+                    </View>
+                  )}
+                  {job.location.province && (
+                    <View style={sheet.locationRow}>
+                      <Ionicons name="business-outline" size={16} color={BLUE} />
+                      <Text style={sheet.locationText}>{job.location.province}</Text>
+                    </View>
+                  )}
+                  {job.location.country && (
+                    <View style={sheet.locationRow}>
+                      <Ionicons name="location-outline" size={16} color={BLUE} />
+                      <Text style={sheet.locationText}>{job.location.country}</Text>
+                    </View>
+                  )}
+                  {job.location.zip_code && (
+                    <View style={sheet.locationRow}>
+                      <Ionicons name="mail-outline" size={16} color={BLUE} />
+                      <Text style={sheet.locationText}>Zip: {job.location.zip_code}</Text>
+                    </View>
+                  )}
+                  {fullAddress && (
+                    <View style={[sheet.locationRow, sheet.locationFull]}>
+                      <Ionicons name="pin-outline" size={16} color={GOLD} />
+                      <Text style={[sheet.locationText, sheet.locationFullText]}>Full: {fullAddress.replace(/\n/g, ', ')}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+
             {/* Screening Questions */}
             {job.screening_questions?.length > 0 && (
               <View style={sheet.section}>
@@ -416,6 +554,21 @@ function JobDetailSheet({
                     <Text style={sheet.questionText}>{q.question}</Text>
                   </View>
                 ))}
+              </View>
+            )}
+
+            {/* Application Settings */}
+            {job.hiring && (
+              <View style={sheet.section}>
+                <Text style={sheet.sectionLabel}>Application Settings</Text>
+                <View style={{ gap: 4 }}>
+                  <Text style={sheet.descText}>• Max Applicants: {job.hiring.max_applicants || 100}</Text>
+                  <Text style={sheet.descText}>• Auto Accept: {job.hiring.auto_accept ? 'Yes' : 'No'}</Text>
+                  <Text style={sheet.descText}>• Multiple Hires: {job.hiring.allow_multiple_hires ? 'Yes' : 'No'}</Text>
+                  {job.application_deadline && (
+                    <Text style={sheet.descText}>• Deadline: {formatDate(job.application_deadline)}</Text>
+                  )}
+                </View>
               </View>
             )}
 
@@ -457,10 +610,28 @@ function JobDetailSheet({
                   </View>
                 </View>
               )}
+              {job.timezone && (
+                <View style={sheet.detailItem}>
+                  <Ionicons name="time-outline" size={16} color={BLUE} />
+                  <View>
+                    <Text style={sheet.detailLabel}>Timezone</Text>
+                    <Text style={sheet.detailValue}>{job.timezone}</Text>
+                  </View>
+                </View>
+              )}
+              {job.work_setup && (
+                <View style={sheet.detailItem}>
+                  <Ionicons name="wifi-outline" size={16} color={BLUE} />
+                  <View>
+                    <Text style={sheet.detailLabel}>Work Setup</Text>
+                    <Text style={sheet.detailValue}>{formatWorkSetup(job.work_setup)}</Text>
+                  </View>
+                </View>
+              )}
             </View>
           </ScrollView>
 
-          {/* Footer with Edit and Applicants buttons only */}
+          {/* Footer with Edit and Applicants buttons */}
           <View style={sheet.footer}>
             <TouchableOpacity
               style={sheet.editBtn}
@@ -482,8 +653,6 @@ function JobDetailSheet({
           </View>
         </View>
       </View>
-
-      {/* Delete Confirmation Modal - REMOVED */}
     </Modal>
   );
 }
@@ -492,7 +661,10 @@ function JobDetailSheet({
 export default function ClientScreen({ onNavigate }) {
   const dispatch = useDispatch();
   const { user } = useSelector(s => s.auth);
-  const { clientJobs, isLoading: jobsLoading } = useSelector(s => s.jobs.jobs);
+  
+  const clientJobs = useSelector(selectClientJobs);
+  const jobsLoading = useSelector(selectJobsLoading);
+  
   const { applications, isLoading: applicationsLoading } = useSelector(s => s.applications);
   const { updateJobSuccess, deleteJobSuccess } = useSelector(s => s.jobs);
 
@@ -513,16 +685,35 @@ export default function ClientScreen({ onNavigate }) {
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      await Promise.all([
-        dispatch(getClientJobs({})).unwrap(),
-        dispatch(getClientApplications({})).unwrap(),
-      ]);
-    } catch (e) { console.error('Dashboard fetch error:', e); }
+      const result = await dispatch(getClientJobs({})).unwrap();
+      console.log('=== RAW API RESPONSE ===');
+      console.log('Total jobs:', result.totalJobs);
+      console.log('Jobs array length:', result.jobs?.length || 0);
+      
+      if (result.jobs && result.jobs.length > 0) {
+        const sample = result.jobs[0];
+        console.log('Sample job structure:');
+        console.log('- ID:', sample._id);
+        console.log('- Title:', sample.title);
+        console.log('- Status:', sample.status);
+        console.log('- Budget:', JSON.stringify(sample.budget, null, 2));
+        console.log('- Location:', JSON.stringify(sample.location, null, 2));
+        console.log('- Timeline:', JSON.stringify(sample.timeline, null, 2));
+        console.log('- Requirements:', JSON.stringify(sample.requirements, null, 2));
+        console.log('- Hiring:', JSON.stringify(sample.hiring, null, 2));
+        console.log('- Features - Urgent:', sample.urgent, 'Featured:', sample.featured, 'NDA:', sample.nda_required);
+      }
+      
+      await dispatch(getClientApplications({})).unwrap();
+    } catch (e) { 
+      console.error('Dashboard fetch error:', e); 
+    }
   }, [dispatch]);
 
-  useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
+  useEffect(() => { 
+    fetchDashboardData(); 
+  }, [fetchDashboardData]);
 
-  // Refresh when job is updated or deleted
   useEffect(() => {
     if (updateJobSuccess || deleteJobSuccess) {
       fetchDashboardData();
@@ -531,8 +722,14 @@ export default function ClientScreen({ onNavigate }) {
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (sheetVisible) return false;
-      if (activeTab !== 'Home') { setActiveTab('Home'); return true; }
+      if (sheetVisible) {
+        setSheetVisible(false);
+        return true;
+      }
+      if (activeTab !== 'Home') { 
+        setActiveTab('Home'); 
+        return true; 
+      }
       Alert.alert('Exit App', 'Are you sure you want to exit?', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Exit', style: 'destructive', onPress: () => BackHandler.exitApp() },
@@ -542,17 +739,18 @@ export default function ClientScreen({ onNavigate }) {
     return () => sub.remove();
   }, [activeTab, sheetVisible]);
 
-  // Get applicants count for a specific job from applications data
   const getApplicantsCount = (jobId) => {
     if (!applications) return 0;
     return applications.filter(app => app.job_id?._id === jobId).length;
   };
 
-  const activePostings = clientJobs?.filter(j => j.status === 'open' || j.status === 'in_progress').length || 0;
-  const totalPosts     = clientJobs?.length || 0;
+  const jobsArray = Array.isArray(clientJobs) ? clientJobs : [];
+  
+  const activePostings = jobsArray.filter(j => j.status === 'open' || j.status === 'in_progress').length || 0;
+  const totalPosts     = jobsArray.length || 0;
   const isLoading      = jobsLoading || applicationsLoading;
 
-  const filteredJobs = (clientJobs || []).filter(j => {
+  const filteredJobs = jobsArray.filter(j => {
     if (activeFilter === 'all') return true;
     if (activeFilter === 'open') return j.status === 'open' || j.status === 'in_progress';
     if (activeFilter === 'draft') return j.status === 'draft';
@@ -581,7 +779,10 @@ export default function ClientScreen({ onNavigate }) {
         onPress: async () => { await dispatch(logout()); onNavigate('Login'); } },
     ]);
 
-  const openJobDetail = (job) => { setSelectedJob(job); setSheetVisible(true); };
+  const openJobDetail = (job) => { 
+    setSelectedJob(job); 
+    setSheetVisible(true); 
+  };
 
   const handleStatusChange = async (jobId, status) => {
     try {
@@ -604,8 +805,10 @@ export default function ClientScreen({ onNavigate }) {
 
   const getBudgetDisplay = (job) => {
     if (job.budget) {
-      const { min, max, currency = 'PHP' } = job.budget;
-      if (min && max) return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()}`;
+      const min = job.budget.min || job.budget.budget_min || 0;
+      const max = job.budget.max || job.budget.budget_max || min;
+      const currency = job.budget.currency || job.budget.budget_currency || 'PHP';
+      if (min && max && min !== max) return `${currency} ${min.toLocaleString()} - ${max.toLocaleString()}`;
       if (min) return `${currency} ${min.toLocaleString()}+`;
     }
     return null;
@@ -711,7 +914,7 @@ export default function ClientScreen({ onNavigate }) {
               const applicantsCount = getApplicantsCount(job._id);
               const sColor          = jobStatusColor(job.status);
               const sLabel          = jobStatusLabel(job.status);
-              const locationText    = formatLocation(job.location);
+              const locationText    = getShortLocation(job.location);
               const jobTypeText     = formatJobType(job.job_type);
               const postedDateTime  = formatPostedDateTime(job.createdAt);
               const workSetupText   = formatWorkSetup(job.work_setup);
@@ -754,6 +957,12 @@ export default function ClientScreen({ onNavigate }) {
                           <Text style={styles.featuredBadgeText}>Featured</Text>
                         </View>
                       )}
+                      {job.nda_required && (
+                        <View style={styles.ndaBadge}>
+                          <Ionicons name="document-text-outline" size={10} color={BLUE} />
+                          <Text style={styles.ndaBadgeText}>NDA</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
 
@@ -776,6 +985,12 @@ export default function ClientScreen({ onNavigate }) {
                       <View style={styles.jobMetaItem}>
                         <Ionicons name="wifi-outline" size={12} color={TEXT_MUTED} />
                         <Text style={styles.jobMetaText}>{workSetupText}</Text>
+                      </View>
+                    )}
+                    {job.contact_preference && (
+                      <View style={styles.jobMetaItem}>
+                        <Ionicons name="chatbubble-outline" size={12} color={TEXT_MUTED} />
+                        <Text style={styles.jobMetaText}>Contact: {job.contact_preference}</Text>
                       </View>
                     )}
                   </View>
@@ -1120,6 +1335,22 @@ const styles = StyleSheet.create({
     color: GOLD_DARK,
     fontWeight: '700',
   },
+  ndaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+  },
+  ndaBadgeText: {
+    fontSize: 9,
+    color: BLUE,
+    fontWeight: '700',
+  },
 
   jobTitle: { fontSize: 16, fontWeight: '700', color: TEXT_MAIN, marginBottom: 6, lineHeight: 22 },
   jobMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
@@ -1230,6 +1461,10 @@ const sheet = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   
+  featuresWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12, paddingHorizontal: 20 },
+  featureBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1 },
+  featureText: { fontSize: 11, fontWeight: '600' },
+  
   statsBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1295,6 +1530,38 @@ const sheet = StyleSheet.create({
   questionItem: { flexDirection: 'row', gap: 8, marginBottom: 6 },
   questionNumber: { fontSize: 14, color: BLUE, fontWeight: '600', width: 24 },
   questionText: { fontSize: 14, color: TEXT_MAIN, flex: 1, lineHeight: 20 },
+  
+  // Location styles
+  locationCard: {
+    backgroundColor: '#F5F7FA',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    gap: 8,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  locationFull: {
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    paddingTop: 8,
+    marginTop: 4,
+  },
+  locationText: {
+    fontSize: 13,
+    color: TEXT_MAIN,
+    flex: 1,
+  },
+  locationFullText: {
+    fontWeight: '600',
+    color: GOLD_DARK,
+  },
+  
   detailGrid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 12,
     backgroundColor: '#F5F7FA', borderRadius: 14, padding: 16,

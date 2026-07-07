@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
@@ -20,7 +21,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { applyForJob } from '../Redux/slices/applicationSlice';
 
-const { height: SCREEN_H } = Dimensions.get('window');
+const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const NAVY       = '#071A3E';
@@ -39,6 +40,7 @@ const GREEN      = '#059669';
 const RED        = '#EF4444';
 const ORANGE     = '#F97316';
 
+// ── Updated Data ──────────────────────────────────────────────────────────────
 const EDUCATION_LEVELS = [
   'High School Diploma',
   'Associate Degree',
@@ -50,6 +52,49 @@ const EDUCATION_LEVELS = [
   'Other'
 ];
 
+// ── 15 Fields of Study ────────────────────────────────────────────────────────
+const FIELDS_OF_STUDY = [
+  'Computer Science',
+  'Information Technology',
+  'Computer Engineering',
+  'Civil Engineering',
+  'Mechanical Engineering',
+  'Electrical Engineering',
+  'Electronics Engineering',
+  'Business Administration',
+  'Accountancy',
+  'Nursing',
+  'Education',
+  'Psychology',
+  'Architecture',
+  'Fine Arts',
+  'Multimedia Arts',
+];
+
+// ── 20 Institution Names ─────────────────────────────────────────────────────
+const INSTITUTIONS = [
+  'Technological University of the Philippines - Taguig (TUP-T)',
+  'Technological University of the Philippines - Manila (TUP-M)',
+  'University of the Philippines - Diliman (UP Diliman)',
+  'University of the Philippines - Los Baños (UPLB)',
+  'De La Salle University - Manila (DLSU)',
+  'Ateneo de Manila University (ADMU)',
+  'University of Santo Tomas (UST)',
+  'Mapúa University',
+  'Far Eastern University (FEU)',
+  'Polytechnic University of the Philippines (PUP)',
+  'University of the Philippines - Visayas (UPV)',
+  'University of the Philippines - Mindanao (UPMin)',
+  'Central Philippine University (CPU)',
+  'Silliman University',
+  'Mindanao State University - Iligan Institute of Technology (MSU-IIT)',
+  'University of San Carlos (USC)',
+  'Xavier University - Ateneo de Cagayan',
+  'Adamson University',
+  'University of the East (UE)',
+  'Technological Institute of the Philippines (TIP)',
+];
+
 // ── Format Functions ───────────────────────────────────────────────────────────
 const formatFileSize = (bytes) => {
   if (!bytes) return 'Unknown size';
@@ -57,6 +102,169 @@ const formatFileSize = (bytes) => {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 };
+
+// ── Selection Modal Component with Custom Input ──────────────────────────────
+function SelectionModal({ 
+  visible, 
+  onClose, 
+  onSelect, 
+  data, 
+  title, 
+  searchPlaceholder,
+  selectedValue,
+  allowCustom = true,
+}) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredData, setFilteredData] = useState(data);
+  const [isCustom, setIsCustom] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setSearchQuery('');
+      setFilteredData(data);
+      setIsCustom(false);
+    }
+  }, [visible, data]);
+
+  const handleSearch = (text) => {
+    setSearchQuery(text);
+    setIsCustom(false);
+    if (text.trim()) {
+      const filtered = data.filter(item => 
+        item.toLowerCase().includes(text.toLowerCase())
+      );
+      setFilteredData(filtered);
+    } else {
+      setFilteredData(data);
+    }
+  };
+
+  const handleSelectItem = (item) => {
+    onSelect(item);
+    onClose();
+  };
+
+  const handleUseCustom = () => {
+    if (searchQuery.trim()) {
+      onSelect(searchQuery.trim());
+      setIsCustom(true);
+      onClose();
+    }
+  };
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity 
+      style={[
+        styles.selectionItem,
+        item === selectedValue && styles.selectionItemActive
+      ]}
+      onPress={() => handleSelectItem(item)}
+    >
+      <Text style={[
+        styles.selectionItemText,
+        item === selectedValue && styles.selectionItemTextActive
+      ]}>
+        {item}
+      </Text>
+      {item === selectedValue && (
+        <Ionicons name="checkmark-circle" size={20} color={BLUE} />
+      )}
+    </TouchableOpacity>
+  );
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity 
+        style={styles.selectionOverlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <View style={styles.selectionContainer}>
+          <View style={styles.selectionHeader}>
+            <Text style={styles.selectionTitle}>{title}</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color={TEXT_MUTED} />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.selectionSearchBar}>
+            <Ionicons name="search-outline" size={20} color={TEXT_LIGHT} />
+            <TextInput
+              style={styles.selectionSearchInput}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={TEXT_LIGHT}
+              value={searchQuery}
+              onChangeText={handleSearch}
+              autoFocus={true}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => handleSearch('')}>
+                <Ionicons name="close-circle" size={18} color={TEXT_LIGHT} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {allowCustom && searchQuery.trim().length > 0 && filteredData.length === 0 && (
+            <TouchableOpacity 
+              style={styles.selectionCustomOption}
+              onPress={handleUseCustom}
+            >
+              <Ionicons name="create-outline" size={20} color={BLUE} />
+              <Text style={styles.selectionCustomText}>
+                Type: "{searchQuery.trim()}"
+              </Text>
+              <View style={styles.selectionCustomBadge}>
+                <Text style={styles.selectionCustomBadgeText}>Custom</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {allowCustom && searchQuery.trim().length > 0 && filteredData.length > 0 && (
+            <TouchableOpacity 
+              style={styles.selectionCustomOption}
+              onPress={handleUseCustom}
+            >
+              <Ionicons name="create-outline" size={20} color={BLUE} />
+              <Text style={styles.selectionCustomText}>
+                Type: "{searchQuery.trim()}"
+              </Text>
+              <View style={styles.selectionCustomBadge}>
+                <Text style={styles.selectionCustomBadgeText}>Custom</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          <FlatList
+            data={filteredData}
+            keyExtractor={(item, index) => index.toString()}
+            renderItem={renderItem}
+            contentContainerStyle={styles.selectionList}
+            showsVerticalScrollIndicator={true}
+            ListEmptyComponent={
+              !searchQuery.trim() ? (
+                <View style={styles.selectionEmpty}>
+                  <Ionicons name="search-outline" size={40} color={TEXT_LIGHT} />
+                  <Text style={styles.selectionEmptyText}>Type to search</Text>
+                  <Text style={styles.selectionEmptySub}>Or type your own value</Text>
+                </View>
+              ) : (
+                <View style={styles.selectionEmpty}>
+                  <Ionicons name="create-outline" size={40} color={TEXT_LIGHT} />
+                  <Text style={styles.selectionEmptyText}>No matches found</Text>
+                  <Text style={styles.selectionEmptySub}>Type your own value above</Text>
+                </View>
+              )
+            }
+          />
+
+          <TouchableOpacity style={styles.selectionCloseBtn} onPress={onClose}>
+            <Text style={styles.selectionCloseBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
 
 // ── Main Component ──────────────────────────────────────────────────────────────
 export default function ApplyModal({ 
@@ -84,6 +292,10 @@ export default function ApplyModal({
   const [institutionName, setInstitutionName] = useState('');
   const [graduationYear, setGraduationYear] = useState('');
   
+  // ── Selection Modal state ──────────────────────────────────────────────────
+  const [showFieldModal, setShowFieldModal] = useState(false);
+  const [showInstitutionModal, setShowInstitutionModal] = useState(false);
+  
   const [experiences, setExperiences] = useState([]);
   const [currentExperience, setCurrentExperience] = useState({
     jobTitle: '',
@@ -102,11 +314,8 @@ export default function ApplyModal({
       loadProfileData();
       checkExistingCV();
       
-      if (job?.budget?.min) {
-        setProposedRate(job.budget.min.toString());
-      } else if (job?.budget_amount) {
-        setProposedRate(job.budget_amount.toString());
-      }
+      // Don't auto-fill proposed rate - let user decide if they want to add it
+      setProposedRate('');
       
       setCurrentStep(1);
       setCoverLetter('');
@@ -287,11 +496,11 @@ export default function ApplyModal({
       return false;
     }
     if (!fieldOfStudy.trim()) {
-      Alert.alert('Required', 'Please enter your field of study');
+      Alert.alert('Required', 'Please select or enter your field of study');
       return false;
     }
     if (!institutionName.trim()) {
-      Alert.alert('Required', 'Please enter your institution name');
+      Alert.alert('Required', 'Please select or enter your institution name');
       return false;
     }
     return true;
@@ -325,7 +534,8 @@ export default function ApplyModal({
       formData.append('job_id', job._id);
       formData.append('cover_letter', coverLetter.trim() || "I'm interested in this position.");
       
-      if (proposedRate) {
+      // Only add proposed_rate if it has a value
+      if (proposedRate && proposedRate.trim()) {
         formData.append('proposed_rate', parseFloat(proposedRate).toString());
       }
       
@@ -489,6 +699,7 @@ export default function ApplyModal({
     );
   }
 
+  // ── Updated Step 1 with Modal Selection ──────────────────────────────────
   const renderStep1 = () => (
     <>
       <Text style={styles.applyLabel}>Resume/CV *</Text>
@@ -555,23 +766,37 @@ export default function ApplyModal({
         ))}
       </ScrollView>
 
+      {/* ── Field of Study with Modal Selection ── */}
       <Text style={styles.applyLabel}>Field of Study *</Text>
-      <TextInput 
-        style={styles.applyInput} 
-        placeholder="e.g., Computer Science" 
-        placeholderTextColor={TEXT_LIGHT} 
-        value={fieldOfStudy} 
-        onChangeText={setFieldOfStudy} 
-      />
+      <TouchableOpacity 
+        style={styles.selectionInput}
+        onPress={() => setShowFieldModal(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={[
+          styles.selectionInputText,
+          !fieldOfStudy && styles.selectionInputPlaceholder
+        ]}>
+          {fieldOfStudy || 'Select or type field of study...'}
+        </Text>
+        <Ionicons name="chevron-down" size={20} color={TEXT_LIGHT} />
+      </TouchableOpacity>
 
+      {/* ── Institution Name with Modal Selection ── */}
       <Text style={styles.applyLabel}>Institution Name *</Text>
-      <TextInput 
-        style={styles.applyInput} 
-        placeholder="e.g., University of Technology" 
-        placeholderTextColor={TEXT_LIGHT} 
-        value={institutionName} 
-        onChangeText={setInstitutionName} 
-      />
+      <TouchableOpacity 
+        style={styles.selectionInput}
+        onPress={() => setShowInstitutionModal(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={[
+          styles.selectionInputText,
+          !institutionName && styles.selectionInputPlaceholder
+        ]}>
+          {institutionName || 'Select or type institution...'}
+        </Text>
+        <Ionicons name="chevron-down" size={20} color={TEXT_LIGHT} />
+      </TouchableOpacity>
 
       <Text style={styles.applyLabel}>Graduation Year (Optional)</Text>
       <TextInput 
@@ -581,6 +806,30 @@ export default function ApplyModal({
         value={graduationYear} 
         onChangeText={setGraduationYear} 
         keyboardType="numeric" 
+      />
+
+      {/* ── Field Selection Modal ── */}
+      <SelectionModal
+        visible={showFieldModal}
+        onClose={() => setShowFieldModal(false)}
+        onSelect={setFieldOfStudy}
+        data={FIELDS_OF_STUDY}
+        title="Select Field of Study"
+        searchPlaceholder="Search or type field of study..."
+        selectedValue={fieldOfStudy}
+        allowCustom={true}
+      />
+
+      {/* ── Institution Selection Modal ── */}
+      <SelectionModal
+        visible={showInstitutionModal}
+        onClose={() => setShowInstitutionModal(false)}
+        onSelect={setInstitutionName}
+        data={INSTITUTIONS}
+        title="Select Institution"
+        searchPlaceholder="Search or type institution..."
+        selectedValue={institutionName}
+        allowCustom={true}
       />
     </>
   );
@@ -684,9 +933,8 @@ export default function ApplyModal({
         )}
       </View>
 
-      <Text style={styles.reviewSubTitle}>Cover Letter & Rate</Text>
+      <Text style={styles.reviewSubTitle}>Cover Letter & Rate (Optional)</Text>
       <View style={styles.reviewCard}>
-        {proposedRate && <Text style={styles.reviewValue}>Proposed Rate: ₱{parseFloat(proposedRate).toLocaleString()}</Text>}
         <TextInput 
           style={styles.coverLetterInput} 
           placeholder="Write your cover letter here (optional)..." 
@@ -696,6 +944,19 @@ export default function ApplyModal({
           multiline 
           numberOfLines={4} 
         />
+        <View style={styles.rateInputContainer}>
+          <Ionicons name="cash-outline" size={20} color={TEXT_LIGHT} style={styles.rateIcon} />
+          <TextInput 
+            style={styles.rateInput}
+            placeholder="Proposed rate (optional)"
+            placeholderTextColor={TEXT_LIGHT}
+            value={proposedRate}
+            onChangeText={setProposedRate}
+            keyboardType="numeric"
+          />
+          <Text style={styles.rateLabel}>PHP</Text>
+        </View>
+        <Text style={styles.rateHint}>Leave empty if you want to discuss the rate later</Text>
       </View>
     </>
   );
@@ -831,5 +1092,197 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 14,
     color: TEXT_MUTED,
+  },
+  
+  // ── Selection Input Styles ──────────────────────────────────────────────
+  selectionInput: {
+    backgroundColor: BG,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectionInputText: {
+    fontSize: 14,
+    color: TEXT_MAIN,
+    flex: 1,
+  },
+  selectionInputPlaceholder: {
+    color: TEXT_LIGHT,
+  },
+
+  // ── Selection Modal Styles ──────────────────────────────────────────────
+  selectionOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(7,26,62,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  selectionContainer: {
+    backgroundColor: WHITE,
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: SCREEN_H * 0.8,
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  selectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  selectionSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BG,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    marginBottom: 12,
+  },
+  selectionSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: TEXT_MAIN,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  selectionList: {
+    paddingVertical: 4,
+  },
+  selectionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  selectionItemActive: {
+    backgroundColor: `${BLUE}5`,
+  },
+  selectionItemText: {
+    fontSize: 14,
+    color: TEXT_MAIN,
+    flex: 1,
+  },
+  selectionItemTextActive: {
+    color: BLUE,
+    fontWeight: '600',
+  },
+  selectionEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  selectionEmptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+    marginTop: 12,
+  },
+  selectionEmptySub: {
+    fontSize: 13,
+    color: TEXT_LIGHT,
+    marginTop: 4,
+  },
+  selectionCloseBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+  },
+  selectionCloseBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+  },
+  // ── Custom Option Styles ────────────────────────────────────────────────
+  selectionCustomOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: `${BLUE}5`,
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: BLUE,
+    borderStyle: 'dashed',
+  },
+  selectionCustomText: {
+    flex: 1,
+    fontSize: 14,
+    color: BLUE,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  selectionCustomBadge: {
+    backgroundColor: BLUE,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  selectionCustomBadgeText: {
+    fontSize: 10,
+    color: WHITE,
+    fontWeight: '600',
+  },
+  // ── Rate Input Styles ────────────────────────────────────────────────────
+  rateInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BG,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    marginTop: 12,
+  },
+  rateIcon: {
+    marginRight: 10,
+  },
+  rateInput: {
+    flex: 1,
+    fontSize: 14,
+    color: TEXT_MAIN,
+    paddingVertical: 8,
+  },
+  rateLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+    marginLeft: 8,
+  },
+  rateHint: {
+    fontSize: 11,
+    color: TEXT_LIGHT,
+    marginTop: 6,
+    fontStyle: 'italic',
   },
 });

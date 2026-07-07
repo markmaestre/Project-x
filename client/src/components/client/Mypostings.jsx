@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert,
   ActivityIndicator, RefreshControl, TextInput, Modal, BackHandler,
-  FlatList, StatusBar,
+  FlatList, StatusBar, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +15,11 @@ import {
   getJobById,
   clearJobError,
   clearJobSuccess,
+  selectClientJobs,
+  selectJobsLoading,
+  selectSelectedJob,
 } from '../../Redux/slices/jobSlice';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
 const NAVY       = '#071A3E';
@@ -32,6 +36,8 @@ const TEXT_MUTED = '#3A5070';
 const TEXT_LIGHT = '#7A90A8';
 const BORDER     = '#C8D8E8';
 const GREEN      = '#059669';
+const GREEN_MID  = '#86EFAC';  // ← ADDED THIS
+const GREEN_DARK = '#059669';
 const RED        = '#DC2626';
 const ORANGE     = '#F97316';
 const PURPLE     = '#7C3AED';
@@ -60,6 +66,8 @@ const STATUS_COLORS = {
   completed: PURPLE,
   cancelled: RED,
   closed: TEXT_LIGHT,
+  draft: TEXT_LIGHT,
+  in_review: BLUE_LT,
 };
 
 const STATUS_LABELS = {
@@ -69,10 +77,36 @@ const STATUS_LABELS = {
   completed: 'Completed',
   cancelled: 'Cancelled',
   closed: 'Closed',
+  draft: 'Draft',
+  in_review: 'In Review',
 };
 
+const DEGREE_LEVELS = [
+  { label: 'None', value: 'none' },
+  { label: 'High School', value: 'high_school' },
+  { label: 'Vocational', value: 'vocational' },
+  { label: 'College', value: 'college' },
+  { label: 'Masters', value: 'masters' },
+  { label: 'Doctorate', value: 'doctorate' },
+];
+
+const EDUCATION_LABELS = {
+  none: 'None',
+  high_school: 'High School',
+  vocational: 'Vocational',
+  college: 'College',
+  masters: 'Masters',
+  doctorate: 'Doctorate',
+};
+
+const CONTACT_PREFERENCES = [
+  { label: 'Chat', value: 'chat' },
+  { label: 'Email', value: 'email' },
+  { label: 'Phone', value: 'phone' },
+];
+
 // Statuses where job cannot be deleted
-const NON_DELETABLE_STATUSES = ['in_progress', 'completed'];
+const NON_DELETABLE_STATUSES = ['in_progress', 'completed', 'in_review'];
 
 const formatCurrency = (amount) => {
   if (!amount) return '₱0';
@@ -99,10 +133,51 @@ const formatRelativeTime = (dateString) => {
   return formatDate(dateString);
 };
 
+// ── Helper to extract budget amount from nested budget object ──────────────
+const getBudgetAmount = (job) => {
+  if (!job) return 0;
+  if (job.budget && typeof job.budget === 'object') {
+    return job.budget.max || job.budget.min || 0;
+  }
+  return job.budget_amount || 0;
+};
+
+const getBudgetType = (job) => {
+  if (!job) return 'fixed';
+  if (job.budget && typeof job.budget === 'object') {
+    return job.budget.type || 'fixed';
+  }
+  return job.budget_type || 'fixed';
+};
+
+const getApplicantsCount = (job) => {
+  if (!job) return 0;
+  return job.applications_count || job.analytics?.applications || 0;
+};
+
+const getViewsCount = (job) => {
+  if (!job) return 0;
+  return job.views || job.analytics?.views || 0;
+};
+
+const getFullAddress = (location) => {
+  if (!location) return null;
+  const parts = [];
+  if (location.address) parts.push(location.address);
+  if (location.city) parts.push(location.city);
+  if (location.province) parts.push(location.province);
+  if (location.country && location.country !== 'Philippines') parts.push(location.country);
+  if (location.zip_code) parts.push(location.zip_code);
+  return parts.length > 0 ? parts.join(', ') : null;
+};
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function JobManagement({ onNavigate }) {
   const dispatch = useDispatch();
-  const { clientJobs, isLoading, selectedJob } = useSelector((state) => state.jobs.jobs);
+  
+  const clientJobs = useSelector(selectClientJobs);
+  const isLoading = useSelector(selectJobsLoading);
+  const selectedJob = useSelector(selectSelectedJob);
   const { deleteJobSuccess, updateJobSuccess } = useSelector((state) => state.jobs);
 
   const [refreshing, setRefreshing] = useState(false);
@@ -117,19 +192,58 @@ export default function JobManagement({ onNavigate }) {
   const [detailJob, setDetailJob] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   
-  // Edit form state
+  // ── Edit form state ──
   const [editTitle, setEditTitle] = useState('');
   const [editCategory, setEditCategory] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editBudget, setEditBudget] = useState('');
   const [editBudgetType, setEditBudgetType] = useState('fixed');
   const [editStatus, setEditStatus] = useState('');
+  
+  // New fields for editing
+  const [editJobType, setEditJobType] = useState('');
+  const [editWorkSetup, setEditWorkSetup] = useState('');
+  const [editExperienceLevel, setEditExperienceLevel] = useState('');
+  const [editVacancies, setEditVacancies] = useState('');
+  const [editTimezone, setEditTimezone] = useState('');
+  const [editContactPreference, setEditContactPreference] = useState('');
+  
+  // Location fields
+  const [editLocation, setEditLocation] = useState({
+    country: '',
+    province: '',
+    city: '',
+    address: '',
+    zip_code: '',
+  });
+  
+  // Requirements
+  const [editRequirements, setEditRequirements] = useState({
+    education: 'none',
+    portfolio_required: false,
+    resume_required: false,
+    cover_letter_required: false,
+    preferred_languages: [],
+    preferred_certifications: [],
+  });
+  
+  // Features
+  const [editFeatured, setEditFeatured] = useState(false);
+  const [editUrgent, setEditUrgent] = useState(false);
+  const [editNdaRequired, setEditNdaRequired] = useState(false);
+  
+  // Application Settings
+  const [editMaxApplicants, setEditMaxApplicants] = useState('');
+  const [editAutoAccept, setEditAutoAccept] = useState(false);
+  const [editAllowMultipleHires, setEditAllowMultipleHires] = useState(false);
+  const [editApplicationDeadline, setEditApplicationDeadline] = useState(null);
 
   // ── Fetch Jobs ──────────────────────────────────────────────────────────────
   const fetchJobs = useCallback(async () => {
     try {
-      const params = { page: 1, limit: 50 };
+      const params = { page: 1, limit: 100 };
       if (selectedStatus !== 'all') {
         params.status = selectedStatus;
       }
@@ -143,7 +257,6 @@ export default function JobManagement({ onNavigate }) {
     fetchJobs();
   }, [fetchJobs]);
 
-  // ── Handle Delete Success ─────────────────────────────────────────────────
   useEffect(() => {
     if (deleteJobSuccess) {
       fetchJobs();
@@ -151,7 +264,6 @@ export default function JobManagement({ onNavigate }) {
     }
   }, [deleteJobSuccess, dispatch, fetchJobs]);
 
-  // ── Handle Update Success ─────────────────────────────────────────────────
   useEffect(() => {
     if (updateJobSuccess) {
       fetchJobs();
@@ -238,9 +350,48 @@ export default function JobManagement({ onNavigate }) {
       setEditTitle(detailJob.title || '');
       setEditCategory(detailJob.category || '');
       setEditDescription(detailJob.description || '');
-      setEditBudget(String(detailJob.budget_amount || ''));
-      setEditBudgetType(detailJob.budget_type || 'fixed');
+      setEditBudget(String(getBudgetAmount(detailJob)));
+      setEditBudgetType(getBudgetType(detailJob));
       setEditStatus(detailJob.status || 'open');
+      
+      // New fields
+      setEditJobType(detailJob.job_type || 'project');
+      setEditWorkSetup(detailJob.work_setup || 'remote');
+      setEditExperienceLevel(detailJob.experience_level || 'entry');
+      setEditVacancies(String(detailJob.vacancies || 1));
+      setEditTimezone(detailJob.timezone || 'Asia/Manila');
+      setEditContactPreference(detailJob.contact_preference || 'chat');
+      
+      // Location
+      setEditLocation({
+        country: detailJob.location?.country || 'Philippines',
+        province: detailJob.location?.province || '',
+        city: detailJob.location?.city || '',
+        address: detailJob.location?.address || '',
+        zip_code: detailJob.location?.zip_code || '',
+      });
+      
+      // Requirements
+      setEditRequirements({
+        education: detailJob.requirements?.education || 'none',
+        portfolio_required: detailJob.requirements?.portfolio_required || false,
+        resume_required: detailJob.requirements?.resume_required || false,
+        cover_letter_required: detailJob.requirements?.cover_letter_required || false,
+        preferred_languages: detailJob.requirements?.preferred_languages || [],
+        preferred_certifications: detailJob.requirements?.preferred_certifications || [],
+      });
+      
+      // Features
+      setEditFeatured(detailJob.featured || false);
+      setEditUrgent(detailJob.urgent || false);
+      setEditNdaRequired(detailJob.nda_required || false);
+      
+      // Application Settings
+      setEditMaxApplicants(String(detailJob.hiring?.max_applicants || 100));
+      setEditAutoAccept(detailJob.hiring?.auto_accept || false);
+      setEditAllowMultipleHires(detailJob.hiring?.allow_multiple_hires || false);
+      setEditApplicationDeadline(detailJob.application_deadline || null);
+      
       setIsEditing(true);
     }
   };
@@ -267,9 +418,25 @@ export default function JobManagement({ onNavigate }) {
         title: editTitle.trim(),
         category: editCategory.trim(),
         description: editDescription.trim(),
-        budget_amount: parseFloat(editBudget),
+        budget_min: parseFloat(editBudget),
+        budget_max: parseFloat(editBudget),
         budget_type: editBudgetType,
         status: editStatus,
+        job_type: editJobType,
+        work_setup: editWorkSetup,
+        experience_level: editExperienceLevel,
+        vacancies: parseInt(editVacancies) || 1,
+        timezone: editTimezone || 'Asia/Manila',
+        contact_preference: editContactPreference || 'chat',
+        location: editLocation,
+        requirements: editRequirements,
+        featured: editFeatured,
+        urgent: editUrgent,
+        nda_required: editNdaRequired,
+        max_applicants: parseInt(editMaxApplicants) || 100,
+        auto_accept: editAutoAccept,
+        allow_multiple_hires: editAllowMultipleHires,
+        application_deadline: editApplicationDeadline,
       };
 
       const result = await dispatch(updateJob({ 
@@ -277,7 +444,6 @@ export default function JobManagement({ onNavigate }) {
         jobData: updateData 
       })).unwrap();
 
-      // Update the detail view with new data
       setDetailJob(result.job || {
         ...detailJob,
         ...updateData,
@@ -296,11 +462,10 @@ export default function JobManagement({ onNavigate }) {
   const handleDeleteJob = async () => {
     if (!selectedJobForDelete) return;
     
-    // Check if job can be deleted
     if (NON_DELETABLE_STATUSES.includes(selectedJobForDelete.status)) {
       Alert.alert(
         'Cannot Delete',
-        `This job is ${STATUS_LABELS[selectedJobForDelete.status]}. You can only delete jobs that are Open or Cancelled.`
+        `This job is ${STATUS_LABELS[selectedJobForDelete.status] || selectedJobForDelete.status}. You can only delete jobs that are Open, Draft, or Cancelled.`
       );
       setShowDeleteModal(false);
       setSelectedJobForDelete(null);
@@ -334,7 +499,7 @@ export default function JobManagement({ onNavigate }) {
       setShowStatusModal(false);
       setSelectedJobForStatus(null);
       fetchJobs();
-      Alert.alert('Updated', `Job status changed to ${STATUS_LABELS[status]}.`);
+      Alert.alert('Updated', `Job status changed to ${STATUS_LABELS[status] || status}.`);
     } catch (error) {
       Alert.alert('Error', error?.message || 'Failed to update job status.');
     }
@@ -347,7 +512,6 @@ export default function JobManagement({ onNavigate }) {
     setRefreshing(false);
   }, [fetchJobs]);
 
-  // ── Check if job can be deleted ───────────────────────────────────────────
   const canDeleteJob = (status) => {
     return !NON_DELETABLE_STATUSES.includes(status);
   };
@@ -357,6 +521,11 @@ export default function JobManagement({ onNavigate }) {
     const statusColor = STATUS_COLORS[item.status] || TEXT_LIGHT;
     const statusLabel = STATUS_LABELS[item.status] || item.status;
     const deletable = canDeleteJob(item.status);
+    const budgetAmount = getBudgetAmount(item);
+    const budgetType = getBudgetType(item);
+    const applicantsCount = getApplicantsCount(item);
+    const viewsCount = getViewsCount(item);
+    const fullAddress = getFullAddress(item.location);
     
     return (
       <TouchableOpacity 
@@ -381,22 +550,40 @@ export default function JobManagement({ onNavigate }) {
           <View style={card.metaItem}>
             <Ionicons name="cash-outline" size={14} color={GOLD_DK} />
             <Text style={card.metaText}>
-              {formatCurrency(item.budget_amount)} 
-              {item.budget_type === 'hourly' ? '/hr' : ''}
+              {formatCurrency(budgetAmount)} 
+              {budgetType === 'hourly' ? '/hr' : ''}
             </Text>
           </View>
           <View style={card.metaItem}>
             <Ionicons name="people-outline" size={14} color={TEXT_LIGHT} />
             <Text style={card.metaText}>
-              {item.applications_count || 0} applicants
+              {applicantsCount} applicants
             </Text>
           </View>
           <View style={card.metaItem}>
             <Ionicons name="eye-outline" size={14} color={TEXT_LIGHT} />
             <Text style={card.metaText}>
-              {item.views || 0} views
+              {viewsCount} views
             </Text>
           </View>
+          {item.urgent && (
+            <View style={[card.metaItem, { backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }]}>
+              <Ionicons name="flame-outline" size={12} color={RED} />
+              <Text style={[card.metaText, { color: RED, fontSize: 10 }]}>Urgent</Text>
+            </View>
+          )}
+          {item.featured && (
+            <View style={[card.metaItem, { backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }]}>
+              <Ionicons name="star-outline" size={12} color={GOLD_DK} />
+              <Text style={[card.metaText, { color: GOLD_DK, fontSize: 10 }]}>Featured</Text>
+            </View>
+          )}
+          {fullAddress && (
+            <View style={[card.metaItem, { flex: 1, minWidth: '100%', marginTop: 4 }]}>
+              <Ionicons name="location-outline" size={12} color={TEXT_LIGHT} />
+              <Text style={[card.metaText, { fontSize: 10 }]} numberOfLines={1}>{fullAddress}</Text>
+            </View>
+          )}
         </View>
 
         <View style={card.footer}>
@@ -613,15 +800,37 @@ export default function JobManagement({ onNavigate }) {
                 <View>
                   {/* Status Badge */}
                   <View style={detailModal.statusWrap}>
-                    <View style={[detailModal.statusBadge, { backgroundColor: STATUS_COLORS[detailJob.status] + '15' }]}>
-                      <View style={[detailModal.statusDot, { backgroundColor: STATUS_COLORS[detailJob.status] }]} />
-                      <Text style={[detailModal.statusText, { color: STATUS_COLORS[detailJob.status] }]}>
+                    <View style={[detailModal.statusBadge, { backgroundColor: (STATUS_COLORS[detailJob.status] || TEXT_LIGHT) + '15' }]}>
+                      <View style={[detailModal.statusDot, { backgroundColor: STATUS_COLORS[detailJob.status] || TEXT_LIGHT }]} />
+                      <Text style={[detailModal.statusText, { color: STATUS_COLORS[detailJob.status] || TEXT_LIGHT }]}>
                         {STATUS_LABELS[detailJob.status] || detailJob.status}
                       </Text>
                     </View>
                     <Text style={detailModal.dateText}>
                       Created {formatRelativeTime(detailJob.createdAt)}
                     </Text>
+                  </View>
+
+                  {/* Features Badges */}
+                  <View style={detailModal.featuresWrap}>
+                    {detailJob.urgent && (
+                      <View style={[detailModal.featureBadge, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
+                        <Ionicons name="flame-outline" size={14} color={RED} />
+                        <Text style={[detailModal.featureText, { color: RED }]}>Urgent</Text>
+                      </View>
+                    )}
+                    {detailJob.featured && (
+                      <View style={[detailModal.featureBadge, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
+                        <Ionicons name="star-outline" size={14} color={GOLD_DK} />
+                        <Text style={[detailModal.featureText, { color: GOLD_DK }]}>Featured</Text>
+                      </View>
+                    )}
+                    {detailJob.nda_required && (
+                      <View style={[detailModal.featureBadge, { backgroundColor: '#DBEAFE', borderColor: '#93C5FD' }]}>
+                        <Ionicons name="document-text-outline" size={14} color={BLUE} />
+                        <Text style={[detailModal.featureText, { color: BLUE }]}>NDA</Text>
+                      </View>
+                    )}
                   </View>
 
                   {/* Title */}
@@ -645,8 +854,8 @@ export default function JobManagement({ onNavigate }) {
                   <View style={detailModal.section}>
                     <Text style={detailModal.sectionLabel}>Budget</Text>
                     <Text style={detailModal.budgetText}>
-                      {formatCurrency(detailJob.budget_amount)} 
-                      {detailJob.budget_type === 'hourly' ? ' / hour' : ' (Fixed)'}
+                      {formatCurrency(getBudgetAmount(detailJob))} 
+                      {getBudgetType(detailJob) === 'hourly' ? ' / hour' : ' (Fixed)'}
                     </Text>
                   </View>
 
@@ -661,14 +870,67 @@ export default function JobManagement({ onNavigate }) {
                       <Text style={detailModal.gridValue}>{detailJob.work_setup || 'N/A'}</Text>
                     </View>
                     <View style={detailModal.gridItem}>
-                      <Text style={detailModal.gridLabel}>Urgency</Text>
-                      <Text style={detailModal.gridValue}>{detailJob.urgency_level || 'N/A'}</Text>
-                    </View>
-                    <View style={detailModal.gridItem}>
-                      <Text style={detailModal.gridLabel}>Experience</Text>
+                      <Text style={detailModal.gridLabel}>Experience Level</Text>
                       <Text style={detailModal.gridValue}>{detailJob.experience_level || 'N/A'}</Text>
                     </View>
+                    <View style={detailModal.gridItem}>
+                      <Text style={detailModal.gridLabel}>Vacancies</Text>
+                      <Text style={detailModal.gridValue}>{detailJob.vacancies || 1}</Text>
+                    </View>
+                    <View style={detailModal.gridItem}>
+                      <Text style={detailModal.gridLabel}>Contact Preference</Text>
+                      <Text style={detailModal.gridValue}>{detailJob.contact_preference || 'Chat'}</Text>
+                    </View>
+                    <View style={detailModal.gridItem}>
+                      <Text style={detailModal.gridLabel}>Timezone</Text>
+                      <Text style={detailModal.gridValue}>{detailJob.timezone || 'Asia/Manila'}</Text>
+                    </View>
                   </View>
+
+                  {/* Location */}
+                  {detailJob.location && (detailJob.location.address || detailJob.location.city || detailJob.location.country) && (
+                    <View style={detailModal.section}>
+                      <Text style={detailModal.sectionLabel}>Location</Text>
+                      <Text style={detailModal.sectionValue}>{getFullAddress(detailJob.location) || 'N/A'}</Text>
+                    </View>
+                  )}
+
+                  {/* Requirements */}
+                  {detailJob.requirements && (
+                    <View style={detailModal.section}>
+                      <Text style={detailModal.sectionLabel}>Requirements</Text>
+                      <View style={{ gap: 6 }}>
+                        {detailJob.requirements.education && detailJob.requirements.education !== 'none' && (
+                          <Text style={detailModal.sectionValue}>• Education: {EDUCATION_LABELS[detailJob.requirements.education] || detailJob.requirements.education}</Text>
+                        )}
+                        {detailJob.requirements.portfolio_required && (
+                          <Text style={detailModal.sectionValue}>• Portfolio Required</Text>
+                        )}
+                        {detailJob.requirements.resume_required && (
+                          <Text style={detailModal.sectionValue}>• Resume Required</Text>
+                        )}
+                        {detailJob.requirements.cover_letter_required && (
+                          <Text style={detailModal.sectionValue}>• Cover Letter Required</Text>
+                        )}
+                        {detailJob.requirements.preferred_languages?.length > 0 && (
+                          <Text style={detailModal.sectionValue}>• Languages: {detailJob.requirements.preferred_languages.join(', ')}</Text>
+                        )}
+                        {detailJob.requirements.preferred_certifications?.length > 0 && (
+                          <Text style={detailModal.sectionValue}>• Certifications: {detailJob.requirements.preferred_certifications.join(', ')}</Text>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Screening Questions */}
+                  {detailJob.screening_questions?.length > 0 && (
+                    <View style={detailModal.section}>
+                      <Text style={detailModal.sectionLabel}>Screening Questions</Text>
+                      {detailJob.screening_questions.map((q, i) => (
+                        <Text key={i} style={detailModal.sectionValue}>{i + 1}. {q.question}</Text>
+                      ))}
+                    </View>
+                  )}
 
                   {/* Skills */}
                   {detailJob.required_skills?.length > 0 && (
@@ -684,16 +946,29 @@ export default function JobManagement({ onNavigate }) {
                     </View>
                   )}
 
+                  {/* Application Settings */}
+                  <View style={detailModal.section}>
+                    <Text style={detailModal.sectionLabel}>Application Settings</Text>
+                    <View style={{ gap: 6 }}>
+                      <Text style={detailModal.sectionValue}>• Max Applicants: {detailJob.hiring?.max_applicants || 100}</Text>
+                      <Text style={detailModal.sectionValue}>• Auto Accept: {detailJob.hiring?.auto_accept ? 'Yes' : 'No'}</Text>
+                      <Text style={detailModal.sectionValue}>• Multiple Hires: {detailJob.hiring?.allow_multiple_hires ? 'Yes' : 'No'}</Text>
+                      {detailJob.application_deadline && (
+                        <Text style={detailModal.sectionValue}>• Deadline: {formatDate(detailJob.application_deadline)}</Text>
+                      )}
+                    </View>
+                  </View>
+
                   {/* Stats */}
                   <View style={detailModal.statsWrap}>
                     <View style={detailModal.statItem}>
                       <Ionicons name="people-outline" size={18} color={TEXT_LIGHT} />
-                      <Text style={detailModal.statNum}>{detailJob.applications_count || 0}</Text>
+                      <Text style={detailModal.statNum}>{getApplicantsCount(detailJob)}</Text>
                       <Text style={detailModal.statLabel}>Applicants</Text>
                     </View>
                     <View style={detailModal.statItem}>
                       <Ionicons name="eye-outline" size={18} color={TEXT_LIGHT} />
-                      <Text style={detailModal.statNum}>{detailJob.views || 0}</Text>
+                      <Text style={detailModal.statNum}>{getViewsCount(detailJob)}</Text>
                       <Text style={detailModal.statLabel}>Views</Text>
                     </View>
                   </View>
@@ -720,7 +995,7 @@ export default function JobManagement({ onNavigate }) {
                       <View style={[detailModal.actionBtn, detailModal.disabledBtn]}>
                         <Ionicons name="lock-closed-outline" size={16} color={TEXT_LIGHT} />
                         <Text style={[detailModal.actionBtnText, { color: TEXT_LIGHT }]}>
-                          {STATUS_LABELS[detailJob.status]}
+                          {STATUS_LABELS[detailJob.status] || detailJob.status}
                         </Text>
                       </View>
                     )}
@@ -728,7 +1003,7 @@ export default function JobManagement({ onNavigate }) {
                   
                   {!canDeleteJob(detailJob.status) && (
                     <Text style={detailModal.deleteNote}>
-                      Cannot delete job while {STATUS_LABELS[detailJob.status].toLowerCase()}
+                      Cannot delete job while {STATUS_LABELS[detailJob.status]?.toLowerCase() || detailJob.status}
                     </Text>
                   )}
                 </View>
@@ -737,6 +1012,7 @@ export default function JobManagement({ onNavigate }) {
                 <View>
                   <Text style={detailModal.editTitle}>Edit Job</Text>
                   
+                  {/* Basic Information */}
                   <View style={detailModal.editField}>
                     <Text style={detailModal.editLabel}>Job Title *</Text>
                     <TextInput
@@ -772,36 +1048,199 @@ export default function JobManagement({ onNavigate }) {
                     />
                   </View>
 
-                  <View style={detailModal.editField}>
-                    <Text style={detailModal.editLabel}>Budget Amount *</Text>
-                    <TextInput
-                      style={detailModal.editInput}
-                      value={editBudget}
-                      onChangeText={setEditBudget}
-                      placeholder="Enter budget amount"
-                      placeholderTextColor={TEXT_LIGHT}
-                      keyboardType="numeric"
-                    />
+                  {/* Job Type & Work Setup */}
+                  <View style={detailModal.editRow}>
+                    <View style={[detailModal.editField, { flex: 1 }]}>
+                      <Text style={detailModal.editLabel}>Job Type</Text>
+                      <View style={detailModal.editChipGroup}>
+                        {['project', 'full_time', 'part_time', 'one_time', 'long_term'].map((type) => (
+                          <TouchableOpacity
+                            key={type}
+                            style={[detailModal.editChip, editJobType === type && detailModal.editChipActive]}
+                            onPress={() => setEditJobType(type)}
+                          >
+                            <Text style={[detailModal.editChipText, editJobType === type && detailModal.editChipTextActive]}>
+                              {type.replace('_', ' ').toUpperCase()}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
                   </View>
 
+                  <View style={detailModal.editRow}>
+                    <View style={[detailModal.editField, { flex: 1 }]}>
+                      <Text style={detailModal.editLabel}>Work Setup</Text>
+                      <View style={detailModal.editChipGroup}>
+                        {['remote', 'onsite', 'hybrid'].map((setup) => (
+                          <TouchableOpacity
+                            key={setup}
+                            style={[detailModal.editChip, editWorkSetup === setup && detailModal.editChipActive]}
+                            onPress={() => setEditWorkSetup(setup)}
+                          >
+                            <Text style={[detailModal.editChipText, editWorkSetup === setup && detailModal.editChipTextActive]}>
+                              {setup.toUpperCase()}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Experience & Vacancies */}
+                  <View style={detailModal.editRow}>
+                    <View style={[detailModal.editField, { flex: 1, marginRight: 8 }]}>
+                      <Text style={detailModal.editLabel}>Experience Level</Text>
+                      <View style={detailModal.editChipGroup}>
+                        {['entry', 'intermediate', 'expert', 'senior'].map((level) => (
+                          <TouchableOpacity
+                            key={level}
+                            style={[detailModal.editChip, editExperienceLevel === level && detailModal.editChipActive]}
+                            onPress={() => setEditExperienceLevel(level)}
+                          >
+                            <Text style={[detailModal.editChipText, editExperienceLevel === level && detailModal.editChipTextActive]}>
+                              {level.slice(0, 3).toUpperCase()}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={[detailModal.editField, { flex: 1 }]}>
+                      <Text style={detailModal.editLabel}>Vacancies</Text>
+                      <TextInput
+                        style={detailModal.editInput}
+                        value={editVacancies}
+                        onChangeText={setEditVacancies}
+                        placeholder="1"
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Contact Preference & Timezone */}
+                  <View style={detailModal.editRow}>
+                    <View style={[detailModal.editField, { flex: 1, marginRight: 8 }]}>
+                      <Text style={detailModal.editLabel}>Contact Preference</Text>
+                      <View style={detailModal.editChipGroup}>
+                        {CONTACT_PREFERENCES.map((pref) => (
+                          <TouchableOpacity
+                            key={pref.value}
+                            style={[detailModal.editChip, editContactPreference === pref.value && detailModal.editChipActive]}
+                            onPress={() => setEditContactPreference(pref.value)}
+                          >
+                            <Text style={[detailModal.editChipText, editContactPreference === pref.value && detailModal.editChipTextActive]}>
+                              {pref.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={[detailModal.editField, { flex: 1 }]}>
+                      <Text style={detailModal.editLabel}>Timezone</Text>
+                      <TextInput
+                        style={detailModal.editInput}
+                        value={editTimezone}
+                        onChangeText={setEditTimezone}
+                        placeholder="Asia/Manila"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Budget */}
+                  <View style={detailModal.editRow}>
+                    <View style={[detailModal.editField, { flex: 1, marginRight: 8 }]}>
+                      <Text style={detailModal.editLabel}>Budget Amount *</Text>
+                      <TextInput
+                        style={detailModal.editInput}
+                        value={editBudget}
+                        onChangeText={setEditBudget}
+                        placeholder="Enter budget amount"
+                        placeholderTextColor={TEXT_LIGHT}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={[detailModal.editField, { flex: 1 }]}>
+                      <Text style={detailModal.editLabel}>Budget Type</Text>
+                      <View style={detailModal.editChipGroup}>
+                        {['fixed', 'hourly'].map((type) => (
+                          <TouchableOpacity
+                            key={type}
+                            style={[detailModal.editChip, editBudgetType === type && detailModal.editChipActive]}
+                            onPress={() => setEditBudgetType(type)}
+                          >
+                            <Text style={[detailModal.editChipText, editBudgetType === type && detailModal.editChipTextActive]}>
+                              {type === 'fixed' ? 'Fixed' : 'Hourly'}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Location */}
                   <View style={detailModal.editField}>
-                    <Text style={detailModal.editLabel}>Budget Type</Text>
-                    <View style={detailModal.budgetTypeRow}>
-                      {['fixed', 'hourly'].map((type) => (
+                    <Text style={detailModal.editLabel}>Location</Text>
+                    <TextInput
+                      style={detailModal.editInput}
+                      value={editLocation.address}
+                      onChangeText={(text) => setEditLocation({ ...editLocation, address: text })}
+                      placeholder="Street address"
+                      placeholderTextColor={TEXT_LIGHT}
+                    />
+                  </View>
+                  <View style={detailModal.editRow}>
+                    <View style={[detailModal.editField, { flex: 1, marginRight: 8 }]}>
+                      <TextInput
+                        style={detailModal.editInput}
+                        value={editLocation.city}
+                        onChangeText={(text) => setEditLocation({ ...editLocation, city: text })}
+                        placeholder="City"
+                        placeholderTextColor={TEXT_LIGHT}
+                      />
+                    </View>
+                    <View style={[detailModal.editField, { flex: 1 }]}>
+                      <TextInput
+                        style={detailModal.editInput}
+                        value={editLocation.province}
+                        onChangeText={(text) => setEditLocation({ ...editLocation, province: text })}
+                        placeholder="Province"
+                        placeholderTextColor={TEXT_LIGHT}
+                      />
+                    </View>
+                  </View>
+                  <View style={detailModal.editRow}>
+                    <View style={[detailModal.editField, { flex: 1, marginRight: 8 }]}>
+                      <TextInput
+                        style={detailModal.editInput}
+                        value={editLocation.country}
+                        onChangeText={(text) => setEditLocation({ ...editLocation, country: text })}
+                        placeholder="Country"
+                        placeholderTextColor={TEXT_LIGHT}
+                      />
+                    </View>
+                    <View style={[detailModal.editField, { flex: 1 }]}>
+                      <TextInput
+                        style={detailModal.editInput}
+                        value={editLocation.zip_code}
+                        onChangeText={(text) => setEditLocation({ ...editLocation, zip_code: text })}
+                        placeholder="Zip Code"
+                        placeholderTextColor={TEXT_LIGHT}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Requirements */}
+                  <View style={detailModal.editField}>
+                    <Text style={detailModal.editLabel}>Education Level</Text>
+                    <View style={detailModal.editChipGroup}>
+                      {DEGREE_LEVELS.map((level) => (
                         <TouchableOpacity
-                          key={type}
-                          style={[
-                            detailModal.budgetTypeBtn,
-                            editBudgetType === type && detailModal.budgetTypeActive
-                          ]}
-                          onPress={() => setEditBudgetType(type)}
-                          activeOpacity={0.7}
+                          key={level.value}
+                          style={[detailModal.editChip, editRequirements.education === level.value && detailModal.editChipActive]}
+                          onPress={() => setEditRequirements({ ...editRequirements, education: level.value })}
                         >
-                          <Text style={[
-                            detailModal.budgetTypeText,
-                            editBudgetType === type && detailModal.budgetTypeTextActive
-                          ]}>
-                            {type === 'fixed' ? 'Fixed' : 'Hourly'}
+                          <Text style={[detailModal.editChipText, editRequirements.education === level.value && detailModal.editChipTextActive]}>
+                            {level.label}
                           </Text>
                         </TouchableOpacity>
                       ))}
@@ -809,11 +1248,139 @@ export default function JobManagement({ onNavigate }) {
                   </View>
 
                   <View style={detailModal.editField}>
+                    <View style={detailModal.switchRow}>
+                      <Text style={detailModal.switchLabel}>Portfolio Required</Text>
+                      <Switch
+                        value={editRequirements.portfolio_required}
+                        onValueChange={(val) => setEditRequirements({ ...editRequirements, portfolio_required: val })}
+                        trackColor={{ false: BORDER, true: GREEN_MID }}
+                        thumbColor={editRequirements.portfolio_required ? BLUE : TEXT_LIGHT}
+                      />
+                    </View>
+                    <View style={detailModal.switchRow}>
+                      <Text style={detailModal.switchLabel}>Resume Required</Text>
+                      <Switch
+                        value={editRequirements.resume_required}
+                        onValueChange={(val) => setEditRequirements({ ...editRequirements, resume_required: val })}
+                        trackColor={{ false: BORDER, true: GREEN_MID }}
+                        thumbColor={editRequirements.resume_required ? BLUE : TEXT_LIGHT}
+                      />
+                    </View>
+                    <View style={detailModal.switchRow}>
+                      <Text style={detailModal.switchLabel}>Cover Letter Required</Text>
+                      <Switch
+                        value={editRequirements.cover_letter_required}
+                        onValueChange={(val) => setEditRequirements({ ...editRequirements, cover_letter_required: val })}
+                        trackColor={{ false: BORDER, true: GREEN_MID }}
+                        thumbColor={editRequirements.cover_letter_required ? BLUE : TEXT_LIGHT}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Features */}
+                  <View style={detailModal.editField}>
+                    <Text style={detailModal.editLabel}>Job Features</Text>
+                    <View style={detailModal.switchRow}>
+                      <Text style={detailModal.switchLabel}>Featured Job</Text>
+                      <Switch
+                        value={editFeatured}
+                        onValueChange={setEditFeatured}
+                        trackColor={{ false: BORDER, true: GREEN_MID }}
+                        thumbColor={editFeatured ? BLUE : TEXT_LIGHT}
+                      />
+                    </View>
+                    <View style={detailModal.switchRow}>
+                      <Text style={detailModal.switchLabel}>Urgent Hiring</Text>
+                      <Switch
+                        value={editUrgent}
+                        onValueChange={setEditUrgent}
+                        trackColor={{ false: BORDER, true: GREEN_MID }}
+                        thumbColor={editUrgent ? BLUE : TEXT_LIGHT}
+                      />
+                    </View>
+                    <View style={detailModal.switchRow}>
+                      <Text style={detailModal.switchLabel}>NDA Required</Text>
+                      <Switch
+                        value={editNdaRequired}
+                        onValueChange={setEditNdaRequired}
+                        trackColor={{ false: BORDER, true: GREEN_MID }}
+                        thumbColor={editNdaRequired ? BLUE : TEXT_LIGHT}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Application Settings */}
+                  <View style={detailModal.editField}>
+                    <Text style={detailModal.editLabel}>Application Settings</Text>
+                    <TextInput
+                      style={detailModal.editInput}
+                      value={editMaxApplicants}
+                      onChangeText={setEditMaxApplicants}
+                      placeholder="Max Applicants (1-1000)"
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  <View style={detailModal.editField}>
+                    <View style={detailModal.switchRow}>
+                      <Text style={detailModal.switchLabel}>Auto Accept Applications</Text>
+                      <Switch
+                        value={editAutoAccept}
+                        onValueChange={setEditAutoAccept}
+                        trackColor={{ false: BORDER, true: GREEN_MID }}
+                        thumbColor={editAutoAccept ? BLUE : TEXT_LIGHT}
+                      />
+                    </View>
+                    <View style={detailModal.switchRow}>
+                      <Text style={detailModal.switchLabel}>Allow Multiple Hires</Text>
+                      <Switch
+                        value={editAllowMultipleHires}
+                        onValueChange={setEditAllowMultipleHires}
+                        trackColor={{ false: BORDER, true: GREEN_MID }}
+                        thumbColor={editAllowMultipleHires ? BLUE : TEXT_LIGHT}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={detailModal.editField}>
+                    <Text style={detailModal.editLabel}>Application Deadline</Text>
+                    <TouchableOpacity
+                      style={detailModal.datePickerBtn}
+                      onPress={() => setShowDatePicker(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="calendar-outline" size={18} color={BLUE} />
+                      <Text style={detailModal.datePickerText}>
+                        {editApplicationDeadline ? formatDate(editApplicationDeadline) : 'Select deadline (optional)'}
+                      </Text>
+                    </TouchableOpacity>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={editApplicationDeadline ? new Date(editApplicationDeadline) : new Date()}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={(event, selectedDate) => {
+                          setShowDatePicker(false);
+                          if (selectedDate) {
+                            if (selectedDate <= new Date()) {
+                              Alert.alert('Invalid Date', 'Application deadline must be in the future');
+                              return;
+                            }
+                            setEditApplicationDeadline(selectedDate.toISOString());
+                          }
+                        }}
+                        minimumDate={new Date()}
+                      />
+                    )}
+                  </View>
+
+                  {/* Status */}
+                  <View style={detailModal.editField}>
                     <Text style={detailModal.editLabel}>Status</Text>
                     <View style={detailModal.statusRow}>
                       {['open', 'in_progress', 'paused', 'completed', 'cancelled'].map((status) => {
                         const isActive = editStatus === status;
-                        const color = STATUS_COLORS[status];
+                        const color = STATUS_COLORS[status] || TEXT_LIGHT;
                         return (
                           <TouchableOpacity
                             key={status}
@@ -829,7 +1396,7 @@ export default function JobManagement({ onNavigate }) {
                               detailModal.statusOptionText,
                               isActive && { color, fontWeight: '700' }
                             ]}>
-                              {STATUS_LABELS[status]}
+                              {STATUS_LABELS[status] || status}
                             </Text>
                           </TouchableOpacity>
                         );
@@ -906,7 +1473,7 @@ export default function JobManagement({ onNavigate }) {
             <View style={modal.statusOptions}>
               {['open', 'in_progress', 'paused', 'completed', 'cancelled'].map((status) => {
                 const isActive = selectedJobForStatus?.status === status;
-                const color = STATUS_COLORS[status];
+                const color = STATUS_COLORS[status] || TEXT_LIGHT;
                 return (
                   <TouchableOpacity
                     key={status}
@@ -919,7 +1486,7 @@ export default function JobManagement({ onNavigate }) {
                   >
                     <View style={[modal.statusDot, { backgroundColor: color }]} />
                     <Text style={[modal.statusLabel, isActive && { color, fontWeight: '700' }]}>
-                      {STATUS_LABELS[status]}
+                      {STATUS_LABELS[status] || status}
                     </Text>
                     {isActive && <Ionicons name="checkmark-circle" size={16} color={color} />}
                   </TouchableOpacity>
@@ -1036,7 +1603,7 @@ const card = StyleSheet.create({
   statusText: { fontSize: 9, fontWeight: '700' },
   category: { fontSize: 11, color: TEXT_LIGHT, marginTop: 3 },
   description: { fontSize: 12, color: TEXT_MUTED, lineHeight: 18, marginBottom: 10 },
-  metaRow: { flexDirection: 'row', gap: 14, marginBottom: 12 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaText: { fontSize: 11, color: TEXT_LIGHT, fontWeight: '500' },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTopWidth: 1, borderTopColor: BORDER },
@@ -1056,6 +1623,10 @@ const detailModal = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: BORDER },
   headerTitle: { fontSize: 16, fontWeight: '700', color: TEXT_MAIN },
   body: { padding: 16, paddingBottom: 32 },
+  
+  featuresWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  featureBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1 },
+  featureText: { fontSize: 11, fontWeight: '600' },
   
   statusWrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
@@ -1094,22 +1665,29 @@ const detailModal = StyleSheet.create({
   actionBtnText: { fontSize: 14, fontWeight: '700', color: WHITE },
   deleteNote: { textAlign: 'center', fontSize: 11, color: TEXT_LIGHT, marginTop: 8 },
   
+  // Edit mode styles
   editTitle: { fontSize: 20, fontWeight: '800', color: TEXT_MAIN, marginBottom: 16 },
   editField: { marginBottom: 14 },
+  editRow: { flexDirection: 'row', gap: 8 },
   editLabel: { fontSize: 12, fontWeight: '700', color: TEXT_MUTED, marginBottom: 6 },
   editInput: { backgroundColor: BG, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: BORDER, fontSize: 14, color: TEXT_MAIN },
   editTextArea: { height: 100, textAlignVertical: 'top' },
+  editChipGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  editChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: BORDER, backgroundColor: BG },
+  editChipActive: { backgroundColor: BLUE, borderColor: BLUE },
+  editChipText: { fontSize: 11, fontWeight: '500', color: TEXT_LIGHT },
+  editChipTextActive: { color: WHITE, fontWeight: '700' },
   
-  budgetTypeRow: { flexDirection: 'row', gap: 8 },
-  budgetTypeBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: BORDER, alignItems: 'center', backgroundColor: BG },
-  budgetTypeActive: { backgroundColor: BLUE, borderColor: BLUE },
-  budgetTypeText: { fontSize: 13, fontWeight: '600', color: TEXT_LIGHT },
-  budgetTypeTextActive: { color: WHITE },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
+  switchLabel: { fontSize: 13, fontWeight: '600', color: TEXT_MAIN },
   
   statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   statusOption: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: BORDER, backgroundColor: BG },
   statusDotSmall: { width: 6, height: 6, borderRadius: 3 },
   statusOptionText: { fontSize: 11, fontWeight: '500', color: TEXT_LIGHT },
+  
+  datePickerBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: BG, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: BORDER },
+  datePickerText: { flex: 1, fontSize: 14, color: TEXT_MAIN },
   
   editActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
   editActionBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },

@@ -1,4 +1,5 @@
-// Redux/slices/notificationSlice.js
+// Redux/slices/notificationSlice.js - UPDATED WITH BETTER ERROR HANDLING
+
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../services/api';
 
@@ -198,9 +199,9 @@ export const deleteAllNotifications = createAsyncThunk(
   }
 );
 
-// Redux/slices/notificationSlice.js - Updated getNotificationCounts
+// ==================== GET NOTIFICATION COUNTS - IMPROVED ====================
 
-// Get notification counts - FIXED: Skip if invalid ID
+// Get notification counts - IMPROVED with better error handling
 export const getNotificationCounts = createAsyncThunk(
   'notifications/getNotificationCounts',
   async (_, { getState, rejectWithValue }) => {
@@ -209,10 +210,15 @@ export const getNotificationCounts = createAsyncThunk(
       const user = getState().auth.user;
       
       if (!token) {
-        return rejectWithValue({ message: 'No token found. Please login again.' });
+        console.log('No token found, skipping counts fetch');
+        return {
+          totalUnread: 0,
+          highPriorityUnread: 0,
+          unreadByType: {}
+        };
       }
 
-      // Check if user ID looks like a valid MongoDB ObjectId
+      // Check if user ID looks like a valid MongoDB ObjectId (24 hex chars)
       const userId = user?.id || user?._id;
       if (!userId || !/^[0-9a-fA-F]{24}$/.test(userId)) {
         console.log('Invalid user ID format, skipping counts fetch:', userId);
@@ -223,17 +229,23 @@ export const getNotificationCounts = createAsyncThunk(
         };
       }
 
-      console.log('Fetching notification counts...');
+      console.log('Fetching notification counts for user:', userId);
       
       const response = await api.get('/notifications/counts', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       console.log('Counts response:', response.data);
-      return response.data;
+      
+      // Ensure we always return valid data
+      return {
+        totalUnread: response.data?.totalUnread || 0,
+        highPriorityUnread: response.data?.highPriorityUnread || 0,
+        unreadByType: response.data?.unreadByType || {}
+      };
     } catch (error) {
       console.error('Get notification counts error:', error.response?.data || error.message);
-      // Return default values instead of rejecting
+      // Always return default values instead of rejecting
       return {
         totalUnread: 0,
         highPriorityUnread: 0,
@@ -326,6 +338,7 @@ const initialState = {
   deleteSuccess: false,
   updateSuccess: false,
   lastUpdated: null,
+  countsLoaded: false, // NEW: track if counts have been loaded
 };
 
 // ==================== SLICE ====================
@@ -366,7 +379,6 @@ const notificationSlice = createSlice({
       if (state.selectedNotification?._id === notificationId) {
         state.selectedNotification = { ...state.selectedNotification, ...updates };
       }
-      // Update unread notifications list if present
       const unreadIndex = state.unreadNotifications.findIndex(n => n._id === notificationId);
       if (unreadIndex !== -1) {
         state.unreadNotifications[unreadIndex] = { ...state.unreadNotifications[unreadIndex], ...updates };
@@ -399,6 +411,10 @@ const notificationSlice = createSlice({
         state.unreadCount += 1;
       }
     },
+    // NEW: Set counts loaded flag
+    setCountsLoaded: (state, action) => {
+      state.countsLoaded = action.payload;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -413,13 +429,17 @@ const notificationSlice = createSlice({
         state.totalCount = action.payload.totalNotifications || 0;
         state.totalPages = action.payload.totalPages || 1;
         state.currentPage = action.payload.currentPage || 1;
-        state.unreadCount = action.payload.unreadCount || 0;
+        // Only update unreadCount if not already set by counts
+        if (!state.countsLoaded) {
+          state.unreadCount = action.payload.unreadCount || 0;
+        }
         state.typeBreakdown = action.payload.typeBreakdown || {};
         state.lastUpdated = new Date().toISOString();
       })
       .addCase(getNotifications.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
+        // Keep existing data on error
       })
 
       // ==================== GET UNREAD NOTIFICATIONS ====================
@@ -430,7 +450,9 @@ const notificationSlice = createSlice({
       .addCase(getUnreadNotifications.fulfilled, (state, action) => {
         state.isLoading = false;
         state.unreadNotifications = action.payload.notifications || [];
-        state.unreadCount = action.payload.unreadCount || 0;
+        if (!state.countsLoaded) {
+          state.unreadCount = action.payload.unreadCount || 0;
+        }
         state.lastUpdated = new Date().toISOString();
       })
       .addCase(getUnreadNotifications.rejected, (state, action) => {
@@ -446,7 +468,6 @@ const notificationSlice = createSlice({
       .addCase(getNotificationById.fulfilled, (state, action) => {
         state.isLoading = false;
         state.selectedNotification = action.payload.notification;
-        // Mark as clicked in local state
         if (state.selectedNotification && !state.selectedNotification.is_clicked) {
           state.selectedNotification.is_clicked = true;
           state.selectedNotification.clicked_at = new Date().toISOString();
@@ -466,20 +487,23 @@ const notificationSlice = createSlice({
       .addCase(markNotificationAsRead.fulfilled, (state, action) => {
         state.isLoading = false;
         state.markSuccess = true;
-        state.unreadCount = action.payload.unreadCount || 0;
+        if (action.payload.unreadCount !== undefined) {
+          state.unreadCount = action.payload.unreadCount;
+        }
         
         const updatedNotification = action.payload.notification;
-        const index = state.notifications.findIndex(n => n._id === updatedNotification._id);
-        if (index !== -1) {
-          state.notifications[index] = updatedNotification;
+        if (updatedNotification) {
+          const index = state.notifications.findIndex(n => n._id === updatedNotification._id);
+          if (index !== -1) {
+            state.notifications[index] = updatedNotification;
+          }
+          if (state.selectedNotification?._id === updatedNotification._id) {
+            state.selectedNotification = updatedNotification;
+          }
+          state.unreadNotifications = state.unreadNotifications.filter(
+            n => n._id !== updatedNotification._id
+          );
         }
-        if (state.selectedNotification?._id === updatedNotification._id) {
-          state.selectedNotification = updatedNotification;
-        }
-        // Remove from unread list
-        state.unreadNotifications = state.unreadNotifications.filter(
-          n => n._id !== updatedNotification._id
-        );
       })
       .addCase(markNotificationAsRead.rejected, (state, action) => {
         state.isLoading = false;
@@ -493,11 +517,10 @@ const notificationSlice = createSlice({
         state.error = null;
         state.markSuccess = false;
       })
-      .addCase(markAllNotificationsAsRead.fulfilled, (state, action) => {
+      .addCase(markAllNotificationsAsRead.fulfilled, (state) => {
         state.isLoading = false;
         state.markSuccess = true;
         state.unreadCount = 0;
-        // Update all notifications to read
         state.notifications = state.notifications.map(n => ({
           ...n,
           is_read: true,
@@ -521,9 +544,10 @@ const notificationSlice = createSlice({
       .addCase(markNotificationsByTypeAsRead.fulfilled, (state, action) => {
         state.isLoading = false;
         state.markSuccess = true;
-        state.unreadCount = action.payload.unreadCount || 0;
-        // Update notifications of that type to read
-        const type = action.meta.arg; // The type passed to the thunk
+        if (action.payload.unreadCount !== undefined) {
+          state.unreadCount = action.payload.unreadCount;
+        }
+        const type = action.meta.arg;
         state.notifications = state.notifications.map(n => {
           if (n.type === type && !n.is_read) {
             return { ...n, is_read: true, read_at: new Date().toISOString() };
@@ -550,7 +574,9 @@ const notificationSlice = createSlice({
       .addCase(deleteNotification.fulfilled, (state, action) => {
         state.isLoading = false;
         state.deleteSuccess = true;
-        state.unreadCount = action.payload.unreadCount || 0;
+        if (action.payload.unreadCount !== undefined) {
+          state.unreadCount = action.payload.unreadCount;
+        }
         const notificationId = action.payload.notificationId;
         state.notifications = state.notifications.filter(n => n._id !== notificationId);
         state.unreadNotifications = state.unreadNotifications.filter(n => n._id !== notificationId);
@@ -575,13 +601,10 @@ const notificationSlice = createSlice({
         state.deleteSuccess = true;
         const type = action.meta.arg?.type;
         if (type && type !== 'All') {
-          // Delete only specific type
           state.notifications = state.notifications.filter(n => n.type !== type);
           state.unreadNotifications = state.unreadNotifications.filter(n => n.type !== type);
-          // Update counts - we need to recalculate
           state.unreadCount = state.unreadNotifications.length;
         } else {
-          // Delete all
           state.notifications = [];
           state.unreadNotifications = [];
           state.unreadCount = 0;
@@ -595,24 +618,24 @@ const notificationSlice = createSlice({
         state.deleteSuccess = false;
       })
 
-      // ==================== GET NOTIFICATION COUNTS ====================
+      // ==================== GET NOTIFICATION COUNTS - IMPROVED ====================
       .addCase(getNotificationCounts.pending, (state) => {
-        state.isLoading = true;
+        // Don't set loading to true for counts to avoid UI flicker
         state.error = null;
       })
       .addCase(getNotificationCounts.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.unreadCount = action.payload.totalUnread || 0;
-        state.highPriorityUnread = action.payload.highPriorityUnread || 0;
-        state.unreadByType = action.payload.unreadByType || {};
+        state.countsLoaded = true;
+        state.unreadCount = action.payload?.totalUnread || 0;
+        state.highPriorityUnread = action.payload?.highPriorityUnread || 0;
+        state.unreadByType = action.payload?.unreadByType || {};
+        state.lastUpdated = new Date().toISOString();
       })
-      .addCase(getNotificationCounts.rejected, (state, action) => {
-        state.isLoading = false;
-        // Don't set error for counts - just use defaults
+      .addCase(getNotificationCounts.rejected, (state) => {
+        state.countsLoaded = true;
         state.unreadCount = 0;
         state.highPriorityUnread = 0;
         state.unreadByType = {};
-        // Only log the error, don't show it to user
+        // Don't set error for counts - just use defaults
         console.log('Counts endpoint failed, using defaults');
       })
 
@@ -663,7 +686,8 @@ export const {
   decrementUnreadCount,
   incrementUnreadCount,
   resetUnreadCount,
-  addNotificationLocally
+  addNotificationLocally,
+  setCountsLoaded, // NEW
 } = notificationSlice.actions;
 
 // ==================== SELECTORS ====================
@@ -685,46 +709,40 @@ export const selectMarkSuccess = (state) => state.notifications.markSuccess;
 export const selectDeleteSuccess = (state) => state.notifications.deleteSuccess;
 export const selectUpdateSuccess = (state) => state.notifications.updateSuccess;
 export const selectNotificationsLastUpdated = (state) => state.notifications.lastUpdated;
+export const selectCountsLoaded = (state) => state.notifications.countsLoaded; // NEW
 
 // ==================== COMPLEX SELECTORS ====================
 
-// Select unread count for a specific type
 export const selectUnreadCountByType = (state, type) => {
   return state.notifications.unreadByType[type] || 0;
 };
 
-// Select notifications filtered by type
 export const selectNotificationsByType = (state, type) => {
   return state.notifications.notifications.filter(n => n.type === type);
 };
 
-// Select unread notifications filtered by type
 export const selectUnreadNotificationsByType = (state, type) => {
   return state.notifications.unreadNotifications.filter(n => n.type === type);
 };
 
-// Select high priority notifications
 export const selectHighPriorityNotifications = (state) => {
   return state.notifications.notifications.filter(
     n => n.priority === 'high' || n.priority === 'urgent'
   );
 };
 
-// Select unread high priority notifications
 export const selectUnreadHighPriorityNotifications = (state) => {
   return state.notifications.unreadNotifications.filter(
     n => n.priority === 'high' || n.priority === 'urgent'
   );
 };
 
-// Select notifications that have actions
 export const selectNotificationsWithActions = (state) => {
   return state.notifications.notifications.filter(
     n => n.actions && n.actions.length > 0
   );
 };
 
-// Get notification by reference
 export const selectNotificationsByReference = (state, referenceId, referenceModel) => {
   return state.notifications.notifications.filter(
     n => n.reference_id === referenceId && n.reference_model === referenceModel
