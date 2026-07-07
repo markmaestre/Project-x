@@ -477,10 +477,33 @@ const cardStyles = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
-// Update Card (using project update data)
+// Update Card (for freelancer view - NO Approve/Revise buttons)
 // ─────────────────────────────────────────────────────────
-const UpdateCard = ({ update, onPress, onStatusChange }) => {
+const UpdateCard = ({ update, onPress }) => {
   const updateType = UPDATE_TYPES[update.update_type] || UPDATE_TYPES.progress;
+
+  // Determine delivery status display - FIXED
+  const getDeliveryStatusDisplay = () => {
+    // If status is completed OR delivery_status is approved, show as Approved
+    if (update.status === 'completed' || update.delivery_status === 'approved') {
+      return { label: 'Approved', color: SUCCESS, icon: 'checkmark-circle' };
+    }
+    // If delivery_status is revision_requested
+    if (update.delivery_status === 'revision_requested') {
+      return { label: 'Revision Requested', color: DANGER, icon: 'refresh-circle' };
+    }
+    // If delivery_status is submitted and status is not completed
+    if (update.delivery_status === 'submitted' && update.status !== 'completed') {
+      return { label: 'Pending Review', color: GOLD_DARK, icon: 'time-outline' };
+    }
+    // If there's no delivery status or not submitted yet
+    if (!update.delivery_status || update.delivery_status === 'not_submitted') {
+      return null;
+    }
+    return null;
+  };
+
+  const deliveryStatus = getDeliveryStatusDisplay();
 
   return (
     <TouchableOpacity style={updateCardStyles.card} onPress={() => onPress(update)} activeOpacity={0.7}>
@@ -492,12 +515,22 @@ const UpdateCard = ({ update, onPress, onStatusChange }) => {
           <Text style={updateCardStyles.typeLabel} numberOfLines={1}>{updateType.label}</Text>
           <Text style={updateCardStyles.updateTime}>{timeAgo(update.created_at)}</Text>
         </View>
-        {update.delivery_status === 'submitted' && (
-          <View style={updateCardStyles.pendingBadge}>
-            <Text style={updateCardStyles.pendingText}>Pending</Text>
+        
+        {/* Delivery Status Badge - shows current status */}
+        {deliveryStatus && (
+          <View style={[
+            updateCardStyles.deliveryBadge,
+            { backgroundColor: `${deliveryStatus.color}15`, borderColor: deliveryStatus.color }
+          ]}>
+            <Ionicons name={deliveryStatus.icon} size={10} color={deliveryStatus.color} />
+            <Text style={[updateCardStyles.deliveryBadgeText, { color: deliveryStatus.color }]}>
+              {deliveryStatus.label}
+            </Text>
           </View>
         )}
-        {update.status === 'completed' && (
+        
+        {/* Status badge for completed updates - removed duplicate, deliveryStatus handles it */}
+        {update.status === 'completed' && !deliveryStatus && (
           <View style={updateCardStyles.doneBadge}>
             <Ionicons name="checkmark" size={12} color={WHITE} />
           </View>
@@ -539,24 +572,13 @@ const UpdateCard = ({ update, onPress, onStatusChange }) => {
         </View>
       )}
 
-      {update.delivery_status === 'submitted' && onStatusChange && (
-        <View style={updateCardStyles.actionRow}>
-          <TouchableOpacity
-            style={[updateCardStyles.actionBtn, updateCardStyles.approveBtn]}
-            onPress={() => onStatusChange(update._id, 'approved')}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="checkmark" size={14} color={WHITE} />
-            <Text style={updateCardStyles.actionBtnText}>Approve</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[updateCardStyles.actionBtn, updateCardStyles.rejectBtn]}
-            onPress={() => onStatusChange(update._id, 'revision_requested')}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="refresh" size={14} color={BLUE_DARK} />
-            <Text style={[updateCardStyles.actionBtnText, { color: BLUE_DARK }]}>Revise</Text>
-          </TouchableOpacity>
+      {/* Show client comment if available */}
+      {has(update.client_comment) && (
+        <View style={updateCardStyles.clientCommentSection}>
+          <Ionicons name="chatbubble-outline" size={12} color={GOLD_DARK} />
+          <Text style={updateCardStyles.clientCommentText} numberOfLines={2}>
+            Client: {update.client_comment}
+          </Text>
         </View>
       )}
     </TouchableOpacity>
@@ -580,13 +602,12 @@ const updateCardStyles = StyleSheet.create({
   typeContent: { flex: 1, minWidth: 0 },
   typeLabel: { fontSize: 12, fontWeight: '700', color: TEXT_MAIN },
   updateTime: { fontSize: 10, color: TEXT_FAINT, marginTop: 1 },
-  pendingBadge: {
-    backgroundColor: GOLD_LIGHT,
-    borderWidth: 1,
-    borderColor: GOLD_LINE,
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, flexShrink: 0,
+  deliveryBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+    borderWidth: 1, flexShrink: 0,
   },
-  pendingText: { fontSize: 9, fontWeight: '700', color: GOLD_DARK },
+  deliveryBadgeText: { fontSize: 9, fontWeight: '700' },
   doneBadge: {
     width: 20, height: 20, borderRadius: 10,
     backgroundColor: GOLD, alignItems: 'center', justifyContent: 'center',
@@ -612,17 +633,14 @@ const updateCardStyles = StyleSheet.create({
   progressBar: { flex: 1, height: 4, backgroundColor: BORDER, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: BLUE, borderRadius: 2 },
   progressValue: { fontSize: 11, fontWeight: '700', color: TEXT_MAIN, minWidth: 32, textAlign: 'right' },
-  actionRow: {
-    flexDirection: 'row', gap: 8, marginTop: 10, paddingTop: 10,
+  clientCommentSection: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    marginTop: 8, paddingTop: 8,
     borderTopWidth: 1, borderTopColor: BORDER_SOFT,
   },
-  actionBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, paddingVertical: 9, borderRadius: 8,
+  clientCommentText: {
+    flex: 1, fontSize: 11.5, color: TEXT_MUTED, fontStyle: 'italic',
   },
-  approveBtn: { backgroundColor: BLUE },
-  rejectBtn: { backgroundColor: BLUE_LIGHT, borderWidth: 1, borderColor: BLUE_LINE },
-  actionBtnText: { fontSize: 12, fontWeight: '700', color: WHITE },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -938,7 +956,7 @@ const modalStyles = StyleSheet.create({
 // Contract Detail Modal
 // ─────────────────────────────────────────────────────────
 const ContractDetailModal = ({
-  contract, visible, onClose, updates, onUpdateProgress, onStatusChange, onUpdatePress, isLoading,
+  contract, visible, onClose, updates, onUpdateProgress, onUpdatePress, isLoading,
 }) => {
   if (!contract) return null;
 
@@ -1066,7 +1084,6 @@ const ContractDetailModal = ({
                     key={update._id}
                     update={update}
                     onPress={() => onUpdatePress(update)}
-                    onStatusChange={!isCompleted && contract.status === 'active' ? onStatusChange : null}
                   />
                 ))
               )}
@@ -1228,7 +1245,7 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
   const deliveryUpdateSuccess = useSelector(selectDeliveryUpdateSuccess) || false;
 
   const [refreshing, setRefreshing] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active'); // Default to 'active'
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedContractForUpdate, setSelectedContractForUpdate] = useState(null);
@@ -1378,40 +1395,6 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
     }
   };
 
-  const handleDeliveryStatusChange = async (updateId, status) => {
-    Alert.alert(
-      status === 'approved' ? 'Approve Update' : 'Request Changes',
-      status === 'approved' ? 'Approve this update and mark it as complete?' : 'Request changes to this update?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: status === 'approved' ? 'Approve' : 'Request Changes',
-          style: status === 'approved' ? 'default' : 'destructive',
-          onPress: async () => {
-            try {
-              await dispatch(updateDeliveryStatus({
-                updateId,
-                delivery_status: status === 'approved' ? 'approved' : 'revision_requested',
-              })).unwrap();
-
-              if (status === 'approved') {
-                await dispatch(updateProjectUpdateStatus({ 
-                  updateId, 
-                  status: 'completed' 
-                })).unwrap();
-              }
-
-              Alert.alert('Success', status === 'approved' ? 'Update approved!' : 'Changes requested.');
-              await fetchData();
-            } catch (error) {
-              Alert.alert('Error', error.message || 'Failed to update status');
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleTabBarPress = (key) => {
     const returnState = { activeTab: 'MyJobs' };
     if (key === 'FreelancerDashboard') {
@@ -1459,8 +1442,8 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
     return () => backHandler.remove();
   }, [showProgressModal, showDetailModal]);
 
+  // Status tabs - only Active and Completed
   const statusTabs = [
-    { key: 'all', label: 'All', count: stats.total },
     { key: 'active', label: 'Active', count: stats.active },
     { key: 'completed', label: 'Completed', count: stats.completed },
   ];
@@ -1523,6 +1506,7 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
           avgProgress={stats.avgProgress}
         />
 
+        {/* Filter Tabs - Only Active and Completed */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabs}>
           {statusTabs.map(tab => (
             <TouchableOpacity
@@ -1556,12 +1540,12 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
                 <Ionicons name="briefcase-outline" size={32} color={TEXT_FAINT} />
               </View>
               <Text style={styles.emptyTitle}>
-                {statusFilter === 'all' ? 'No contracts yet' : `No ${statusFilter} contracts`}
+                {statusFilter === 'active' ? 'No active contracts' : 'No completed contracts'}
               </Text>
               <Text style={styles.emptyDesc}>
-                {statusFilter === 'all'
-                  ? "Contracts will appear here once you've been hired for a job."
-                  : 'Try selecting a different filter.'}
+                {statusFilter === 'active'
+                  ? "Active contracts will appear here once you've been hired for a job."
+                  : 'Completed contracts will appear here once you finish a job.'}
               </Text>
             </View>
           ) : (
@@ -1594,7 +1578,6 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
         onClose={() => { setShowDetailModal(false); setSelectedContractForDetail(null); }}
         updates={updates || []}
         onUpdateProgress={handleUpdateProgress}
-        onStatusChange={handleDeliveryStatusChange}
         onUpdatePress={(update) => {
           Alert.alert(
             update.title || 'Update Details',
