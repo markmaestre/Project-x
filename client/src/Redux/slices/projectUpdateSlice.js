@@ -13,6 +13,11 @@ const createUpdateFormData = (updateData) => {
         for (let i = 0; i < updateData[key].length; i++) {
           formData.append('attachments', updateData[key][i]);
         }
+      } else if (key === 'attachments' && Array.isArray(updateData[key])) {
+        // Handle array of files
+        updateData[key].forEach(file => {
+          formData.append('attachments', file);
+        });
       } else if (typeof updateData[key] === 'object' && !(updateData[key] instanceof File) && !(updateData[key] instanceof Date)) {
         formData.append(key, JSON.stringify(updateData[key]));
       } else if (updateData[key] instanceof Date) {
@@ -81,6 +86,54 @@ export const createProjectUpdate = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.error('Create project update error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Create project update with file attachments (multipart/form-data)
+export const createProjectUpdateWithFiles = createAsyncThunk(
+  'projectUpdates/createProjectUpdateWithFiles',
+  async ({ updateData, files }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const formData = new FormData();
+      
+      // Add all fields to formData
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] !== null && updateData[key] !== undefined && updateData[key] !== '') {
+          if (typeof updateData[key] === 'object' && !(updateData[key] instanceof Date)) {
+            formData.append(key, JSON.stringify(updateData[key]));
+          } else if (updateData[key] instanceof Date) {
+            formData.append(key, updateData[key].toISOString());
+          } else {
+            formData.append(key, String(updateData[key]));
+          }
+        }
+      });
+
+      // Add files
+      if (files && files.length > 0) {
+        files.forEach(file => {
+          formData.append('attachments', file);
+        });
+      }
+
+      const response = await api.post('/project-updates', formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 30000,
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Create project update with files error:', error.response?.data);
       return rejectWithValue(error.response?.data || { message: error.message });
     }
   }
@@ -238,22 +291,22 @@ export const updateProjectUpdate = createAsyncThunk(
 // Update project update status
 export const updateProjectUpdateStatus = createAsyncThunk(
   'projectUpdates/updateProjectUpdateStatus',
-  async ({ updateId, status }, { getState, rejectWithValue }) => {
+  async ({ updateId, status, comment }, { getState, rejectWithValue }) => {
     try {
       const token = getState().auth.token;
       if (!token) {
         return rejectWithValue({ message: 'No token found' });
       }
 
-      const response = await api.patch(`/project-updates/${updateId}/status`, 
-        { status },
-        {
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+      const payload = { status };
+      if (comment) payload.comment = comment;
+
+      const response = await api.patch(`/project-updates/${updateId}/status`, payload, {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-      );
+      });
       
       return response.data;
     } catch (error) {
@@ -266,26 +319,55 @@ export const updateProjectUpdateStatus = createAsyncThunk(
 // Update delivery status
 export const updateDeliveryStatus = createAsyncThunk(
   'projectUpdates/updateDeliveryStatus',
-  async ({ updateId, delivery_status }, { getState, rejectWithValue }) => {
+  async ({ updateId, delivery_status, comment }, { getState, rejectWithValue }) => {
     try {
       const token = getState().auth.token;
       if (!token) {
         return rejectWithValue({ message: 'No token found' });
       }
 
-      const response = await api.patch(`/project-updates/${updateId}/delivery`, 
-        { delivery_status },
-        {
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+      const payload = { delivery_status };
+      if (comment) payload.comment = comment;
+
+      const response = await api.patch(`/project-updates/${updateId}/delivery`, payload, {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-      );
+      });
       
       return response.data;
     } catch (error) {
       console.error('Update delivery status error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Upload attachment to project update
+export const uploadUpdateAttachment = createAsyncThunk(
+  'projectUpdates/uploadUpdateAttachment',
+  async ({ updateId, file }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await api.post(`/project-updates/${updateId}/attachments`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 30000,
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Upload attachment error:', error.response?.data);
       return rejectWithValue(error.response?.data || { message: error.message });
     }
   }
@@ -313,6 +395,34 @@ export const deleteUpdateAttachment = createAsyncThunk(
   }
 );
 
+// Add comment to project update
+export const addUpdateComment = createAsyncThunk(
+  'projectUpdates/addUpdateComment',
+  async ({ updateId, comment }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const response = await api.post(`/project-updates/${updateId}/comments`, 
+        { comment },
+        {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('Add comment error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
 // Get project update statistics
 export const getProjectUpdateStats = createAsyncThunk(
   'projectUpdates/getProjectUpdateStats',
@@ -330,6 +440,32 @@ export const getProjectUpdateStats = createAsyncThunk(
       return { contractId, ...response.data };
     } catch (error) {
       console.error('Get project update stats error:', error.response?.data);
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
+// Get contract activity log
+export const getContractActivityLog = createAsyncThunk(
+  'projectUpdates/getContractActivityLog',
+  async ({ contractId, limit = 20, skip = 0, type }, { getState, rejectWithValue }) => {
+    try {
+      const token = getState().auth.token;
+      if (!token) {
+        return rejectWithValue({ message: 'No token found' });
+      }
+
+      const params = { limit, skip };
+      if (type) params.type = type;
+
+      const response = await api.get(`/contracts/${contractId}/activity`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params
+      });
+      
+      return { contractId, ...response.data };
+    } catch (error) {
+      console.error('Get contract activity log error:', error.response?.data);
       return rejectWithValue(error.response?.data || { message: error.message });
     }
   }
@@ -362,10 +498,22 @@ const initialState = {
     isLoading: false,
     error: null,
   },
+  activityLog: {
+    items: [],
+    total: 0,
+    limit: 20,
+    skip: 0,
+    hasMore: false,
+    types: [],
+    isLoading: false,
+    error: null,
+  },
   createSuccess: false,
   updateSuccess: false,
   statusUpdateSuccess: false,
   deliveryUpdateSuccess: false,
+  commentAdded: false,
+  attachmentUploaded: false,
 };
 
 // ==================== SLICE ====================
@@ -377,12 +525,15 @@ const projectUpdateSlice = createSlice({
     clearUpdateError: (state) => {
       state.updates.error = null;
       state.stats.error = null;
+      state.activityLog.error = null;
     },
     clearUpdateSuccess: (state) => {
       state.createSuccess = false;
       state.updateSuccess = false;
       state.statusUpdateSuccess = false;
       state.deliveryUpdateSuccess = false;
+      state.commentAdded = false;
+      state.attachmentUploaded = false;
     },
     setSelectedUpdate: (state, action) => {
       state.updates.selectedUpdate = action.payload;
@@ -409,6 +560,12 @@ const projectUpdateSlice = createSlice({
       state.stats.pending = 0;
       state.stats.typeBreakdown = {};
       state.stats.contractProgress = 0;
+    },
+    clearActivityLog: (state) => {
+      state.activityLog.items = [];
+      state.activityLog.total = 0;
+      state.activityLog.hasMore = false;
+      state.activityLog.types = [];
     },
     updateUpdateLocally: (state, action) => {
       const { updateId, updates } = action.payload;
@@ -451,6 +608,30 @@ const projectUpdateSlice = createSlice({
           state.updates.selectedUpdate.attachments.filter(a => a._id !== attachmentId);
       }
     },
+    addAttachmentLocally: (state, action) => {
+      const { updateId, attachment } = action.payload;
+      
+      const addToList = (list) => {
+        const update = list.find(u => u._id === updateId);
+        if (update) {
+          if (!update.attachments) update.attachments = [];
+          update.attachments.push(attachment);
+        }
+      };
+      
+      addToList(state.updates.list);
+      addToList(state.updates.contractUpdates);
+      addToList(state.updates.jobUpdates);
+      addToList(state.updates.freelancerUpdates);
+      addToList(state.updates.clientUpdates);
+      
+      if (state.updates.selectedUpdate?._id === updateId) {
+        if (!state.updates.selectedUpdate.attachments) {
+          state.updates.selectedUpdate.attachments = [];
+        }
+        state.updates.selectedUpdate.attachments.push(attachment);
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -476,6 +657,28 @@ const projectUpdateSlice = createSlice({
         state.createSuccess = false;
       })
       
+      // ==================== CREATE WITH FILES ====================
+      .addCase(createProjectUpdateWithFiles.pending, (state) => {
+        state.updates.isLoading = true;
+        state.updates.error = null;
+        state.createSuccess = false;
+      })
+      .addCase(createProjectUpdateWithFiles.fulfilled, (state, action) => {
+        state.updates.isLoading = false;
+        state.createSuccess = true;
+        const update = action.payload.projectUpdate || action.payload;
+        if (update) {
+          state.updates.list.unshift(update);
+          state.updates.contractUpdates.unshift(update);
+          state.updates.totalCount += 1;
+        }
+      })
+      .addCase(createProjectUpdateWithFiles.rejected, (state, action) => {
+        state.updates.isLoading = false;
+        state.updates.error = action.payload;
+        state.createSuccess = false;
+      })
+      
       // ==================== GET CONTRACT UPDATES ====================
       .addCase(getContractUpdates.pending, (state) => {
         state.updates.isLoading = true;
@@ -487,6 +690,11 @@ const projectUpdateSlice = createSlice({
         state.updates.totalCount = action.payload.totalUpdates || action.payload.total || 0;
         state.updates.totalPages = action.payload.totalPages || 1;
         state.updates.currentPage = action.payload.currentPage || 1;
+        // Also store recent activity if available
+        if (action.payload.recentActivity) {
+          state.activityLog.items = action.payload.recentActivity;
+          state.activityLog.total = action.payload.recentActivity.length;
+        }
       })
       .addCase(getContractUpdates.rejected, (state, action) => {
         state.updates.isLoading = false;
@@ -606,6 +814,8 @@ const projectUpdateSlice = createSlice({
           if (item) {
             item.status = update.status;
             item.completed_at = update.completed_at;
+            if (update.freelancer_comment) item.freelancer_comment = update.freelancer_comment;
+            if (update.client_comment) item.client_comment = update.client_comment;
           }
         };
         
@@ -640,6 +850,8 @@ const projectUpdateSlice = createSlice({
             item.status = update.status;
             item.completed_at = update.completed_at;
             item.progress = update.progress;
+            if (update.freelancer_comment) item.freelancer_comment = update.freelancer_comment;
+            if (update.client_comment) item.client_comment = update.client_comment;
           }
         };
         
@@ -653,6 +865,40 @@ const projectUpdateSlice = createSlice({
         state.updates.isLoading = false;
         state.updates.error = action.payload;
         state.deliveryUpdateSuccess = false;
+      })
+      
+      // ==================== UPLOAD ATTACHMENT ====================
+      .addCase(uploadUpdateAttachment.pending, (state) => {
+        state.updates.isLoading = true;
+        state.updates.error = null;
+        state.attachmentUploaded = false;
+      })
+      .addCase(uploadUpdateAttachment.fulfilled, (state, action) => {
+        state.updates.isLoading = false;
+        state.attachmentUploaded = true;
+        const { attachment, projectUpdate } = action.payload;
+        if (projectUpdate) {
+          // Update the entire project update
+          const updateList = (list) => {
+            const index = list.findIndex(u => u._id === projectUpdate._id);
+            if (index !== -1) {
+              list[index] = projectUpdate;
+            }
+          };
+          updateList(state.updates.list);
+          updateList(state.updates.contractUpdates);
+          updateList(state.updates.jobUpdates);
+          updateList(state.updates.freelancerUpdates);
+          updateList(state.updates.clientUpdates);
+          if (state.updates.selectedUpdate?._id === projectUpdate._id) {
+            state.updates.selectedUpdate = projectUpdate;
+          }
+        }
+      })
+      .addCase(uploadUpdateAttachment.rejected, (state, action) => {
+        state.updates.isLoading = false;
+        state.updates.error = action.payload;
+        state.attachmentUploaded = false;
       })
       
       // ==================== DELETE UPDATE ATTACHMENT ====================
@@ -687,6 +933,39 @@ const projectUpdateSlice = createSlice({
         state.updates.error = action.payload;
       })
       
+      // ==================== ADD COMMENT ====================
+      .addCase(addUpdateComment.pending, (state) => {
+        state.updates.isLoading = true;
+        state.updates.error = null;
+        state.commentAdded = false;
+      })
+      .addCase(addUpdateComment.fulfilled, (state, action) => {
+        state.updates.isLoading = false;
+        state.commentAdded = true;
+        const update = action.payload.projectUpdate || action.payload;
+        state.updates.selectedUpdate = update;
+        
+        const updateList = (list) => {
+          const item = list.find(u => u._id === update._id);
+          if (item) {
+            if (update.freelancer_comment) item.freelancer_comment = update.freelancer_comment;
+            if (update.client_comment) item.client_comment = update.client_comment;
+            item.last_updated_by = update.last_updated_by;
+          }
+        };
+        
+        updateList(state.updates.list);
+        updateList(state.updates.contractUpdates);
+        updateList(state.updates.jobUpdates);
+        updateList(state.updates.freelancerUpdates);
+        updateList(state.updates.clientUpdates);
+      })
+      .addCase(addUpdateComment.rejected, (state, action) => {
+        state.updates.isLoading = false;
+        state.updates.error = action.payload;
+        state.commentAdded = false;
+      })
+      
       // ==================== GET PROJECT UPDATE STATS ====================
       .addCase(getProjectUpdateStats.pending, (state) => {
         state.stats.isLoading = true;
@@ -701,10 +980,33 @@ const projectUpdateSlice = createSlice({
         state.stats.pending = action.payload.pending || 0;
         state.stats.typeBreakdown = action.payload.typeBreakdown || {};
         state.stats.contractProgress = action.payload.contractProgress || 0;
+        // Store recent activity if available
+        if (action.payload.recentActivity) {
+          state.activityLog.items = action.payload.recentActivity;
+        }
       })
       .addCase(getProjectUpdateStats.rejected, (state, action) => {
         state.stats.isLoading = false;
         state.stats.error = action.payload;
+      })
+      
+      // ==================== GET CONTRACT ACTIVITY LOG ====================
+      .addCase(getContractActivityLog.pending, (state) => {
+        state.activityLog.isLoading = true;
+        state.activityLog.error = null;
+      })
+      .addCase(getContractActivityLog.fulfilled, (state, action) => {
+        state.activityLog.isLoading = false;
+        state.activityLog.items = action.payload.activity || [];
+        state.activityLog.total = action.payload.total || 0;
+        state.activityLog.limit = action.payload.limit || 20;
+        state.activityLog.skip = action.payload.skip || 0;
+        state.activityLog.hasMore = action.payload.hasMore || false;
+        state.activityLog.types = action.payload.types || [];
+      })
+      .addCase(getContractActivityLog.rejected, (state, action) => {
+        state.activityLog.isLoading = false;
+        state.activityLog.error = action.payload;
       });
   },
 });
@@ -718,8 +1020,10 @@ export const {
   clearSelectedUpdate,
   clearUpdates,
   clearStats,
+  clearActivityLog,
   updateUpdateLocally,
   removeAttachmentLocally,
+  addAttachmentLocally,
 } = projectUpdateSlice.actions;
 
 // ==================== SELECTORS ====================
@@ -740,6 +1044,9 @@ export const selectCreateUpdateSuccess = (state) => state.projectUpdates.createS
 export const selectUpdateUpdateSuccess = (state) => state.projectUpdates.updateSuccess;
 export const selectStatusUpdateSuccess = (state) => state.projectUpdates.statusUpdateSuccess;
 export const selectDeliveryUpdateSuccess = (state) => state.projectUpdates.deliveryUpdateSuccess;
+export const selectCommentAdded = (state) => state.projectUpdates.commentAdded;
+export const selectAttachmentUploaded = (state) => state.projectUpdates.attachmentUploaded;
+export const selectActivityLog = (state) => state.projectUpdates.activityLog;
 
 // Memoized selectors
 export const selectUpdateById = (state, updateId) => {
@@ -762,6 +1069,14 @@ export const selectPendingDeliveries = (state) => {
   return state.projectUpdates.updates.list.filter(
     u => u.delivery_status === 'submitted' && u.status !== 'completed'
   );
+};
+
+export const selectActivityLogByType = (state, type) => {
+  return state.projectUpdates.activityLog.items.filter(log => log.type === type);
+};
+
+export const selectRecentActivity = (state, limit = 10) => {
+  return state.projectUpdates.activityLog.items.slice(0, limit);
 };
 
 export default projectUpdateSlice.reducer;

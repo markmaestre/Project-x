@@ -1,8 +1,10 @@
+// src/services/applicationService.js
 import Application from '../models/Application.js';
 import Job from '../models/Job.js';
 import Freelancer from '../models/Freelancer.js';
 import NotificationService from './notificationService.js';
 import ContractService from './contractService.js';
+import { sendEmail, getEmailTemplate } from './emailService.js';
 
 class ApplicationService {
   
@@ -56,7 +58,61 @@ class ApplicationService {
       $inc: { 'analytics.applications': 1 }
     });
     
-    // Notify client
+    // --- EMAIL NOTIFICATIONS ---
+    
+    // 1. Notify Client via Email
+    try {
+      const clientEmailData = {
+        job_title: job.title,
+        job_id: job._id,
+        freelancer_name: `${freelancer.first_name} ${freelancer.last_name}`,
+        freelancer_email: freelancer.email_address,
+        freelancer_profile: freelancer.profile_picture,
+        cover_letter: cover_letter,
+        proposed_rate: proposed_rate,
+        applied_at: new Date(),
+        application_id: application._id,
+        client_name: job.client_id.first_name || 'Client',
+      };
+      
+      const clientEmailHtml = getEmailTemplate('application-received-client', clientEmailData);
+      await sendEmail(
+        job.client_id.email_address,
+        `📝 New Application for "${job.title}" - Taskra`,
+        clientEmailHtml
+      );
+      console.log(`✅ Application notification email sent to client: ${job.client_id.email_address}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send client application notification email:', emailError.message);
+    }
+    
+    // 2. Notify Freelancer via Email (Confirmation)
+    try {
+      const freelancerEmailData = {
+        job_title: job.title,
+        job_id: job._id,
+        job_category: job.category,
+        job_type: job.job_type,
+        budget: job.budget,
+        cover_letter: cover_letter,
+        proposed_rate: proposed_rate,
+        applied_at: new Date(),
+        application_id: application._id,
+        freelancer_name: `${freelancer.first_name} ${freelancer.last_name}`,
+      };
+      
+      const freelancerEmailHtml = getEmailTemplate('application-confirmation-freelancer', freelancerEmailData);
+      await sendEmail(
+        freelancer.email_address,
+        `✅ Application Submitted for "${job.title}" - Taskra`,
+        freelancerEmailHtml
+      );
+      console.log(`✅ Application confirmation email sent to freelancer: ${freelancer.email_address}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send freelancer application confirmation email:', emailError.message);
+    }
+    
+    // 3. In-app notification for client
     await NotificationService.createNotification({
       recipient_id: job.client_id._id,
       recipient_model: 'Client',
@@ -109,14 +165,101 @@ class ApplicationService {
     
     await application.save();
     
-    // Notify freelancer
+    // --- EMAIL NOTIFICATIONS ---
+    
+    const statusDisplay = status.charAt(0).toUpperCase() + status.slice(1);
+    const jobTitle = application.job_id.title;
+    const freelancerEmail = application.freelancer_id.email_address;
+    const freelancerName = `${application.freelancer_id.first_name} ${application.freelancer_id.last_name}`;
+    const clientName = application.job_id.client_id.first_name || 'Client';
+    
+    // Send status update email to freelancer
+    try {
+      const emailData = {
+        status: status,
+        status_display: statusDisplay,
+        job_title: jobTitle,
+        job_id: application.job_id._id,
+        application_id: application._id,
+        freelancer_name: freelancerName,
+        client_name: clientName,
+        notes: notes || '',
+        updated_at: new Date(),
+      };
+      
+      const emailHtml = getEmailTemplate('application-status-update', emailData);
+      await sendEmail(
+        freelancerEmail,
+        `📋 Application ${statusDisplay} for "${jobTitle}" - Taskra`,
+        emailHtml
+      );
+      console.log(`✅ Status update email sent to freelancer: ${freelancerEmail}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send status update email:', emailError.message);
+    }
+    
+    // If offered, send special offer email
+    if (status === 'offered' && application.offer) {
+      try {
+        const offerEmailData = {
+          job_title: jobTitle,
+          job_id: application.job_id._id,
+          application_id: application._id,
+          freelancer_name: freelancerName,
+          client_name: clientName,
+          offer_amount: application.offer.amount,
+          offer_message: application.offer.message || '',
+          offer_sent_at: application.offer.sent_at || new Date(),
+          job_type: application.job_id.job_type,
+          work_setup: application.job_id.work_setup,
+        };
+        
+        const offerEmailHtml = getEmailTemplate('offer-received', offerEmailData);
+        await sendEmail(
+          freelancerEmail,
+          `🎉 You've Received a Job Offer for "${jobTitle}" - Taskra`,
+          offerEmailHtml
+        );
+        console.log(`✅ Offer email sent to freelancer: ${freelancerEmail}`);
+      } catch (emailError) {
+        console.error('❌ Failed to send offer email:', emailError.message);
+      }
+    }
+    
+    // If hired, send hired email
+    if (status === 'hired') {
+      try {
+        const hiredEmailData = {
+          job_title: jobTitle,
+          job_id: application.job_id._id,
+          application_id: application._id,
+          freelancer_name: freelancerName,
+          client_name: clientName,
+          hired_at: new Date(),
+          job_type: application.job_id.job_type,
+          work_setup: application.job_id.work_setup,
+        };
+        
+        const hiredEmailHtml = getEmailTemplate('hired-confirmation', hiredEmailData);
+        await sendEmail(
+          freelancerEmail,
+          `🎊 You've Been Hired for "${jobTitle}" - Taskra`,
+          hiredEmailHtml
+        );
+        console.log(`✅ Hired email sent to freelancer: ${freelancerEmail}`);
+      } catch (emailError) {
+        console.error('❌ Failed to send hired email:', emailError.message);
+      }
+    }
+    
+    // In-app notification for freelancer
     await NotificationService.createNotification({
       recipient_id: application.freelancer_id._id,
       recipient_model: 'Freelancer',
       sender_id: client_id,
       sender_model: 'Client',
       type: 'application_status_updated',
-      title: `Application ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      title: `Application ${statusDisplay}`,
       message: `Your application for "${application.job_id.title}" has been ${status}`,
       reference_id: application._id,
       reference_model: 'Application',
@@ -129,29 +272,6 @@ class ApplicationService {
         },
       ],
     });
-    
-    // If offered, create offer notification
-    if (status === 'offered' && application.offer) {
-      await NotificationService.createNotification({
-        recipient_id: application.freelancer_id._id,
-        recipient_model: 'Freelancer',
-        sender_id: client_id,
-        sender_model: 'Client',
-        type: 'offer_received',
-        title: 'You received a job offer!',
-        message: `Client offered $${application.offer.amount} for "${application.job_id.title}"`,
-        reference_id: application._id,
-        reference_model: 'Application',
-        priority: 'urgent',
-        actions: [
-          {
-            label: 'View Offer',
-            action_type: 'view_offer',
-            data: { application_id: application._id },
-          },
-        ],
-      });
-    }
     
     return application;
   }
@@ -183,7 +303,34 @@ class ApplicationService {
     
     await application.save();
     
-    // Notify freelancer
+    // --- EMAIL NOTIFICATION ---
+    try {
+      const offerEmailData = {
+        job_title: application.job_id.title,
+        job_id: application.job_id._id,
+        application_id: application._id,
+        freelancer_name: `${application.freelancer_id.first_name} ${application.freelancer_id.last_name}`,
+        client_name: application.job_id.client_id.first_name || 'Client',
+        offer_amount: amount,
+        offer_message: message || 'We would like to offer you this position.',
+        offer_sent_at: new Date(),
+        job_type: application.job_id.job_type,
+        work_setup: application.job_id.work_setup,
+        budget: application.job_id.budget,
+      };
+      
+      const offerEmailHtml = getEmailTemplate('offer-received', offerEmailData);
+      await sendEmail(
+        application.freelancer_id.email_address,
+        `🎉 New Job Offer for "${application.job_id.title}" - Taskra`,
+        offerEmailHtml
+      );
+      console.log(`✅ Offer email sent to freelancer: ${application.freelancer_id.email_address}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send offer email:', emailError.message);
+    }
+    
+    // In-app notification
     await NotificationService.createNotification({
       recipient_id: application.freelancer_id._id,
       recipient_model: 'Freelancer',
@@ -254,7 +401,57 @@ class ApplicationService {
       },
     });
     
-    // Notify client
+    // --- EMAIL NOTIFICATIONS ---
+    
+    // 1. Notify Client
+    try {
+      const clientEmailData = {
+        job_title: application.job_id.title,
+        job_id: application.job_id._id,
+        freelancer_name: `${application.freelancer_id.first_name} ${application.freelancer_id.last_name}`,
+        freelancer_email: application.freelancer_id.email_address,
+        client_name: application.job_id.client_id.first_name || 'Client',
+        offer_amount: application.offer.amount,
+        accepted_at: new Date(),
+        contract_id: contract._id,
+      };
+      
+      const clientEmailHtml = getEmailTemplate('offer-accepted-client', clientEmailData);
+      await sendEmail(
+        application.job_id.client_id.email_address,
+        `✅ Freelancer Accepted Your Offer for "${application.job_id.title}" - Taskra`,
+        clientEmailHtml
+      );
+      console.log(`✅ Offer accepted email sent to client: ${application.job_id.client_id.email_address}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send offer accepted email to client:', emailError.message);
+    }
+    
+    // 2. Notify Freelancer (Confirmation)
+    try {
+      const freelancerEmailData = {
+        job_title: application.job_id.title,
+        job_id: application.job_id._id,
+        freelancer_name: `${application.freelancer_id.first_name} ${application.freelancer_id.last_name}`,
+        client_name: application.job_id.client_id.first_name || 'Client',
+        offer_amount: application.offer.amount,
+        accepted_at: new Date(),
+        contract_id: contract._id,
+        start_date: contract.start_date || new Date(),
+      };
+      
+      const freelancerEmailHtml = getEmailTemplate('offer-accepted-freelancer', freelancerEmailData);
+      await sendEmail(
+        application.freelancer_id.email_address,
+        `✅ You Accepted the Offer for "${application.job_id.title}" - Taskra`,
+        freelancerEmailHtml
+      );
+      console.log(`✅ Offer accepted confirmation email sent to freelancer: ${application.freelancer_id.email_address}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send offer accepted confirmation to freelancer:', emailError.message);
+    }
+    
+    // In-app notification for client
     await NotificationService.createNotification({
       recipient_id: application.job_id.client_id,
       recipient_model: 'Client',

@@ -16,16 +16,19 @@ import {
   Platform,
   Image,
   BackHandler,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import {
   getFreelancerContracts,
   getContractById,
   updateContractProgress,
   updateContractStatus,
-  getContractStats,
+  getFreelancerContractAnalytics,
   selectFreelancerContracts,
   selectContractsLoading,
   selectSelectedContract,
@@ -35,6 +38,7 @@ import {
 import {
   getContractUpdates,
   createProjectUpdate,
+  createProjectUpdateWithFiles,
   updateDeliveryStatus,
   updateProjectUpdateStatus,
   selectContractUpdates,
@@ -47,35 +51,34 @@ import {
 
 // ─────────────────────────────────────────────────────────
 // DESIGN SYSTEM — Blue / Gold / White only
-// A restrained, workflow / ops-console palette. All emphasis,
-// hierarchy and status differentiation is carried by value
-// (light/dark), weight, and structure — not extra hues.
 // ─────────────────────────────────────────────────────────
-const NAVY        = '#0A2247';   // primary surface (header, tab bar accents)
-const NAVY_DEEP   = '#061733';   // darkest — pressed / high emphasis
-const BLUE        = '#1B5FC4';   // primary action blue
-const BLUE_DARK   = '#123C82';   // hover/active blue
-const BLUE_LIGHT  = '#E8F0FC';   // light blue tint (backgrounds/chips)
-const BLUE_LINE   = '#CBDCF4';   // blue-tinted border/divider
-const GOLD        = '#B8862B';   // primary gold accent
-const GOLD_DARK   = '#8C6414';   // deep gold (text-on-light)
-const GOLD_LIGHT  = '#FBF1DC';   // light gold tint (backgrounds/chips)
-const GOLD_LINE   = '#EAD6A6';   // gold-tinted border
+const NAVY        = '#0A2247';
+const NAVY_DEEP   = '#061733';
+const BLUE        = '#1B5FC4';
+const BLUE_DARK   = '#123C82';
+const BLUE_LIGHT  = '#E8F0FC';
+const BLUE_LINE   = '#CBDCF4';
+const GOLD        = '#B8862B';
+const GOLD_DARK   = '#8C6414';
+const GOLD_LIGHT  = '#FBF1DC';
+const GOLD_LINE   = '#EAD6A6';
 const WHITE       = '#FFFFFF';
-const OFFWHITE    = '#F5F7FB';   // app background, faint blue-white
+const OFFWHITE    = '#F5F7FB';
 const CARD        = '#FFFFFF';
-const TEXT_MAIN   = '#0A2247';   // navy — primary text
-const TEXT_MUTED  = '#5E718F';   // blue-grey — secondary text
-const TEXT_FAINT  = '#96A6C0';   // blue-grey — tertiary/placeholder
-const BORDER      = '#E1E7F2';   // neutral blue-white border
+const TEXT_MAIN   = '#0A2247';
+const TEXT_MUTED  = '#5E718F';
+const TEXT_FAINT  = '#96A6C0';
+const BORDER      = '#E1E7F2';
 const BORDER_SOFT = '#EDF1F8';
+const SUCCESS     = '#157F3C';
+const DANGER      = '#C1272D';
 
-// Status treatment — differentiated by tone/weight within the blue+gold family
 const CONTRACT_STATUS = {
   active: { bg: BLUE_LIGHT, border: BLUE_LINE, text: BLUE_DARK, dot: BLUE, label: 'Active', icon: 'flash' },
   paused: { bg: OFFWHITE, border: BORDER, text: TEXT_MUTED, dot: TEXT_FAINT, label: 'Paused', icon: 'pause' },
   completed: { bg: GOLD_LIGHT, border: GOLD_LINE, text: GOLD_DARK, dot: GOLD, label: 'Completed', icon: 'checkmark-done' },
   cancelled: { bg: OFFWHITE, border: BORDER, text: TEXT_FAINT, dot: TEXT_FAINT, label: 'Cancelled', icon: 'close' },
+  draft: { bg: OFFWHITE, border: BORDER, text: TEXT_FAINT, dot: TEXT_FAINT, label: 'Draft', icon: 'document' },
 };
 
 const UPDATE_TYPES = {
@@ -93,13 +96,6 @@ const getContractStatus = (status) =>
 const formatCurrency = (amount) => {
   if (!amount) return '₱0.00';
   return `₱${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-
-const formatCompactCurrency = (amount) => {
-  const value = Number(amount) || 0;
-  if (value >= 1000000) return `₱${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `₱${(value / 1000).toFixed(1)}K`;
-  return formatCurrency(value);
 };
 
 const formatDate = (date) => {
@@ -125,8 +121,16 @@ const refCode = (id) => {
   return s.slice(-6).toUpperCase();
 };
 
+const has = (value) => {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number') return !Number.isNaN(value);
+  if (Array.isArray(value)) return value.length > 0;
+  return Boolean(value);
+};
+
 // ─────────────────────────────────────────────────────────
-// Status Chip — dot + label, used across cards/detail
+// Status Chip
 // ─────────────────────────────────────────────────────────
 const StatusChip = ({ status, size = 'md' }) => {
   const s = getContractStatus(status);
@@ -172,7 +176,6 @@ const chipStyles = StyleSheet.create({
   },
 });
 
-// Meta Tag — small info tag used in card footers
 const Tag = ({ icon, label }) => (
   <View style={tagStyles.wrap}>
     <Ionicons name={icon} size={11} color={TEXT_MUTED} />
@@ -190,59 +193,7 @@ const tagStyles = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
-// Header summary badge (Total Earnings)
-// ─────────────────────────────────────────────────────────
-const EarningsBadge = ({ amount }) => (
-  <View style={summaryStyles.wrap}>
-    <View style={summaryStyles.iconCircle}>
-      <Ionicons name="wallet-outline" size={13} color={GOLD} />
-    </View>
-    <View style={summaryStyles.textWrap}>
-      <Text style={summaryStyles.label}>Total Earnings</Text>
-      <Text style={summaryStyles.value} numberOfLines={1}>{formatCompactCurrency(amount)}</Text>
-    </View>
-  </View>
-);
-
-const summaryStyles = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  iconCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
-    backgroundColor: 'rgba(184,134,43,0.20)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  textWrap: { minWidth: 0 },
-  label: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.55)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  value: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: WHITE,
-    marginTop: 1,
-  },
-});
-
-// ─────────────────────────────────────────────────────────
-// Overview strip — quick stats row under the header
+// Overview Strip (removed earnings)
 // ─────────────────────────────────────────────────────────
 const OverviewStrip = ({ total, active, completed, avgProgress }) => (
   <View style={overviewStyles.wrap}>
@@ -294,7 +245,7 @@ const overviewStyles = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
-// Contract Card — ticket-style, left accent bar carries status
+// Contract Card
 // ─────────────────────────────────────────────────────────
 const ContractCard = ({ contract, onPress, onUpdateProgress }) => {
   const status = getContractStatus(contract.status);
@@ -307,6 +258,10 @@ const ContractCard = ({ contract, onPress, onUpdateProgress }) => {
     'Client';
 
   const isCompleted = contract.status === 'completed';
+  const isDraft = contract.status === 'draft';
+
+  // Don't show draft contracts
+  if (isDraft) return null;
 
   return (
     <TouchableOpacity
@@ -522,7 +477,7 @@ const cardStyles = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
-// Update Card (activity log entry)
+// Update Card (using project update data)
 // ─────────────────────────────────────────────────────────
 const UpdateCard = ({ update, onPress, onStatusChange }) => {
   const updateType = UPDATE_TYPES[update.update_type] || UPDATE_TYPES.progress;
@@ -550,9 +505,29 @@ const UpdateCard = ({ update, onPress, onStatusChange }) => {
       </View>
 
       <Text style={updateCardStyles.title} numberOfLines={2}>{update.title}</Text>
-      {update.description ? (
+      {has(update.description) ? (
         <Text style={updateCardStyles.description} numberOfLines={2}>{update.description}</Text>
       ) : null}
+
+      {/* Show attachments if any */}
+      {has(update.attachments) && update.attachments.length > 0 && (
+        <View style={updateCardStyles.attachmentSection}>
+          <Text style={updateCardStyles.attachmentLabel}>Attachments:</Text>
+          <View style={updateCardStyles.attachmentList}>
+            {update.attachments.slice(0, 3).map((att, index) => (
+              <View key={att._id || index} style={updateCardStyles.attachmentItem}>
+                <Ionicons name="document-outline" size={12} color={BLUE} />
+                <Text style={updateCardStyles.attachmentName} numberOfLines={1}>
+                  {att.file_name || 'File'}
+                </Text>
+              </View>
+            ))}
+            {update.attachments.length > 3 && (
+              <Text style={updateCardStyles.attachmentMore}>+{update.attachments.length - 3} more</Text>
+            )}
+          </View>
+        </View>
+      )}
 
       {update.progress !== undefined && update.progress !== null && (
         <View style={updateCardStyles.progressSection}>
@@ -618,6 +593,16 @@ const updateCardStyles = StyleSheet.create({
   },
   title: { fontSize: 13.5, fontWeight: '700', color: TEXT_MAIN, marginBottom: 4, lineHeight: 18 },
   description: { fontSize: 12.5, color: TEXT_MUTED, lineHeight: 18, marginBottom: 6 },
+  attachmentSection: { marginTop: 6, marginBottom: 4 },
+  attachmentLabel: { fontSize: 10, color: TEXT_FAINT, fontWeight: '600', marginBottom: 4 },
+  attachmentList: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  attachmentItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: BLUE_LIGHT, paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 5, borderWidth: 1, borderColor: BLUE_LINE,
+  },
+  attachmentName: { fontSize: 10, color: BLUE_DARK, maxWidth: 100 },
+  attachmentMore: { fontSize: 10, color: TEXT_FAINT, alignSelf: 'center' },
   progressSection: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: OFFWHITE, paddingVertical: 8, paddingHorizontal: 10,
@@ -641,13 +626,14 @@ const updateCardStyles = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
-// Progress Update Modal
+// Progress Update Modal (with file attachments)
 // ─────────────────────────────────────────────────────────
 const ProgressUpdateModal = ({ visible, contract, onClose, onSubmit, isLoading }) => {
   const [progress, setProgress] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [updateType, setUpdateType] = useState('progress');
+  const [attachments, setAttachments] = useState([]);
 
   useEffect(() => {
     if (visible && contract) {
@@ -655,8 +641,56 @@ const ProgressUpdateModal = ({ visible, contract, onClose, onSubmit, isLoading }
       setTitle(`Progress Update - ${contract.job_id?.title || 'Contract'}`);
       setDescription('');
       setUpdateType('progress');
+      setAttachments([]);
     }
   }, [visible, contract]);
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+      
+      if (result.assets && result.assets.length > 0) {
+        const file = result.assets[0];
+        setAttachments(prev => [...prev, {
+          uri: file.uri,
+          name: file.name || 'document.pdf',
+          mimeType: file.mimeType || 'application/pdf',
+          size: file.size || 0,
+        }]);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setAttachments(prev => [...prev, {
+          uri: asset.uri,
+          name: asset.fileName || 'image.jpg',
+          mimeType: asset.type || 'image/jpeg',
+          size: asset.fileSize || 0,
+        }]);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const removeAttachment = (index) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = () => {
     const progressNum = parseInt(progress, 10);
@@ -673,7 +707,19 @@ const ProgressUpdateModal = ({ visible, contract, onClose, onSubmit, isLoading }
       title: title.trim(),
       description: description.trim(),
       updateType: updateType,
+      attachments: attachments,
     });
+  };
+
+  const getFileIcon = (filename) => {
+    if (!filename) return 'document-outline';
+    const ext = filename.split('.').pop()?.toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(ext)) return 'image-outline';
+    if (['pdf'].includes(ext)) return 'document-text-outline';
+    if (['doc', 'docx'].includes(ext)) return 'document-text-outline';
+    if (['xls', 'xlsx'].includes(ext)) return 'grid-outline';
+    if (['zip', 'rar', '7z'].includes(ext)) return 'archive-outline';
+    return 'document-outline';
   };
 
   return (
@@ -761,6 +807,38 @@ const ProgressUpdateModal = ({ visible, contract, onClose, onSubmit, isLoading }
                   textAlignVertical="top"
                 />
 
+                {/* Attachments Section */}
+                <Text style={modalStyles.label}>Attachments (Optional)</Text>
+                <View style={modalStyles.attachmentActions}>
+                  <TouchableOpacity style={modalStyles.attachBtn} onPress={handlePickImage}>
+                    <Ionicons name="image-outline" size={15} color={BLUE} />
+                    <Text style={modalStyles.attachBtnText}>Image</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={modalStyles.attachBtn} onPress={handlePickDocument}>
+                    <Ionicons name="document-outline" size={15} color={BLUE} />
+                    <Text style={modalStyles.attachBtnText}>Document</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {attachments.length > 0 && (
+                  <View style={modalStyles.attachmentList}>
+                    {attachments.map((file, index) => (
+                      <View key={index} style={modalStyles.attachmentItem}>
+                        <Ionicons name={getFileIcon(file.name)} size={14} color={BLUE} />
+                        <Text style={modalStyles.attachmentName} numberOfLines={1}>
+                          {file.name || 'File'}
+                        </Text>
+                        <Text style={modalStyles.attachmentSize}>
+                          {file.size ? `${(file.size / 1024).toFixed(1)} KB` : ''}
+                        </Text>
+                        <TouchableOpacity onPress={() => removeAttachment(index)}>
+                          <Ionicons name="close-circle" size={16} color={DANGER} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
                 <TouchableOpacity
                   style={[modalStyles.submitBtn, isLoading && { opacity: 0.7 }]}
                   onPress={handleSubmit}
@@ -833,6 +911,22 @@ const modalStyles = StyleSheet.create({
     borderWidth: 1.5, borderColor: BORDER, borderRadius: 10, padding: 12,
     minHeight: 100, fontSize: 13, color: TEXT_MAIN, textAlignVertical: 'top',
   },
+  attachmentActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  attachBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 13, paddingVertical: 9, borderRadius: 9,
+    borderWidth: 1, borderColor: BORDER, backgroundColor: WHITE,
+  },
+  attachBtnText: { fontSize: 12, color: TEXT_MAIN, fontWeight: '600' },
+  attachmentList: { marginTop: 9, gap: 5 },
+  attachmentItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 9,
+    backgroundColor: OFFWHITE, borderRadius: 9,
+    borderWidth: 1, borderColor: BORDER,
+  },
+  attachmentName: { flex: 1, fontSize: 12, color: TEXT_MAIN },
+  attachmentSize: { fontSize: 10, color: TEXT_FAINT },
   submitBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: BLUE, paddingVertical: 15, borderRadius: 12, marginTop: 20, marginBottom: 12,
@@ -856,6 +950,10 @@ const ContractDetailModal = ({
     'Client';
 
   const isCompleted = contract.status === 'completed';
+  const isDraft = contract.status === 'draft';
+
+  // Don't show draft contracts
+  if (isDraft) return null;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -918,14 +1016,14 @@ const ContractDetailModal = ({
               </View>
             </View>
 
-            {job.description ? (
+            {has(job.description) ? (
               <View style={detailStyles.section}>
                 <Text style={detailStyles.sectionTitle}>Description</Text>
                 <Text style={detailStyles.descriptionText}>{job.description}</Text>
               </View>
             ) : null}
 
-            {job.required_skills && job.required_skills.length > 0 && (
+            {has(job.required_skills) && job.required_skills.length > 0 && (
               <View style={detailStyles.section}>
                 <Text style={detailStyles.sectionTitle}>Skills</Text>
                 <View style={detailStyles.skillsRow}>
@@ -1137,16 +1235,21 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
   const [selectedContractForDetail, setSelectedContractForDetail] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Filter out draft contracts
+  const activeContracts = useMemo(() => {
+    return (contracts || []).filter(c => c.status !== 'draft');
+  }, [contracts]);
+
   const stats = useMemo(() => {
-    const total = contracts?.length || 0;
-    const active = contracts?.filter(c => c.status === 'active').length || 0;
-    const completed = contracts?.filter(c => c.status === 'completed').length || 0;
-    const totalBudget = contracts?.reduce((sum, c) => sum + (c.agreed_budget?.amount || 0), 0) || 0;
-    const avgProgress = contracts?.length > 0
-      ? Math.round(contracts.reduce((sum, c) => sum + (c.progress || 0), 0) / contracts.length)
+    const total = activeContracts?.length || 0;
+    const active = activeContracts?.filter(c => c.status === 'active').length || 0;
+    const completed = activeContracts?.filter(c => c.status === 'completed').length || 0;
+    const totalBudget = activeContracts?.reduce((sum, c) => sum + (c.agreed_budget?.amount || 0), 0) || 0;
+    const avgProgress = activeContracts?.length > 0
+      ? Math.round(activeContracts.reduce((sum, c) => sum + (c.progress || 0), 0) / activeContracts.length)
       : 0;
     return { total, active, completed, totalBudget, avgProgress };
-  }, [contracts]);
+  }, [activeContracts]);
 
   const handleNavigate = (screen, params) => {
     if (propNavigate && typeof propNavigate === 'function') {
@@ -1169,7 +1272,7 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
     try {
       await Promise.all([
         dispatch(getFreelancerContracts({})).unwrap(),
-        dispatch(getContractStats()).unwrap(),
+        dispatch(getFreelancerContractAnalytics()).unwrap(),
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -1193,16 +1296,16 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
   }, [fetchData]);
 
   const filteredContracts = useMemo(() => {
-    if (statusFilter === 'all') return contracts || [];
-    return (contracts || []).filter(c => c.status === statusFilter);
-  }, [contracts, statusFilter]);
+    if (statusFilter === 'all') return activeContracts || [];
+    return (activeContracts || []).filter(c => c.status === statusFilter);
+  }, [activeContracts, statusFilter]);
 
   const handleContractPress = async (contract) => {
     setSelectedContractForDetail(contract);
     setShowDetailModal(true);
     try {
       await dispatch(getContractById(contract._id)).unwrap();
-      await dispatch(getContractUpdates({ contractId: contract._id, page: 1, limit: 50 })).unwrap();
+      await dispatch(getContractUpdates({ contractId: contract._id, limit: 50 })).unwrap();
     } catch (error) {
       console.error('Error fetching contract details:', error);
       Alert.alert('Error', 'Failed to load contract details');
@@ -1219,15 +1322,18 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
 
     setIsSubmitting(true);
     try {
+      // Get the job ID properly
       let jobId = selectedContractForUpdate.job_id;
       if (jobId && typeof jobId === 'object' && jobId._id) jobId = jobId._id;
       if (!jobId && selectedContractForUpdate.job) jobId = selectedContractForUpdate.job;
 
+      // Update contract progress
       await dispatch(updateContractProgress({
         contractId: selectedContractForUpdate._id,
         progress: data.progress,
       })).unwrap();
 
+      // Prepare update payload
       const updatePayload = {
         contract_id: selectedContractForUpdate._id,
         job_id: jobId,
@@ -1237,9 +1343,28 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
         progress: data.progress,
         status: 'in_progress',
         delivery_status: 'submitted',
+        freelancer_id: selectedContractForUpdate.freelancer_id?._id || selectedContractForUpdate.freelancer_id,
+        created_by: selectedContractForUpdate.freelancer_id?._id || selectedContractForUpdate.freelancer_id,
+        created_by_role: 'freelancer',
       };
 
-      await dispatch(createProjectUpdate(updatePayload)).unwrap();
+      // Check if there are attachments
+      if (data.attachments && data.attachments.length > 0) {
+        // Use the file upload version
+        const files = data.attachments.map(file => ({
+          uri: file.uri,
+          name: file.name,
+          type: file.mimeType || 'application/octet-stream',
+        }));
+        
+        await dispatch(createProjectUpdateWithFiles({
+          updateData: updatePayload,
+          files: files,
+        })).unwrap();
+      } else {
+        // Use regular version without files
+        await dispatch(createProjectUpdate(updatePayload)).unwrap();
+      }
 
       Alert.alert('Success', 'Progress update submitted successfully!');
       setShowProgressModal(false);
@@ -1270,7 +1395,10 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
               })).unwrap();
 
               if (status === 'approved') {
-                await dispatch(updateProjectUpdateStatus({ updateId, status: 'completed' })).unwrap();
+                await dispatch(updateProjectUpdateStatus({ 
+                  updateId, 
+                  status: 'completed' 
+                })).unwrap();
               }
 
               Alert.alert('Success', status === 'approved' ? 'Update approved!' : 'Changes requested.');
@@ -1345,7 +1473,6 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Text style={styles.headerTitle}>My <Text style={styles.gold}>Jobs</Text></Text>
-              <EarningsBadge amount={stats.totalBudget} />
             </View>
             <TouchableOpacity
               style={styles.iconBtn}
@@ -1376,7 +1503,6 @@ export default function JobManagement({ navigation, route, onNavigate: propNavig
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>My <Text style={styles.gold}>Jobs</Text></Text>
-            <EarningsBadge amount={stats.totalBudget} />
           </View>
           <TouchableOpacity
             style={styles.iconBtn}

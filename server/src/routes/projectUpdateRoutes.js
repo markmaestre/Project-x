@@ -1,4 +1,4 @@
-// routes/projectUpdateRoutes.js
+// ==================== IMPORTS ====================
 import express from "express";
 import mongoose from "mongoose";
 import { authMiddleware } from "../middleware/authMiddleware.js";
@@ -7,7 +7,7 @@ import Contract from "../models/Contract.js";
 import Job from "../models/Job.js";
 import Client from "../models/Client.js";
 import Freelancer from "../models/Freelancer.js";
-import { cloudinary, upload } from "../config/cloudinary.js";
+import { cloudinary, uploadProjectUpdate } from "../config/cloudinary.js"; // CHANGED: import uploadProjectUpdate instead of upload
 import ProjectUpdateService from "../services/projectUpdateService.js";
 import NotificationService from "../services/notificationService.js";
 
@@ -32,15 +32,16 @@ const checkUpdateAuthorization = async (updateId, userId, userRole) => {
   return { update, isClient, isFreelancer };
 };
 
-// Check if contract is valid and active
+// Check if contract is valid
 const validateContract = async (contractId, userId, userRole) => {
   const contract = await Contract.findById(contractId);
   if (!contract) {
     return { error: "Contract not found", status: 404 };
   }
 
-  if (contract.status !== "active") {
-    return { error: "Contract is not active", status: 400 };
+  // Allow updates even if contract is not active
+  if (!['active', 'completed', 'paused'].includes(contract.status)) {
+    return { error: `Contract is ${contract.status}. Updates can only be made on active, paused, or completed contracts.`, status: 400 };
   }
 
   const isClient = contract.client_id.toString() === userId;
@@ -53,10 +54,43 @@ const validateContract = async (contractId, userId, userRole) => {
   return { contract, isClient, isFreelancer };
 };
 
+// ==================== LOG ACTIVITY HELPER ====================
+const logContractActivity = async (contractId, userId, userRole, type, message, data = null) => {
+  try {
+    const contract = await Contract.findById(contractId)
+      .populate('client_id freelancer_id');
+    
+    if (!contract) return;
+
+    const isFreelancer = userRole === 'freelancer';
+    const userModel = isFreelancer ? 'Freelancer' : 'Client';
+    const userName = isFreelancer 
+      ? (contract.freelancer_id?.first_name || 'Freelancer')
+      : (contract.client_id?.first_name || 'Client');
+
+    contract.activity_log.push({
+      type: type,
+      user_id: userId,
+      user_model: userModel,
+      user_name: userName,
+      message: message,
+      data: data,
+    });
+
+    await contract.save();
+    console.log(`✅ Activity logged: ${message}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error logging activity:', error);
+    return false;
+  }
+};
+
 // ==================== CREATE PROJECT UPDATE ====================
 
-// Create a new project update (Client or Freelancer) - Using Service
-router.post("/project-updates", authMiddleware, upload.array('attachments', 10), async (req, res) => {
+// Create a new project update (Client or Freelancer)
+// CHANGED: Using uploadProjectUpdate instead of upload
+router.post("/project-updates", authMiddleware, uploadProjectUpdate.array('attachments', 10), async (req, res) => {
   try {
     const {
       contract_id,
@@ -99,7 +133,7 @@ router.post("/project-updates", authMiddleware, upload.array('attachments', 10),
       return res.status(404).json({ message: "Job not found" });
     }
 
-    // Process attachments
+    // Process attachments - Now supports all file types!
     const attachments = req.files ? req.files.map(file => ({
       file_name: file.originalname,
       file_url: file.path,
@@ -150,6 +184,15 @@ router.post("/project-updates", authMiddleware, upload.array('attachments', 10),
       contract.progress = progress;
       if (progress === 100) {
         contract.status = "completed";
+        // Log completion
+        await logContractActivity(
+          contract_id,
+          req.user.id,
+          req.user.role,
+          'status_update',
+          `Contract completed (100% progress)`,
+          { old_progress: contract.progress, new_progress: 100 }
+        );
       }
       await contract.save();
     }
@@ -209,11 +252,18 @@ router.get("/contracts/:contractId/updates", authMiddleware, async (req, res) =>
 
     const total = await ProjectUpdate.countDocuments(query);
 
+    // Also get contract activity log
+    const contractWithLog = await Contract.findById(contractId)
+      .select('activity_log')
+      .sort({ 'activity_log.created_at': -1 })
+      .limit(10);
+
     res.json({
       projectUpdates: updates,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
-      totalUpdates: total
+      totalUpdates: total,
+      recentActivity: contractWithLog?.activity_log?.slice(0, 10) || []
     });
   } catch (error) {
     console.error("Error fetching project updates:", error);
@@ -356,7 +406,7 @@ router.get("/client/updates", authMiddleware, async (req, res) => {
   }
 });
 
-// Get single project update by ID - Using Service
+// Get single project update by ID
 router.get("/project-updates/:id", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
@@ -392,7 +442,7 @@ router.get("/project-updates/:id", authMiddleware, async (req, res) => {
 
 // ==================== UPDATE PROJECT UPDATE ====================
 
-// Update project update status - Using Service
+// Update project update status
 router.patch("/project-updates/:id/status", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
@@ -436,7 +486,7 @@ router.patch("/project-updates/:id/status", authMiddleware, async (req, res) => 
   }
 });
 
-// Update delivery status - Using Service
+// Update delivery status
 router.patch("/project-updates/:id/delivery", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
@@ -493,6 +543,16 @@ router.patch("/project-updates/:id/delivery", authMiddleware, async (req, res) =
         contract.progress = 100;
         contract.status = "completed";
         await contract.save();
+        
+        // Log completion
+        await logContractActivity(
+          contract._id,
+          req.user.id,
+          req.user.role,
+          'status_update',
+          `Contract completed (delivery approved)`,
+          { delivery_status: 'approved' }
+        );
       }
     }
     await updatedUpdate.save();
@@ -511,6 +571,57 @@ router.patch("/project-updates/:id/delivery", authMiddleware, async (req, res) =
 });
 
 // ==================== ATTACHMENT MANAGEMENT ====================
+
+// Add attachment to project update
+// CHANGED: Using uploadProjectUpdate.single instead of upload.single
+router.post("/project-updates/:id/attachments", authMiddleware, uploadProjectUpdate.single('file'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid update ID" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const { error, update, isClient, isFreelancer, status: errorStatus } = 
+      await checkUpdateAuthorization(id, req.user.id, req.user.role);
+    
+    if (error) {
+      if (req.file) {
+        await cloudinary.uploader.destroy(req.file.filename);
+      }
+      return res.status(errorStatus).json({ message: error });
+    }
+
+    // Use ProjectUpdateService to add attachment
+    const result = await ProjectUpdateService.addAttachment({
+      project_update_id: id,
+      file: req.file,
+      uploaded_by: req.user.id,
+      uploaded_by_role: req.user.role,
+    });
+
+    res.json({
+      message: "File uploaded successfully",
+      attachment: result.attachment,
+      projectUpdate: result.update
+    });
+  } catch (error) {
+    console.error("Error uploading attachment:", error);
+    if (req.file) {
+      try {
+        await cloudinary.uploader.destroy(req.file.filename);
+      } catch (e) {}
+    }
+    res.status(500).json({ 
+      message: "Error uploading file", 
+      error: error.message 
+    });
+  }
+});
 
 // Delete attachment from project update
 router.delete("/project-updates/:updateId/attachments/:attachmentId", authMiddleware, async (req, res) => {
@@ -560,6 +671,16 @@ router.delete("/project-updates/:updateId/attachments/:attachmentId", authMiddle
     update.attachments.splice(attachmentIndex, 1);
     update.last_updated_by = req.user.id;
     await update.save();
+
+    // Log deletion
+    await logContractActivity(
+      update.contract_id,
+      req.user.id,
+      req.user.role,
+      'file_upload',
+      `Deleted file: "${attachment.file_name}"`,
+      { deleted_file: attachment.file_name }
+    );
 
     res.json({
       message: "Attachment deleted successfully",
@@ -617,6 +738,12 @@ router.get("/project-updates/stats/:contractId", authMiddleware, async (req, res
       .limit(5)
       .populate("created_by", "first_name last_name username");
 
+    // Get activity log
+    const activityLog = await Contract.findById(contractId)
+      .select('activity_log')
+      .sort({ 'activity_log.created_at': -1 })
+      .limit(10);
+
     res.json({
       total,
       completed,
@@ -625,7 +752,8 @@ router.get("/project-updates/stats/:contractId", authMiddleware, async (req, res
       pending,
       typeBreakdown: breakdown,
       contractProgress: contract.progress || 0,
-      recentUpdates
+      recentUpdates,
+      recentActivity: activityLog?.activity_log?.slice(0, 10) || []
     });
   } catch (error) {
     console.error("Error fetching project update statistics:", error);
@@ -671,6 +799,20 @@ router.post("/project-updates/:id/comments", authMiddleware, async (req, res) =>
     update.last_updated_by = req.user.id;
     await update.save();
 
+    // Log comment to contract activity
+    await logContractActivity(
+      update.contract_id,
+      req.user.id,
+      req.user.role,
+      'comment',
+      `${req.user.role === 'freelancer' ? 'Freelancer' : 'Client'} commented on project update: "${comment.substring(0, 50)}${comment.length > 50 ? '...' : ''}"`,
+      {
+        project_update_id: update._id,
+        comment: comment,
+        update_title: update.title,
+      }
+    );
+
     // Notify the other party
     const recipient_id = isFreelancer ? update.client_id : update.freelancer_id;
     const recipient_model = isFreelancer ? 'Client' : 'Freelancer';
@@ -698,6 +840,62 @@ router.post("/project-updates/:id/comments", authMiddleware, async (req, res) =>
     console.error("Error adding comment:", error);
     res.status(500).json({ 
       message: "Error adding comment", 
+      error: error.message 
+    });
+  }
+});
+
+// ==================== GET CONTRACT ACTIVITY LOG ====================
+
+// Get contract activity log
+router.get("/contracts/:contractId/activity", authMiddleware, async (req, res) => {
+  try {
+    const { contractId } = req.params;
+    const { limit = 20, skip = 0, type } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(contractId)) {
+      return res.status(400).json({ message: "Invalid contract ID" });
+    }
+
+    // Validate contract and authorization
+    const { error, contract, status: errorStatus } = 
+      await validateContract(contractId, req.user.id, req.user.role);
+    
+    if (error) {
+      return res.status(errorStatus || 400).json({ message: error });
+    }
+
+    // Get contract with activity log
+    const contractWithLog = await Contract.findById(contractId)
+      .select('activity_log');
+
+    let activityLog = contractWithLog?.activity_log || [];
+
+    // Filter by type if provided
+    if (type) {
+      activityLog = activityLog.filter(log => log.type === type);
+    }
+
+    // Sort by created_at descending
+    activityLog = activityLog.sort((a, b) => 
+      new Date(b.created_at) - new Date(a.created_at)
+    );
+
+    // Paginate
+    const total = activityLog.length;
+    const paginated = activityLog.slice(skip, skip + limit);
+
+    res.json({
+      activity: paginated,
+      total,
+      limit: parseInt(limit),
+      skip: parseInt(skip),
+      hasMore: skip + limit < total
+    });
+  } catch (error) {
+    console.error("Error fetching contract activity:", error);
+    res.status(500).json({ 
+      message: "Error fetching contract activity", 
       error: error.message 
     });
   }

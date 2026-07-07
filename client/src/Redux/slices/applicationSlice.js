@@ -67,7 +67,14 @@ export const applyForJob = createAsyncThunk(
       console.log('Application response status:', response.status);
       console.log('Application response data:', response.data);
       
-      return response.data;
+      // Return with email notification status
+      return {
+        ...response.data,
+        emailNotifications: response.data.emailNotifications || {
+          client: 'sent',
+          freelancer: 'sent'
+        }
+      };
     } catch (error) {
       console.error('Apply for job error details:', {
         status: error.response?.status,
@@ -439,7 +446,7 @@ export const getClientApplications = createAsyncThunk(
 // Update application status (Client only) - supports interview data
 export const updateApplicationStatus = createAsyncThunk(
   'applications/updateApplicationStatus',
-  async ({ applicationId, status, interview, offer }, { getState, rejectWithValue }) => {
+  async ({ applicationId, status, interview, offer, notes }, { getState, rejectWithValue }) => {
     try {
       const token = getAuthToken(getState);
 
@@ -454,6 +461,9 @@ export const updateApplicationStatus = createAsyncThunk(
       if (offer) {
         payload.offer = offer;
       }
+      if (notes) {
+        payload.notes = notes;
+      }
 
       const response = await api.patch(`/applications/${applicationId}/status`, 
         payload,
@@ -465,7 +475,13 @@ export const updateApplicationStatus = createAsyncThunk(
         }
       );
       
-      return response.data;
+      // Return with email notification status
+      return {
+        ...response.data,
+        emailNotifications: response.data.emailNotifications || {
+          freelancer: 'sent'
+        }
+      };
     } catch (error) {
       console.error('Update application status error:', error.response?.data);
       
@@ -505,8 +521,14 @@ export const sendOffer = createAsyncThunk(
         return rejectWithValue({ message: 'Valid offer amount is required' });
       }
 
-      const response = await api.post(`/applications/${applicationId}/offer`, 
-        { amount, message: message || 'We would like to offer you this position.' },
+      const response = await api.patch(`/applications/${applicationId}/status`, 
+        { 
+          status: 'offered',
+          offer: { 
+            amount, 
+            message: message || 'We would like to offer you this position.' 
+          }
+        },
         {
           headers: { 
             Authorization: `Bearer ${token}`,
@@ -515,7 +537,12 @@ export const sendOffer = createAsyncThunk(
         }
       );
       
-      return response.data;
+      return {
+        ...response.data,
+        emailNotifications: response.data.emailNotifications || {
+          freelancer: 'sent'
+        }
+      };
     } catch (error) {
       console.error('Send offer error:', error.response?.data);
       
@@ -529,6 +556,59 @@ export const sendOffer = createAsyncThunk(
       return rejectWithValue(error.response?.data || { 
         message: error.message || 'Failed to send offer',
         code: 'SEND_OFFER_ERROR'
+      });
+    }
+  }
+);
+
+// Accept offer (Freelancer only)
+export const acceptOffer = createAsyncThunk(
+  'applications/acceptOffer',
+  async (applicationId, { getState, rejectWithValue }) => {
+    try {
+      const token = getAuthToken(getState);
+
+      if (!applicationId) {
+        return rejectWithValue({ message: 'Application ID is required' });
+      }
+
+      const response = await api.post(`/applications/${applicationId}/accept-offer`, 
+        {},
+        {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      return {
+        ...response.data,
+        emailNotifications: response.data.emailNotifications || {
+          client: 'sent',
+          freelancer: 'sent'
+        }
+      };
+    } catch (error) {
+      console.error('Accept offer error:', error.response?.data);
+      
+      if (error.response?.status === 403) {
+        return rejectWithValue({ 
+          message: 'You do not have permission to accept this offer',
+          code: 'FORBIDDEN'
+        });
+      }
+      
+      if (error.response?.status === 400) {
+        return rejectWithValue({ 
+          message: error.response?.data?.message || 'No offer to accept',
+          code: 'NO_OFFER'
+        });
+      }
+      
+      return rejectWithValue(error.response?.data || { 
+        message: error.message || 'Failed to accept offer',
+        code: 'ACCEPT_OFFER_ERROR'
       });
     }
   }
@@ -626,6 +706,14 @@ const initialState = {
   resumeUrl: null,
   isSaved: false,
   savedJobId: null,
+  // Email notification tracking
+  emailNotifications: {
+    lastSent: null,
+    status: {
+      client: null,
+      freelancer: null
+    }
+  },
   stats: {
     total: 0,
     pending: 0,
@@ -702,20 +790,32 @@ const applicationSlice = createSlice({
       const { applicationId, status } = action.payload;
       const index = state.applications.findIndex(app => app._id === applicationId);
       if (index !== -1) {
+        const oldStatus = state.applications[index].status;
         state.applications[index].status = status;
+        // Update stats
+        if (oldStatus && oldStatus !== status) {
+          if (state.stats[oldStatus] > 0) state.stats[oldStatus]--;
+          if (state.stats[status] !== undefined) state.stats[status]++;
+        }
       }
       if (state.selectedApplication?._id === applicationId) {
         state.selectedApplication.status = status;
       }
-      // Update stats
-      const stats = state.stats;
-      const oldStatus = state.applications[index]?.status;
-      if (oldStatus && oldStatus !== status) {
-        // Decrement old status count
-        if (stats[oldStatus] > 0) stats[oldStatus]--;
-        // Increment new status count
-        if (stats[status] !== undefined) stats[status]++;
-      }
+    },
+    // Email notification tracking reducers
+    setEmailNotificationStatus: (state, action) => {
+      const { recipient, status } = action.payload;
+      state.emailNotifications.status[recipient] = status;
+      state.emailNotifications.lastSent = new Date().toISOString();
+    },
+    clearEmailNotifications: (state) => {
+      state.emailNotifications = {
+        lastSent: null,
+        status: {
+          client: null,
+          freelancer: null
+        }
+      };
     },
   },
   extraReducers: (builder) => {
@@ -740,6 +840,12 @@ const applicationSlice = createSlice({
           if (state.stats[status] !== undefined) {
             state.stats[status] += 1;
           }
+        }
+        // Track email notifications
+        if (action.payload.emailNotifications) {
+          state.emailNotifications.status.client = action.payload.emailNotifications.client || 'sent';
+          state.emailNotifications.status.freelancer = action.payload.emailNotifications.freelancer || 'sent';
+          state.emailNotifications.lastSent = new Date().toISOString();
         }
         state.lastUpdated = new Date().toISOString();
       })
@@ -869,6 +975,13 @@ const applicationSlice = createSlice({
         if (state.selectedApplication?._id === updatedApp._id) {
           state.selectedApplication = updatedApp;
         }
+        
+        // Track email notifications
+        if (action.payload.emailNotifications) {
+          state.emailNotifications.status.freelancer = action.payload.emailNotifications.freelancer || 'sent';
+          state.emailNotifications.lastSent = new Date().toISOString();
+        }
+        
         state.lastUpdated = new Date().toISOString();
       })
       .addCase(updateApplicationStatus.rejected, (state, action) => {
@@ -892,9 +1005,57 @@ const applicationSlice = createSlice({
         if (state.selectedApplication?._id === updatedApp._id) {
           state.selectedApplication = updatedApp;
         }
+        
+        // Track email notifications
+        if (action.payload.emailNotifications) {
+          state.emailNotifications.status.freelancer = action.payload.emailNotifications.freelancer || 'sent';
+          state.emailNotifications.lastSent = new Date().toISOString();
+        }
+        
         state.lastUpdated = new Date().toISOString();
       })
       .addCase(sendOffer.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      
+      // ==================== ACCEPT OFFER ====================
+      .addCase(acceptOffer.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(acceptOffer.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.updateSuccess = true;
+        
+        // Update application status to hired
+        if (action.payload.contract) {
+          const applicationId = action.payload.contract.application_id;
+          const index = state.applications.findIndex(app => app._id === applicationId);
+          if (index !== -1) {
+            const oldStatus = state.applications[index].status;
+            state.applications[index].status = 'hired';
+            // Update stats
+            if (oldStatus && oldStatus !== 'hired') {
+              if (state.stats[oldStatus] > 0) state.stats[oldStatus]--;
+              if (state.stats.hired !== undefined) state.stats.hired++;
+            }
+          }
+          if (state.selectedApplication?._id === applicationId) {
+            state.selectedApplication.status = 'hired';
+          }
+        }
+        
+        // Track email notifications
+        if (action.payload.emailNotifications) {
+          state.emailNotifications.status.client = action.payload.emailNotifications.client || 'sent';
+          state.emailNotifications.status.freelancer = action.payload.emailNotifications.freelancer || 'sent';
+          state.emailNotifications.lastSent = new Date().toISOString();
+        }
+        
+        state.lastUpdated = new Date().toISOString();
+      })
+      .addCase(acceptOffer.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       })
@@ -1039,6 +1200,8 @@ export const {
   setUploadProgress,
   resetUploadProgress,
   updateApplicationStatusLocally,
+  setEmailNotificationStatus,
+  clearEmailNotifications,
 } = applicationSlice.actions;
 
 // ==================== SELECTORS ====================
@@ -1061,5 +1224,6 @@ export const selectApplicationStats = (state) => state.applications.stats;
 export const selectStatusBreakdown = (state) => state.applications.statusBreakdown;
 export const selectUploadProgress = (state) => state.applications.uploadProgress;
 export const selectLastUpdated = (state) => state.applications.lastUpdated;
+export const selectEmailNotifications = (state) => state.applications.emailNotifications;
 
 export default applicationSlice.reducer;

@@ -10,10 +10,14 @@ import { useDispatch, useSelector } from 'react-redux';
 import {
   getClientContracts,
   getContractById,
-  updateContractStatus,
+  updateContract,
   cancelContract,
+  pauseContract,
+  resumeContract,
+  completeContract,
   clearContractError,
   clearContractSuccess,
+  updateContractLocally,
 } from '../../Redux/slices/contractSlice';
 
 // ── Design Tokens ─────────────────────────────────────────────────────────────
@@ -57,6 +61,7 @@ const STATUS_COLORS = {
   completed: PURPLE,
   cancelled: RED,
   pending: TEXT_LIGHT,
+  draft: TEXT_LIGHT,
 };
 
 const STATUS_LABELS = {
@@ -65,6 +70,7 @@ const STATUS_LABELS = {
   completed: 'Completed',
   cancelled: 'Cancelled',
   pending: 'Pending',
+  draft: 'Draft',
 };
 
 const formatCurrency = (amount) => {
@@ -96,7 +102,7 @@ const formatRelativeTime = (dateString) => {
 export default function Contracts({ onNavigate }) {
   const dispatch = useDispatch();
   const { clientContracts, isLoading, selectedContract } = useSelector((state) => state.contracts.contracts);
-  const { cancelSuccess } = useSelector((state) => state.contracts);
+  const { cancelSuccess, updateSuccess } = useSelector((state) => state.contracts);
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -110,6 +116,10 @@ export default function Contracts({ onNavigate }) {
   const [selectedContractForStatus, setSelectedContractForStatus] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [showPauseModal, setShowPauseModal] = useState(false);
+  const [pauseReason, setPauseReason] = useState('');
+  const [isPausing, setIsPausing] = useState(false);
 
   // ── Fetch Contracts ──────────────────────────────────────────────────────────
   const fetchContracts = useCallback(async () => {
@@ -128,13 +138,20 @@ export default function Contracts({ onNavigate }) {
     fetchContracts();
   }, [fetchContracts]);
 
-  // ── Handle Cancel Success ─────────────────────────────────────────────────
+  // ── Handle Success ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (cancelSuccess) {
       fetchContracts();
       dispatch(clearContractSuccess());
     }
   }, [cancelSuccess, dispatch, fetchContracts]);
+
+  useEffect(() => {
+    if (updateSuccess) {
+      fetchContracts();
+      dispatch(clearContractSuccess());
+    }
+  }, [updateSuccess, dispatch, fetchContracts]);
 
   // ── Hardware Back Button ──────────────────────────────────────────────────
   useEffect(() => {
@@ -155,6 +172,11 @@ export default function Contracts({ onNavigate }) {
         setSelectedContractForStatus(null);
         return true;
       }
+      if (showPauseModal) {
+        setShowPauseModal(false);
+        setPauseReason('');
+        return true;
+      }
       if (onNavigate) {
         onNavigate('ClientDashboard');
         return true;
@@ -163,7 +185,7 @@ export default function Contracts({ onNavigate }) {
     });
 
     return () => backHandler.remove();
-  }, [showDetailModal, showCancelModal, showStatusModal, onNavigate]);
+  }, [showDetailModal, showCancelModal, showStatusModal, showPauseModal, onNavigate]);
 
   // ── Filter Contracts ───────────────────────────────────────────────────────
   const getFilteredContracts = () => {
@@ -191,7 +213,7 @@ export default function Contracts({ onNavigate }) {
     if (key === 'Home') onNavigate('ClientDashboard');
     if (key === 'PostJob') onNavigate('PostJob');
     if (key === 'Hiredtalents') onNavigate('Hiredtalents');
-    if (key === 'Message') onNavigate('Message');
+    if (key === 'Message') onNavigate('Messages');
     if (key === 'ClientProfile') onNavigate('ClientProfile');
   };
 
@@ -202,6 +224,7 @@ export default function Contracts({ onNavigate }) {
       setDetailContract(result.contract || contract);
       setShowDetailModal(true);
     } catch (error) {
+      // If API fails, use the contract data we already have
       setDetailContract(contract);
       setShowDetailModal(true);
     }
@@ -219,15 +242,10 @@ export default function Contracts({ onNavigate }) {
     setIsCancelling(true);
     
     try {
-      // You can pass the reason in the payload if your API supports it
-      // For now, we'll just show it in the alert and update the status
-      await dispatch(cancelContract(selectedContractForCancel._id)).unwrap();
-      
-      // You could also update the contract with the reason if your API supports it
-      // await dispatch(updateContract({ 
-      //   contractId: selectedContractForCancel._id, 
-      //   contractData: { cancellation_reason: cancelReason } 
-      // })).unwrap();
+      await dispatch(cancelContract({ 
+        contractId: selectedContractForCancel._id,
+        reason: cancelReason 
+      })).unwrap();
       
       setShowCancelModal(false);
       setSelectedContractForCancel(null);
@@ -249,21 +267,97 @@ export default function Contracts({ onNavigate }) {
     }
   };
 
+  // ── Pause Contract ─────────────────────────────────────────────────────────
+  const handlePauseContract = async () => {
+    if (!selectedContractForCancel) return;
+    
+    if (!pauseReason.trim()) {
+      Alert.alert('Reason Required', 'Please provide a reason for pausing this contract.');
+      return;
+    }
+    
+    setIsPausing(true);
+    
+    try {
+      await dispatch(pauseContract({ 
+        contractId: selectedContractForCancel._id,
+        reason: pauseReason 
+      })).unwrap();
+      
+      setShowPauseModal(false);
+      setSelectedContractForCancel(null);
+      setPauseReason('');
+      setIsPausing(false);
+      
+      if (showDetailModal) {
+        setShowDetailModal(false);
+        setDetailContract(null);
+      }
+      
+      Alert.alert(
+        'Contract Paused', 
+        `The contract has been paused.\n\nReason: ${pauseReason}`
+      );
+    } catch (error) {
+      Alert.alert('Error', error?.message || 'Failed to pause contract.');
+      setIsPausing(false);
+    }
+  };
+
+  // ── Resume Contract ────────────────────────────────────────────────────────
+  const handleResumeContract = async (contractId) => {
+    try {
+      await dispatch(resumeContract(contractId)).unwrap();
+      Alert.alert('Contract Resumed', 'The contract has been resumed successfully.');
+      fetchContracts();
+    } catch (error) {
+      Alert.alert('Error', error?.message || 'Failed to resume contract.');
+    }
+  };
+
+  // ── Complete Contract ──────────────────────────────────────────────────────
+  const handleCompleteContract = async (contractId) => {
+    Alert.alert(
+      'Complete Contract',
+      'Are you sure you want to mark this contract as completed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Complete', 
+          style: 'default',
+          onPress: async () => {
+            try {
+              await dispatch(completeContract(contractId)).unwrap();
+              Alert.alert('Contract Completed', 'The contract has been marked as completed.');
+              fetchContracts();
+            } catch (error) {
+              Alert.alert('Error', error?.message || 'Failed to complete contract.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // ── Update Contract Status ─────────────────────────────────────────────────
   const handleUpdateStatus = async (status) => {
     if (!selectedContractForStatus) return;
     
+    setIsUpdatingStatus(true);
+    
     try {
-      await dispatch(updateContractStatus({ 
+      await dispatch(updateContract({ 
         contractId: selectedContractForStatus._id, 
-        status 
+        contractData: { status } 
       })).unwrap();
       setShowStatusModal(false);
       setSelectedContractForStatus(null);
+      setIsUpdatingStatus(false);
       fetchContracts();
       Alert.alert('Updated', `Contract status changed to ${STATUS_LABELS[status]}.`);
     } catch (error) {
       Alert.alert('Error', error?.message || 'Failed to update contract status.');
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -279,6 +373,26 @@ export default function Contracts({ onNavigate }) {
     return status === 'active' || status === 'paused';
   };
 
+  const canPauseContract = (status) => {
+    return status === 'active';
+  };
+
+  const canResumeContract = (status) => {
+    return status === 'paused';
+  };
+
+  const canCompleteContract = (status) => {
+    return status === 'active' || status === 'paused';
+  };
+
+  // ── Navigate to Contract Full View ────────────────────────────────────────
+  const navigateToContractView = (contractId) => {
+    setShowDetailModal(false);
+    if (onNavigate) {
+      onNavigate('ContractDetail', { contractId });
+    }
+  };
+
   // ── Render Contract Card ──────────────────────────────────────────────────
   const renderContractCard = ({ item }) => {
     const freelancer = item.freelancer_id || {};
@@ -288,6 +402,9 @@ export default function Contracts({ onNavigate }) {
     const statusColor = STATUS_COLORS[item.status] || TEXT_LIGHT;
     const statusLabel = STATUS_LABELS[item.status] || item.status;
     const cancellable = canCancelContract(item.status);
+    const pausable = canPauseContract(item.status);
+    const resumable = canResumeContract(item.status);
+    const completable = canCompleteContract(item.status);
 
     return (
       <TouchableOpacity 
@@ -341,16 +458,12 @@ export default function Contracts({ onNavigate }) {
           </Text>
           <View style={card.actions}>
             <TouchableOpacity 
-              style={[card.actionBtn, card.statusBtn]}
-              onPress={(e) => {
-                e.stopPropagation();
-                setSelectedContractForStatus(item);
-                setShowStatusModal(true);
-              }}
+              style={[card.actionBtn, card.viewBtn]}
+              onPress={() => navigateToContractView(item._id)}
               activeOpacity={0.7}
             >
-              <Ionicons name="swap-horizontal-outline" size={14} color={BLUE} />
-              <Text style={[card.actionText, { color: BLUE }]}>Status</Text>
+              <Ionicons name="eye-outline" size={14} color={BLUE} />
+              <Text style={[card.actionText, { color: BLUE }]}>View</Text>
             </TouchableOpacity>
             {cancellable && (
               <TouchableOpacity 
@@ -522,7 +635,9 @@ export default function Contracts({ onNavigate }) {
                 <Ionicons name="close" size={24} color={TEXT_MAIN} />
               </TouchableOpacity>
               <Text style={detailModal.headerTitle}>Contract Details</Text>
-              <View style={{ width: 24 }} />
+              <TouchableOpacity onPress={() => navigateToContractView(detailContract?._id)} activeOpacity={0.7}>
+                <Ionicons name="open-outline" size={22} color={BLUE} />
+              </TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={detailModal.body}>
@@ -556,6 +671,12 @@ export default function Contracts({ onNavigate }) {
                       <Text style={detailModal.freelancerRole}>
                         {detailContract.freelancer_id?.experience_level || 'Freelancer'}
                       </Text>
+                      {detailContract.freelancer_id?.rating > 0 && (
+                        <View style={detailModal.ratingRow}>
+                          <Ionicons name="star" size={12} color={GOLD} />
+                          <Text style={detailModal.ratingText}>{detailContract.freelancer_id.rating.toFixed(1)}</Text>
+                        </View>
+                      )}
                     </View>
                     <TouchableOpacity 
                       style={detailModal.messageBtn}
@@ -581,6 +702,9 @@ export default function Contracts({ onNavigate }) {
                     <Text style={detailModal.budgetText}>
                       {formatCurrency(detailContract.agreed_budget?.amount)} 
                       {detailContract.agreed_budget?.type === 'hourly' ? ' / hour' : ' (Fixed)'}
+                    </Text>
+                    <Text style={detailModal.budgetSub}>
+                      Currency: {detailContract.agreed_budget?.currency || 'PHP'}
                     </Text>
                   </View>
 
@@ -615,6 +739,68 @@ export default function Contracts({ onNavigate }) {
                     </View>
                   )}
 
+                  {/* Milestones */}
+                  {detailContract.milestones && detailContract.milestones.length > 0 && (
+                    <View style={detailModal.section}>
+                      <Text style={detailModal.sectionLabel}>Milestones ({detailContract.milestones.length})</Text>
+                      {detailContract.milestones.map((milestone, index) => (
+                        <View key={index} style={detailModal.milestoneItem}>
+                          <View style={detailModal.milestoneHeader}>
+                            <Text style={detailModal.milestoneTitle}>{milestone.title}</Text>
+                            <View style={[detailModal.milestoneStatus, { 
+                              backgroundColor: milestone.status === 'completed' ? GREEN + '15' : ORANGE + '15' 
+                            }]}>
+                              <Text style={[detailModal.milestoneStatusText, { 
+                                color: milestone.status === 'completed' ? GREEN : ORANGE 
+                              }]}>
+                                {milestone.status || 'pending'}
+                              </Text>
+                            </View>
+                          </View>
+                          {milestone.description && (
+                            <Text style={detailModal.milestoneDesc}>{milestone.description}</Text>
+                          )}
+                          <View style={detailModal.milestoneFooter}>
+                            <Text style={detailModal.milestoneAmount}>
+                              {formatCurrency(milestone.amount)}
+                            </Text>
+                            <Text style={detailModal.milestoneDate}>
+                              Due: {formatDate(milestone.due_date)}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Documents */}
+                  {detailContract.contract_documents && detailContract.contract_documents.length > 0 && (
+                    <View style={detailModal.section}>
+                      <Text style={detailModal.sectionLabel}>Documents ({detailContract.contract_documents.length})</Text>
+                      {detailContract.contract_documents.map((doc, index) => (
+                        <TouchableOpacity 
+                          key={index} 
+                          style={detailModal.docItem}
+                          onPress={() => {
+                            if (doc.url) {
+                              Linking.openURL(doc.url).catch(() => Alert.alert('Error', 'Cannot open document'));
+                            }
+                          }}
+                        >
+                          <Ionicons name="document-text-outline" size={18} color={BLUE} />
+                          <View style={detailModal.docInfo}>
+                            <Text style={detailModal.docName} numberOfLines={1}>{doc.name}</Text>
+                            <Text style={detailModal.docMeta}>
+                              {doc.size ? (doc.size / 1024).toFixed(1) + ' KB' : ''}
+                              {doc.uploaded_at ? ` • ${formatDate(doc.uploaded_at)}` : ''}
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={16} color={TEXT_LIGHT} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
                   {/* Cancellation Reason */}
                   {detailContract.cancellation_reason && (
                     <View style={detailModal.section}>
@@ -626,8 +812,57 @@ export default function Contracts({ onNavigate }) {
                     </View>
                   )}
 
+                  {/* Pause Reason */}
+                  {detailContract.pause_reason && (
+                    <View style={detailModal.section}>
+                      <Text style={detailModal.sectionLabel}>Pause Reason</Text>
+                      <View style={[detailModal.reasonBox, { backgroundColor: ORANGE + '10', borderColor: ORANGE + '30' }]}>
+                        <Ionicons name="information-circle-outline" size={18} color={ORANGE} />
+                        <Text style={[detailModal.reasonText, { color: ORANGE }]}>{detailContract.pause_reason}</Text>
+                      </View>
+                    </View>
+                  )}
+
                   {/* Action Buttons */}
                   <View style={detailModal.actionRow}>
+                    {canResumeContract(detailContract.status) && (
+                      <TouchableOpacity 
+                        style={[detailModal.actionBtn, detailModal.resumeBtn]} 
+                        onPress={() => {
+                          setShowDetailModal(false);
+                          handleResumeContract(detailContract._id);
+                        }}
+                      >
+                        <Ionicons name="play-outline" size={16} color={WHITE} />
+                        <Text style={detailModal.actionBtnText}>Resume</Text>
+                      </TouchableOpacity>
+                    )}
+                    {canPauseContract(detailContract.status) && (
+                      <TouchableOpacity 
+                        style={[detailModal.actionBtn, detailModal.pauseBtn]} 
+                        onPress={() => {
+                          setShowDetailModal(false);
+                          setSelectedContractForCancel(detailContract);
+                          setPauseReason('');
+                          setShowPauseModal(true);
+                        }}
+                      >
+                        <Ionicons name="pause-outline" size={16} color={WHITE} />
+                        <Text style={detailModal.actionBtnText}>Pause</Text>
+                      </TouchableOpacity>
+                    )}
+                    {canCompleteContract(detailContract.status) && (
+                      <TouchableOpacity 
+                        style={[detailModal.actionBtn, detailModal.completeBtn]} 
+                        onPress={() => {
+                          setShowDetailModal(false);
+                          handleCompleteContract(detailContract._id);
+                        }}
+                      >
+                        <Ionicons name="checkmark-outline" size={16} color={WHITE} />
+                        <Text style={detailModal.actionBtnText}>Complete</Text>
+                      </TouchableOpacity>
+                    )}
                     {canCancelContract(detailContract.status) && (
                       <TouchableOpacity 
                         style={[detailModal.actionBtn, detailModal.cancelBtn]} 
@@ -639,21 +874,19 @@ export default function Contracts({ onNavigate }) {
                         }}
                       >
                         <Ionicons name="close-outline" size={16} color={WHITE} />
-                        <Text style={detailModal.actionBtnText}>Cancel Contract</Text>
+                        <Text style={detailModal.actionBtnText}>Cancel</Text>
                       </TouchableOpacity>
                     )}
-                    <TouchableOpacity 
-                      style={[detailModal.actionBtn, detailModal.statusBtn]} 
-                      onPress={() => {
-                        setShowDetailModal(false);
-                        setSelectedContractForStatus(detailContract);
-                        setShowStatusModal(true);
-                      }}
-                    >
-                      <Ionicons name="swap-horizontal-outline" size={16} color={WHITE} />
-                      <Text style={detailModal.actionBtnText}>Update Status</Text>
-                    </TouchableOpacity>
                   </View>
+
+                  {/* View Full Contract Button */}
+                  <TouchableOpacity 
+                    style={detailModal.viewFullBtn}
+                    onPress={() => navigateToContractView(detailContract._id)}
+                  >
+                    <Ionicons name="eye-outline" size={18} color={WHITE} />
+                    <Text style={detailModal.viewFullText}>View Full Contract</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </ScrollView>
@@ -714,11 +947,64 @@ export default function Contracts({ onNavigate }) {
         </View>
       </Modal>
 
+      {/* ── Pause Contract Modal with Reason ── */}
+      <Modal transparent animationType="fade" visible={showPauseModal} onRequestClose={() => { setShowPauseModal(false); setPauseReason(''); }}>
+        <View style={modal.overlay}>
+          <View style={modal.card}>
+            <View style={[modal.iconWrap, { backgroundColor: ORANGE + '15' }]}>
+              <Ionicons name="pause-circle-outline" size={40} color={ORANGE} />
+            </View>
+            <Text style={modal.title}>Pause Contract</Text>
+            <Text style={modal.desc}>
+              Are you sure you want to pause this contract? Please provide a reason below.
+            </Text>
+            
+            <View style={modal.reasonWrap}>
+              <Text style={modal.reasonLabel}>Reason for Pausing *</Text>
+              <TextInput
+                style={modal.reasonInput}
+                placeholder="Please explain why you're pausing this contract..."
+                placeholderTextColor={TEXT_LIGHT}
+                value={pauseReason}
+                onChangeText={setPauseReason}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+              <Text style={modal.reasonCount}>
+                {pauseReason.length}/500 characters
+              </Text>
+            </View>
+            
+            <View style={modal.actions}>
+              <TouchableOpacity 
+                style={[modal.btn, modal.cancelBtn]} 
+                onPress={() => { setShowPauseModal(false); setPauseReason(''); }}
+                disabled={isPausing}
+              >
+                <Text style={modal.cancelTxt}>Keep Active</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[modal.btn, { backgroundColor: ORANGE }, (!pauseReason.trim() || isPausing) && { opacity: 0.6 }]} 
+                onPress={handlePauseContract}
+                disabled={!pauseReason.trim() || isPausing}
+              >
+                {isPausing ? (
+                  <ActivityIndicator size="small" color={WHITE} />
+                ) : (
+                  <Text style={modal.dangerTxt}>Pause Contract</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Status Update Modal ── */}
       <Modal transparent animationType="fade" visible={showStatusModal} onRequestClose={() => setShowStatusModal(false)}>
         <View style={modal.overlay}>
           <View style={modal.card}>
-            <View style={modal.iconWrap}>
+            <View style={[modal.iconWrap, { backgroundColor: BLUE + '15' }]}>
               <Ionicons name="swap-horizontal-outline" size={40} color={BLUE} />
             </View>
             <Text style={modal.title}>Update Status</Text>
@@ -727,23 +1013,21 @@ export default function Contracts({ onNavigate }) {
             </Text>
             <View style={modal.statusOptions}>
               {['active', 'paused', 'completed', 'cancelled'].map((status) => {
-                const isActive = selectedContractForStatus?.status === status;
                 const color = STATUS_COLORS[status];
+                const label = STATUS_LABELS[status];
                 return (
                   <TouchableOpacity
                     key={status}
-                    style={[
-                      modal.statusBtn,
-                      isActive && { backgroundColor: color + '15', borderColor: color }
-                    ]}
+                    style={modal.statusBtn}
                     onPress={() => handleUpdateStatus(status)}
                     activeOpacity={0.7}
+                    disabled={isUpdatingStatus}
                   >
                     <View style={[modal.statusDot, { backgroundColor: color }]} />
-                    <Text style={[modal.statusLabel, isActive && { color, fontWeight: '700' }]}>
-                      {STATUS_LABELS[status]}
-                    </Text>
-                    {isActive && <Ionicons name="checkmark-circle" size={16} color={color} />}
+                    <Text style={modal.statusLabel}>{label}</Text>
+                    {isUpdatingStatus && selectedContractForStatus?.status === status && (
+                      <ActivityIndicator size="small" color={BLUE} />
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -860,7 +1144,7 @@ const card = StyleSheet.create({
   date: { fontSize: 10, color: TEXT_LIGHT },
   actions: { flexDirection: 'row', gap: 6 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
-  statusBtn: { borderColor: BLUE + '30', backgroundColor: BLUE + '0D' },
+  viewBtn: { borderColor: BLUE + '30', backgroundColor: BLUE + '0D' },
   cancelBtn: { borderColor: RED + '30', backgroundColor: RED + '0D' },
   actionText: { fontSize: 10, fontWeight: '600' },
 });
@@ -886,6 +1170,8 @@ const detailModal = StyleSheet.create({
   freelancerInfo: { flex: 1 },
   freelancerName: { fontSize: 14, fontWeight: '700', color: TEXT_MAIN },
   freelancerRole: { fontSize: 11, color: TEXT_LIGHT },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  ratingText: { fontSize: 11, color: TEXT_MUTED, fontWeight: '600' },
   messageBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center' },
 
   section: { marginBottom: 16 },
@@ -894,6 +1180,7 @@ const detailModal = StyleSheet.create({
   sectionDesc: { fontSize: 13, color: TEXT_MUTED, lineHeight: 18, marginTop: 4 },
 
   budgetText: { fontSize: 18, fontWeight: '800', color: GOLD_DK },
+  budgetSub: { fontSize: 12, color: TEXT_LIGHT, marginTop: 2 },
 
   grid: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   gridItem: { flex: 1, backgroundColor: BG, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: BORDER },
@@ -907,14 +1194,34 @@ const detailModal = StyleSheet.create({
   progressTrack: { height: 6, backgroundColor: BORDER, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: BLUE, borderRadius: 3 },
 
+  milestoneItem: { backgroundColor: BG, borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
+  milestoneHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  milestoneTitle: { fontSize: 13, fontWeight: '600', color: TEXT_MAIN },
+  milestoneStatus: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
+  milestoneStatusText: { fontSize: 9, fontWeight: '700' },
+  milestoneDesc: { fontSize: 12, color: TEXT_MUTED, marginBottom: 6 },
+  milestoneFooter: { flexDirection: 'row', justifyContent: 'space-between' },
+  milestoneAmount: { fontSize: 12, fontWeight: '700', color: GOLD_DK },
+  milestoneDate: { fontSize: 11, color: TEXT_LIGHT },
+
+  docItem: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: BG, borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: BORDER },
+  docInfo: { flex: 1 },
+  docName: { fontSize: 13, color: TEXT_MAIN, fontWeight: '500' },
+  docMeta: { fontSize: 10, color: TEXT_LIGHT },
+
   reasonBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: RED + '10', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: RED + '30' },
   reasonText: { flex: 1, fontSize: 13, color: RED, lineHeight: 18 },
 
-  actionRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 10 },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  actionBtn: { flex: 1, minWidth: 80, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10 },
   cancelBtn: { backgroundColor: RED },
-  statusBtn: { backgroundColor: BLUE },
-  actionBtnText: { fontSize: 14, fontWeight: '700', color: WHITE },
+  pauseBtn: { backgroundColor: ORANGE },
+  resumeBtn: { backgroundColor: BLUE },
+  completeBtn: { backgroundColor: GREEN },
+  actionBtnText: { fontSize: 13, fontWeight: '700', color: WHITE },
+
+  viewFullBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: NAVY, paddingVertical: 14, borderRadius: 10, marginTop: 12 },
+  viewFullText: { fontSize: 14, fontWeight: '700', color: WHITE },
 });
 
 // ── Modal Styles ─────────────────────────────────────────────────────────────
@@ -926,8 +1233,8 @@ const modal = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2, shadowRadius: 24, elevation: 8,
   },
-  iconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: RED + '10', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  title: { fontSize: 18, fontWeight: '800', color: TEXT_MAIN, marginBottom: 8 },
+  iconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: RED + '10', alignItems: 'center', justifyContent: 'center', marginBottom: 16, alignSelf: 'center' },
+  title: { fontSize: 18, fontWeight: '800', color: TEXT_MAIN, textAlign: 'center', marginBottom: 8 },
   desc: { fontSize: 13, color: TEXT_LIGHT, textAlign: 'center', lineHeight: 20, marginBottom: 16 },
   
   reasonWrap: { width: '100%', marginBottom: 20 },

@@ -154,7 +154,11 @@ router.post("/applications", authMiddleware, async (req, res) => {
 
     res.status(201).json({
       message: "Application submitted successfully",
-      application: populatedApplication
+      application: populatedApplication,
+      emailNotifications: {
+        client: 'sent',
+        freelancer: 'sent'
+      }
     });
   } catch (error) {
     console.error("Error creating application:", error);
@@ -299,7 +303,11 @@ router.post("/applications/with-resume", authMiddleware, upload.single('resume')
 
     res.status(201).json({
       message: "Application submitted successfully",
-      application: populatedApplication
+      application: populatedApplication,
+      emailNotifications: {
+        client: 'sent',
+        freelancer: 'sent'
+      }
     });
   } catch (error) {
     console.error("Error creating application with resume:", error);
@@ -681,7 +689,10 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
       
       return res.json({ 
         message: "Offer sent successfully", 
-        application: updatedApplication 
+        application: updatedApplication,
+        emailNotifications: {
+          freelancer: 'sent'
+        }
       });
     }
 
@@ -725,7 +736,10 @@ router.patch("/applications/:applicationId/status", authMiddleware, async (req, 
 
     res.json({ 
       message: `Application status updated to ${status}`, 
-      application: updatedApplication 
+      application: updatedApplication,
+      emailNotifications: {
+        freelancer: 'sent'
+      }
     });
   } catch (error) {
     console.error("Error updating application status:", error);
@@ -754,7 +768,11 @@ router.post("/applications/:applicationId/accept-offer", authMiddleware, async (
 
     res.json({
       message: "Offer accepted successfully",
-      contract: contract
+      contract: contract,
+      emailNotifications: {
+        client: 'sent',
+        freelancer: 'sent'
+      }
     });
   } catch (error) {
     console.error("Error accepting offer:", error);

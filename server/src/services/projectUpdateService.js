@@ -1,3 +1,4 @@
+// services/projectUpdateService.js
 import ProjectUpdate from '../models/ProjectUpdate.js';
 import Contract from '../models/Contract.js';
 import NotificationService from './notificationService.js';
@@ -19,9 +20,16 @@ class ProjectUpdateService {
     priority = 'normal'
   }) {
     // Verify contract exists and is active
-    const contract = await Contract.findById(contract_id);
-    if (!contract || contract.status !== 'active') {
-      throw new Error('Contract not found or not active');
+    const contract = await Contract.findById(contract_id)
+      .populate('client_id freelancer_id');
+    
+    if (!contract) {
+      throw new Error('Contract not found');
+    }
+    
+    // Allow updates even if contract is not active (for completed contracts too)
+    if (!['active', 'completed', 'paused'].includes(contract.status)) {
+      throw new Error(`Contract is ${contract.status}. Updates can only be made on active, paused, or completed contracts.`);
     }
     
     const projectUpdate = new ProjectUpdate({
@@ -32,7 +40,7 @@ class ProjectUpdateService {
       title,
       description,
       update_type,
-      attachments,
+      attachments: attachments || [],
       created_by,
       created_by_role,
       due_date,
@@ -42,6 +50,45 @@ class ProjectUpdateService {
     });
     
     await projectUpdate.save();
+    
+    // ==================== LOG TO CONTRACT ACTIVITY ====================
+    try {
+      const userModel = created_by_role === 'client' ? 'Client' : 'Freelancer';
+      const userName = created_by_role === 'client' 
+        ? (contract.client_id?.first_name || 'Client') 
+        : (contract.freelancer_id?.first_name || 'Freelancer');
+      
+      const updateMessages = {
+        progress: 'submitted a progress update',
+        milestone: 'completed a milestone',
+        delivery: 'submitted work for review',
+        revision: 'requested revisions',
+        feedback: 'provided feedback',
+        announcement: 'made an announcement',
+      };
+      
+      contract.activity_log.push({
+        type: 'project_update',
+        user_id: created_by,
+        user_model: userModel,
+        user_name: userName,
+        message: `${userName} ${updateMessages[update_type] || 'submitted an update'}: "${title}"`,
+        data: {
+          project_update_id: projectUpdate._id,
+          update_type: update_type,
+          title: title,
+          description: description || null,
+          attachments_count: attachments ? attachments.length : 0,
+          status: projectUpdate.status,
+        }
+      });
+      
+      await contract.save();
+      console.log(`✅ Activity logged: Project update "${title}" added to contract ${contract_id}`);
+    } catch (logError) {
+      console.error('❌ Error logging project update to contract:', logError);
+      // Continue even if logging fails - don't block the main operation
+    }
     
     // Determine notification recipient
     let recipient_id, recipient_model, sender_id, sender_model;
@@ -97,7 +144,7 @@ class ProjectUpdateService {
     comment
   }) {
     const update = await ProjectUpdate.findById(project_update_id)
-      .populate('client_id freelancer_id');
+      .populate('client_id freelancer_id contract_id');
     
     if (!update) {
       throw new Error('Project update not found');
@@ -109,6 +156,7 @@ class ProjectUpdateService {
       throw new Error('Unauthorized');
     }
     
+    const oldStatus = update.status;
     update.status = status;
     update.last_updated_by = user_id;
     
@@ -130,6 +178,40 @@ class ProjectUpdateService {
     
     await update.save();
     
+    // ==================== LOG TO CONTRACT ACTIVITY ====================
+    try {
+      const contract = await Contract.findById(update.contract_id)
+        .populate('client_id freelancer_id');
+      
+      if (contract) {
+        const isFreelancer = update.freelancer_id._id.toString() === user_id.toString();
+        const userModel = isFreelancer ? 'Freelancer' : 'Client';
+        const userName = isFreelancer 
+          ? (contract.freelancer_id?.first_name || 'Freelancer')
+          : (contract.client_id?.first_name || 'Client');
+        
+        contract.activity_log.push({
+          type: 'status_update',
+          user_id: user_id,
+          user_model: userModel,
+          user_name: userName,
+          message: `${userName} updated project update status from "${oldStatus}" to "${status}"`,
+          data: {
+            project_update_id: update._id,
+            old_status: oldStatus,
+            new_status: status,
+            title: update.title,
+            comment: comment || null,
+          }
+        });
+        
+        await contract.save();
+        console.log(`✅ Activity logged: Project update status changed to "${status}"`);
+      }
+    } catch (logError) {
+      console.error('❌ Error logging status update to contract:', logError);
+    }
+    
     return update;
   }
   
@@ -149,6 +231,71 @@ class ProjectUpdateService {
       .limit(limit);
     
     return updates;
+  }
+  
+  // ==================== ADD ATTACHMENT WITH LOGGING ====================
+  static async addAttachment({
+    project_update_id,
+    file,
+    uploaded_by,
+    uploaded_by_role,
+  }) {
+    const update = await ProjectUpdate.findById(project_update_id)
+      .populate('client_id freelancer_id');
+    
+    if (!update) {
+      throw new Error('Project update not found');
+    }
+    
+    const attachment = {
+      file_name: file.originalname || file.filename,
+      file_url: file.path,
+      public_id: file.filename,
+      mime_type: file.mimetype,
+      file_size: file.size,
+      uploaded_by: uploaded_by,
+      uploaded_by_role: uploaded_by_role,
+      uploaded_at: new Date(),
+    };
+    
+    update.attachments.push(attachment);
+    await update.save();
+    
+    // ==================== LOG TO CONTRACT ACTIVITY ====================
+    try {
+      const contract = await Contract.findById(update.contract_id)
+        .populate('client_id freelancer_id');
+      
+      if (contract) {
+        const isFreelancer = uploaded_by_role === 'freelancer';
+        const userModel = isFreelancer ? 'Freelancer' : 'Client';
+        const userName = isFreelancer 
+          ? (contract.freelancer_id?.first_name || 'Freelancer')
+          : (contract.client_id?.first_name || 'Client');
+        
+        contract.activity_log.push({
+          type: 'file_upload',
+          user_id: uploaded_by,
+          user_model: userModel,
+          user_name: userName,
+          message: `${userName} uploaded file: "${attachment.file_name}"`,
+          data: {
+            project_update_id: update._id,
+            file_name: attachment.file_name,
+            file_url: attachment.file_url,
+            file_size: attachment.file_size,
+            mime_type: attachment.mime_type,
+          }
+        });
+        
+        await contract.save();
+        console.log(`✅ Activity logged: File "${attachment.file_name}" uploaded`);
+      }
+    } catch (logError) {
+      console.error('❌ Error logging file upload to contract:', logError);
+    }
+    
+    return { update, attachment };
   }
 }
 
