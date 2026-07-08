@@ -1,5 +1,3 @@
-// screens/FreelancerScreen.jsx - UPDATED with Full Client Details
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -23,9 +21,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../Redux/slices/authSlice';
 import { getFreelancerJobs, getJobById } from '../../Redux/slices/jobSlice';
 import { getFreelancerApplications } from '../../Redux/slices/applicationSlice';
+import { getNotificationCounts } from '../../Redux/slices/notificationSlice';
 import ApplyModal from '../ApplyModal';
 
-// ── Vantara Design tokens ──────────────────────────────────────────────────────────
+
 const NAVY       = '#071A3E';
 const NAVY2      = '#0D2151';
 const BLUE       = '#0055A5';
@@ -51,11 +50,10 @@ const GREEN_SOFT = '#D1FAE5';
 const GREEN_MID  = '#86EFAC';
 const RED        = '#EF4444';
 const ORANGE     = '#F97316';
-// ─────────────────────────────────────────────────────────────────────────────────
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-// ── Format Functions ───────────────────────────────────────────────────────────
+// ── Helper Functions ─────────────────────────────────────────────────────────────
 const formatLocation = (location) => {
   if (!location) return null;
   if (typeof location === 'string') return location;
@@ -196,7 +194,7 @@ function SkeletonCard() {
   );
 }
 
-// ── Client Profile Modal with FULL CONTACT DETAILS ──────────────────────────
+// ── Client Profile Modal ──────────────────────────────────────────────────────
 function ClientProfileModal({ visible, client, onClose }) {
   if (!client) return null;
 
@@ -311,7 +309,6 @@ function ClientProfileModal({ visible, client, onClose }) {
             <Text style={clientProfileStyles.clientName}>{getFullName()}</Text>
             <Text style={clientProfileStyles.companyName}>{getCompanyName()}</Text>
             
-            {/* Rating */}
             {client.rating && client.rating.average > 0 && (
               <View style={clientProfileStyles.ratingContainer}>
                 <View style={clientProfileStyles.ratingStars}>
@@ -342,7 +339,6 @@ function ClientProfileModal({ visible, client, onClose }) {
           </View>
 
           <ScrollView style={clientProfileStyles.body} showsVerticalScrollIndicator={false}>
-            {/* Bio/About */}
             {getBio() && (
               <View style={clientProfileStyles.section}>
                 <View style={clientProfileStyles.sectionHeader}>
@@ -353,7 +349,6 @@ function ClientProfileModal({ visible, client, onClose }) {
               </View>
             )}
 
-            {/* CONTACT DETAILS - Main Section */}
             <View style={clientProfileStyles.section}>
               <View style={clientProfileStyles.sectionHeader}>
                 <Ionicons name="call-outline" size={16} color={GOLD_DK} />
@@ -399,7 +394,6 @@ function ClientProfileModal({ visible, client, onClose }) {
               </View>
             </View>
 
-            {/* Company Details */}
             <View style={clientProfileStyles.section}>
               <View style={clientProfileStyles.sectionHeader}>
                 <Ionicons name="business-outline" size={16} color={BLUE} />
@@ -465,7 +459,6 @@ function ClientProfileModal({ visible, client, onClose }) {
               </View>
             </View>
 
-            {/* Skills */}
             {client.skills && client.skills.length > 0 && (
               <View style={clientProfileStyles.section}>
                 <View style={clientProfileStyles.sectionHeader}>
@@ -482,7 +475,6 @@ function ClientProfileModal({ visible, client, onClose }) {
               </View>
             )}
 
-            {/* Recent Projects */}
             {client.recent_projects && client.recent_projects.length > 0 && (
               <View style={clientProfileStyles.section}>
                 <View style={clientProfileStyles.sectionHeader}>
@@ -500,7 +492,6 @@ function ClientProfileModal({ visible, client, onClose }) {
               </View>
             )}
 
-            {/* No Details */}
             {!getBio() && !getEmail() && !getPhone() && !getWebsite() && !locationDisplay && !client.skills?.length && (
               <View style={clientProfileStyles.emptyState}>
                 <Ionicons name="person-outline" size={48} color={TEXT_LIGHT} />
@@ -691,7 +682,6 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
                 </TouchableOpacity>
               </View>
 
-              {/* Features Badges */}
               <View style={detailStyles.featuresWrap}>
                 {job.urgent && (
                   <View style={[detailStyles.featureBadge, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
@@ -713,7 +703,6 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
                 )}
               </View>
 
-              {/* Client Info Card - With Contact Details */}
               <TouchableOpacity 
                 style={detailStyles.clientInfoCard} 
                 onPress={() => onViewClient && onViewClient(client)}
@@ -829,7 +818,6 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
                   </View>
                 )}
 
-                {/* Location Section - FULL DETAILS */}
                 {hasLocation && (
                   <View style={detailStyles.section}>
                     <View style={detailStyles.sectionHeader}>
@@ -928,7 +916,6 @@ function JobDetailModal({ visible, job, onClose, isLoading, onViewClient, onAppl
                   </View>
                 )}
 
-                {/* Application Settings */}
                 {job.hiring && (
                   <View style={detailStyles.section}>
                     <View style={detailStyles.sectionHeader}>
@@ -1200,6 +1187,10 @@ export default function FreelancerScreen({ onNavigate, route }) {
   const applicationsSlice = useSelector(s => s.applications);
   const applySuccess = applicationsSlice?.applySuccess || false;
   
+  // Get unread count from notification slice
+  const notificationSlice = useSelector(s => s.notifications);
+  const unreadCount = notificationSlice?.unreadCount || 0;
+  
   const [activeTab, setActiveTab] = useState('Home');
   const [refreshing, setRefreshing] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
@@ -1217,11 +1208,26 @@ export default function FreelancerScreen({ onNavigate, route }) {
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`;
   const fullName = `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
 
+  // Check if returning from search with results
+  useEffect(() => {
+    if (route?.params?.searchQuery) {
+      setSearchQuery(route.params.searchQuery);
+      route.params.searchQuery = undefined;
+    }
+  }, [route?.params]);
+
   useEffect(() => {
     if (route?.params?.returnState?.activeTab) {
       setActiveTab(route.params.returnState.activeTab);
     }
   }, [route?.params]);
+
+  // Fetch notification counts on mount
+  useEffect(() => {
+    if (user) {
+      dispatch(getNotificationCounts());
+    }
+  }, [dispatch, user]);
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -1259,9 +1265,9 @@ export default function FreelancerScreen({ onNavigate, route }) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchJobs(), fetchApplications()]);
+    await Promise.all([fetchJobs(), fetchApplications(), dispatch(getNotificationCounts())]);
     setRefreshing(false);
-  }, [fetchJobs, fetchApplications]);
+  }, [fetchJobs, fetchApplications, dispatch]);
 
   const handleTabPress = (key) => {
     if (key === 'Home') {
@@ -1288,6 +1294,16 @@ export default function FreelancerScreen({ onNavigate, route }) {
         onNavigate('Login'); 
       } },
     ]);
+
+  const handleSearchPress = () => {
+    onNavigate('Search', { 
+      onGoBack: (searchResults) => {
+        if (searchResults) {
+          setSearchQuery(searchResults.query || '');
+        }
+      }
+    });
+  };
 
   const openJobDetail = async (job) => {
     setSelectedJob(job);
@@ -1349,16 +1365,20 @@ export default function FreelancerScreen({ onNavigate, route }) {
     const company = job.client_id?.company_name?.toLowerCase() || '';
     const business = job.client_id?.business_name?.toLowerCase() || '';
     const category = job.category?.toLowerCase() || '';
+    const location = typeof job.location === 'string' 
+      ? job.location.toLowerCase() 
+      : formatLocation(job.location)?.toLowerCase() || '';
     
     return title.includes(query) || 
            description.includes(query) || 
            skills.includes(query) ||
            company.includes(query) ||
            business.includes(query) ||
-           category.includes(query);
+           category.includes(query) ||
+           location.includes(query);
   });
 
-  console.log('📊 Jobs in render:', jobs?.length || 0, 'Filtered:', filteredJobs?.length || 0);
+  console.log('📊 Jobs in render:', jobs?.length || 0, 'Filtered:', filteredJobs?.length || 0, 'Search:', searchQuery);
 
   const renderJobItem = useCallback(({ item: job }) => {
     const locationDisplay = formatLocation(job.location) || 'Remote';
@@ -1549,25 +1569,40 @@ export default function FreelancerScreen({ onNavigate, route }) {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.searchContainer}>
+      {/* Search bar that navigates to Search screen */}
+      <TouchableOpacity 
+        style={styles.searchContainer} 
+        onPress={handleSearchPress}
+        activeOpacity={0.7}
+      >
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={20} color={TEXT_LIGHT} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search jobs by title, skills, or company..."
-            placeholderTextColor={TEXT_LIGHT}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-          />
+          <Text style={styles.searchPlaceholder}>Search jobs by title, skills, or company...</Text>
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
-              <Ionicons name="close-circle" size={18} color={TEXT_LIGHT} />
-            </TouchableOpacity>
+            <View style={styles.searchBadge}>
+              <Text style={styles.searchBadgeText}>{filteredJobs.length} results</Text>
+            </View>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
+
+      {/* Show active search filter */}
+      {searchQuery.length > 0 && (
+        <View style={styles.activeFilterContainer}>
+          <View style={styles.activeFilterChip}>
+            <Ionicons name="search" size={14} color={BLUE} />
+            <Text style={styles.activeFilterText}>Search: "{searchQuery}"</Text>
+            <TouchableOpacity 
+              onPress={() => setSearchQuery('')} 
+              style={styles.clearFilterBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close-circle" size={18} color={TEXT_LIGHT} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.resultCountText}>{filteredJobs.length} job{filteredJobs.length !== 1 ? 's' : ''} found</Text>
+        </View>
+      )}
 
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
@@ -1583,12 +1618,9 @@ export default function FreelancerScreen({ onNavigate, route }) {
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
-          Available Jobs
+          {searchQuery.length > 0 ? 'Search Results' : 'Available Jobs'}
           {!isInitialLoading && filteredJobs?.length > 0 && (
             <Text style={styles.sectionCount}> ({filteredJobs.length})</Text>
-          )}
-          {searchQuery.length > 0 && (
-            <Text style={styles.searchResultText}> • Results for "{searchQuery}"</Text>
           )}
         </Text>
       </View>
@@ -1632,8 +1664,19 @@ export default function FreelancerScreen({ onNavigate, route }) {
               <Text style={styles.topbarTagline}>Freelancer Hub</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.notifBtn} onPress={() => onNavigate('Notification')}>
+          <TouchableOpacity 
+            style={styles.notifBtn} 
+            onPress={() => onNavigate('Notification')}
+            activeOpacity={0.7}
+          >
             <Ionicons name="notifications-outline" size={22} color={WHITE} />
+            {unreadCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -1735,6 +1778,25 @@ const styles = StyleSheet.create({
   topbarBrand: { fontSize: 16, fontWeight: '800', color: WHITE, letterSpacing: -0.2 },
   topbarTagline: { fontSize: 9, fontWeight: '500', color: GOLD_LT, letterSpacing: 1.44, textTransform: 'uppercase', marginTop: 1 },
   notifBtn: { position: 'relative', padding: 4 },
+  notifBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: RED,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: NAVY,
+  },
+  notifBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: WHITE,
+  },
 
   welcomeHeader: {
     flexDirection: 'row',
@@ -1807,14 +1869,53 @@ const styles = StyleSheet.create({
   searchIcon: {
     marginRight: 10,
   },
-  searchInput: {
+  searchPlaceholder: {
     flex: 1,
     fontSize: 14,
-    color: TEXT_MAIN,
-    paddingVertical: 10,
+    color: TEXT_LIGHT,
   },
-  clearSearchBtn: {
-    padding: 4,
+  searchBadge: {
+    backgroundColor: `${BLUE}10`,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  searchBadgeText: {
+    fontSize: 11,
+    color: BLUE,
+    fontWeight: '600',
+  },
+
+  activeFilterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  activeFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: WHITE,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: `${BLUE}20`,
+  },
+  activeFilterText: {
+    fontSize: 13,
+    color: TEXT_MAIN,
+    fontWeight: '500',
+  },
+  clearFilterBtn: {
+    padding: 2,
+  },
+  resultCountText: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    fontWeight: '500',
   },
 
   statsRow: {
@@ -1870,11 +1971,6 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     fontWeight: '500', 
     color: TEXT_MUTED 
-  },
-  searchResultText: {
-    fontSize: 13,
-    fontWeight: '400',
-    color: TEXT_MUTED,
   },
 
   jobsListContainer: { 
@@ -2741,7 +2837,6 @@ const clientProfileStyles = StyleSheet.create({
     lineHeight: 22 
   },
   
-  // Contact Card Styles
   contactCard: {
     backgroundColor: WHITE,
     borderRadius: 12,

@@ -13,12 +13,10 @@ import {
   ScrollView,
   Modal,
   BackHandler,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import * as ImagePicker from 'expo-image-picker';
 import { 
   registerClient, 
   verifyEmail,
@@ -64,7 +62,6 @@ export default function ClientRegistration({ onNavigate }) {
   const [verificationCode, setVerificationCode] = useState(['', '', '', '', '', '']);
   const [countdown, setCountdown] = useState(0);
   const [canResend, setCanResend] = useState(true);
-  const [profileImage, setProfileImage] = useState(null);
   const [clientType, setClientType] = useState('personal'); // 'personal' or 'business'
   
   const [formData, setFormData] = useState({
@@ -153,38 +150,6 @@ export default function ClientRegistration({ onNavigate }) {
     setCanResend(false);
   };
 
-  // ── Image Picker ──────────────────────────────────────────────────────────
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant camera roll permissions to upload a profile picture.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-      base64: false,
-    });
-
-    if (!result.canceled) {
-      const asset = result.assets[0];
-      setProfileImage({
-        uri: asset.uri,
-        type: asset.type || 'image/jpeg',
-        fileName: asset.fileName || `profile_${Date.now()}.jpg`,
-        width: asset.width,
-        height: asset.height,
-      });
-    }
-  };
-
-  const removeImage = () => {
-    setProfileImage(null);
-  };
-
   // ── Form Validation ──────────────────────────────────────────────────────
   const validateForm = () => {
     const newErrors = {};
@@ -255,7 +220,6 @@ export default function ClientRegistration({ onNavigate }) {
       country: formData.country || null,
       city: formData.city || null,
       address: formData.address || null,
-      profile_picture: profileImage,
       terms_accepted: true,
       client_type: clientType,
     };
@@ -367,7 +331,6 @@ export default function ClientRegistration({ onNavigate }) {
     setServerError(null);
     setVerificationCode(['', '', '', '', '', '']);
     setShowVerificationModal(false);
-    setProfileImage(null);
     setClientType('personal');
   };
 
@@ -414,7 +377,7 @@ export default function ClientRegistration({ onNavigate }) {
           <View style={styles.verificationModalContainer}>
             <View style={styles.verificationHeader}>
               <View style={styles.verificationIconContainer}>
-                <Ionicons name="mail-outline" size={40} color={BLUE} />
+                <Ionicons name="mail-outline" size={36} color={BLUE} />
               </View>
               <Text style={styles.verificationTitle}>Verify Your Email</Text>
               <Text style={styles.verificationSubtitle}>
@@ -435,6 +398,7 @@ export default function ClientRegistration({ onNavigate }) {
                   onChangeText={(text) => handleVerificationCodeChange(text, index)}
                   onKeyPress={(e) => handleVerificationKeyPress(e, index)}
                   autoFocus={index === 0}
+                  textAlign="center"
                 />
               ))}
             </View>
@@ -443,6 +407,7 @@ export default function ClientRegistration({ onNavigate }) {
               style={styles.verifyButton}
               onPress={handleVerifyEmail}
               disabled={isLoading}
+              activeOpacity={0.85}
             >
               {isLoading
                 ? <ActivityIndicator color={WHITE} />
@@ -475,6 +440,7 @@ export default function ClientRegistration({ onNavigate }) {
                   ]
                 );
               }}
+              activeOpacity={0.7}
             >
               <Text style={styles.verificationCloseText}>Cancel</Text>
             </TouchableOpacity>
@@ -493,12 +459,12 @@ export default function ClientRegistration({ onNavigate }) {
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Terms and Conditions</Text>
-              <TouchableOpacity onPress={() => setShowTermsModal(false)} style={styles.modalClose}>
-                <Ionicons name="close" size={24} color={TEXT_MUTED} />
+              <TouchableOpacity onPress={() => setShowTermsModal(false)} style={styles.modalClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={22} color={TEXT_MUTED} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalContent}>
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
               <Text style={styles.termsText}>
                 <Text style={styles.termsHeading}>1. Acceptance of Terms{'\n\n'}</Text>
                 By registering as a Client on Taskra, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our platform.
@@ -547,10 +513,10 @@ export default function ClientRegistration({ onNavigate }) {
             </ScrollView>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.modalButtonCancel} onPress={() => setShowTermsModal(false)}>
+              <TouchableOpacity style={styles.modalButtonCancel} onPress={() => setShowTermsModal(false)} activeOpacity={0.75}>
                 <Text style={styles.modalButtonCancelText}>Close</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalButtonAccept} onPress={handleAcceptTerms}>
+              <TouchableOpacity style={styles.modalButtonAccept} onPress={handleAcceptTerms} activeOpacity={0.85}>
                 <Text style={styles.modalButtonAcceptText}>Accept Terms</Text>
               </TouchableOpacity>
             </View>
@@ -575,6 +541,7 @@ export default function ClientRegistration({ onNavigate }) {
             <TouchableOpacity 
               style={styles.backButton} 
               onPress={() => onNavigate('RoleSelection')}
+              activeOpacity={0.75}
             >
               <View style={styles.backIconWrap}>
                 <Ionicons name="arrow-back" size={18} color={BLUE} />
@@ -604,28 +571,6 @@ export default function ClientRegistration({ onNavigate }) {
             )}
 
             <View style={styles.form}>
-              {/* ── Profile Picture Section ── */}
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Profile Picture</Text>
-                
-                <View style={styles.profilePictureContainer}>
-                  {profileImage ? (
-                    <View style={styles.profileImageWrapper}>
-                      <Image source={{ uri: profileImage.uri }} style={styles.profileImage} />
-                      <TouchableOpacity style={styles.removeImageBtn} onPress={removeImage}>
-                        <Ionicons name="close-circle" size={24} color={ERROR} />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
-                      <Ionicons name="camera-outline" size={32} color={BLUE} />
-                      <Text style={styles.uploadButtonText}>Upload Profile Photo</Text>
-                      <Text style={styles.uploadButtonSubtext}>JPG, PNG • Max 5MB</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-
               {/* ── Client Type Selection ── */}
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Account Type</Text>
@@ -642,13 +587,18 @@ export default function ClientRegistration({ onNavigate }) {
                     onPress={() => selectClientType('personal')}
                     activeOpacity={0.7}
                   >
+                    {clientType === 'personal' && (
+                      <View style={styles.clientTypeCheck}>
+                        <Ionicons name="checkmark-circle" size={18} color={BLUE} />
+                      </View>
+                    )}
                     <View style={[
                       styles.clientTypeIcon,
                       clientType === 'personal' && styles.clientTypeIconActive,
                     ]}>
                       <Ionicons 
                         name="person-outline" 
-                        size={24} 
+                        size={22} 
                         color={clientType === 'personal' ? WHITE : BLUE} 
                       />
                     </View>
@@ -661,11 +611,6 @@ export default function ClientRegistration({ onNavigate }) {
                     <Text style={styles.clientTypeDescription}>
                       Hire freelancers for personal projects
                     </Text>
-                    {clientType === 'personal' && (
-                      <View style={styles.clientTypeCheck}>
-                        <Ionicons name="checkmark-circle" size={20} color={BLUE} />
-                      </View>
-                    )}
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -676,13 +621,18 @@ export default function ClientRegistration({ onNavigate }) {
                     onPress={() => selectClientType('business')}
                     activeOpacity={0.7}
                   >
+                    {clientType === 'business' && (
+                      <View style={styles.clientTypeCheck}>
+                        <Ionicons name="checkmark-circle" size={18} color={BLUE} />
+                      </View>
+                    )}
                     <View style={[
                       styles.clientTypeIcon,
                       clientType === 'business' && styles.clientTypeIconActive,
                     ]}>
                       <Ionicons 
                         name="business-outline" 
-                        size={24} 
+                        size={22} 
                         color={clientType === 'business' ? WHITE : BLUE} 
                       />
                     </View>
@@ -695,11 +645,6 @@ export default function ClientRegistration({ onNavigate }) {
                     <Text style={styles.clientTypeDescription}>
                       Hire for your company or organization
                     </Text>
-                    {clientType === 'business' && (
-                      <View style={styles.clientTypeCheck}>
-                        <Ionicons name="checkmark-circle" size={20} color={BLUE} />
-                      </View>
-                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -709,7 +654,7 @@ export default function ClientRegistration({ onNavigate }) {
                 <Text style={styles.sectionLabel}>Personal Information</Text>
 
                 <View style={styles.row}>
-                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                  <View style={[styles.inputGroup, styles.rowItem]}>
                     <Text style={styles.label}>First Name <Text style={styles.required}>*</Text></Text>
                     <TextInput
                       style={[styles.input, errors.first_name && styles.inputError]}
@@ -721,7 +666,7 @@ export default function ClientRegistration({ onNavigate }) {
                     {errors.first_name && <Text style={styles.fieldErrorText}>{errors.first_name}</Text>}
                   </View>
                   
-                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                  <View style={[styles.inputGroup, styles.rowItem]}>
                     <Text style={styles.label}>Last Name <Text style={styles.required}>*</Text></Text>
                     <TextInput
                       style={[styles.input, errors.last_name && styles.inputError]}
@@ -804,11 +749,11 @@ export default function ClientRegistration({ onNavigate }) {
                   </View>
 
                   <View style={styles.row}>
-                    <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                    <View style={[styles.inputGroup, styles.rowItem]}>
                       <Text style={styles.label}>Industry <Text style={styles.required}>*</Text></Text>
                       <TextInput
                         style={[styles.input, errors.industry && styles.inputError]}
-                        placeholder="e.g., Technology, Healthcare"
+                        placeholder="e.g., Technology"
                         placeholderTextColor={TEXT_LIGHT}
                         value={formData.industry}
                         onChangeText={(text) => updateField('industry', text)}
@@ -816,11 +761,11 @@ export default function ClientRegistration({ onNavigate }) {
                       {errors.industry && <Text style={styles.fieldErrorText}>{errors.industry}</Text>}
                     </View>
                     
-                    <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                    <View style={[styles.inputGroup, styles.rowItem]}>
                       <Text style={styles.label}>Company Size <Text style={styles.required}>*</Text></Text>
                       <TextInput
                         style={[styles.input, errors.company_size && styles.inputError]}
-                        placeholder="e.g., 1-10, 50-100"
+                        placeholder="e.g., 1-10"
                         placeholderTextColor={TEXT_LIGHT}
                         value={formData.company_size}
                         onChangeText={(text) => updateField('company_size', text)}
@@ -830,22 +775,22 @@ export default function ClientRegistration({ onNavigate }) {
                   </View>
 
                   <View style={styles.row}>
-                    <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                    <View style={[styles.inputGroup, styles.rowItem]}>
                       <Text style={styles.label}>Registration Number</Text>
                       <TextInput
                         style={styles.input}
-                        placeholder="Company reg. number (optional)"
+                        placeholder="Optional"
                         placeholderTextColor={TEXT_LIGHT}
                         value={formData.company_registration_number}
                         onChangeText={(text) => updateField('company_registration_number', text)}
                       />
                     </View>
                     
-                    <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                    <View style={[styles.inputGroup, styles.rowItem]}>
                       <Text style={styles.label}>Tax ID</Text>
                       <TextInput
                         style={styles.input}
-                        placeholder="Tax ID (optional)"
+                        placeholder="Optional"
                         placeholderTextColor={TEXT_LIGHT}
                         value={formData.tax_id}
                         onChangeText={(text) => updateField('tax_id', text)}
@@ -860,7 +805,7 @@ export default function ClientRegistration({ onNavigate }) {
                 <Text style={styles.sectionLabel}>Location</Text>
 
                 <View style={styles.row}>
-                  <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                  <View style={[styles.inputGroup, styles.rowItem]}>
                     <Text style={styles.label}>Country</Text>
                     <TextInput
                       style={styles.input}
@@ -871,7 +816,7 @@ export default function ClientRegistration({ onNavigate }) {
                     />
                   </View>
                   
-                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                  <View style={[styles.inputGroup, styles.rowItem]}>
                     <Text style={styles.label}>City</Text>
                     <TextInput
                       style={styles.input}
@@ -913,7 +858,11 @@ export default function ClientRegistration({ onNavigate }) {
                       value={formData.password}
                       onChangeText={(text) => updateField('password', text)}
                     />
-                    <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
+                    <TouchableOpacity
+                      style={styles.eyeBtn}
+                      onPress={() => setShowPassword(!showPassword)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
                       <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={TEXT_LIGHT} />
                     </TouchableOpacity>
                   </View>
@@ -931,7 +880,11 @@ export default function ClientRegistration({ onNavigate }) {
                       value={formData.confirm_password}
                       onChangeText={(text) => updateField('confirm_password', text)}
                     />
-                    <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                    <TouchableOpacity
+                      style={styles.eyeBtn}
+                      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
                       <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={TEXT_LIGHT} />
                     </TouchableOpacity>
                   </View>
@@ -1038,7 +991,7 @@ const styles = StyleSheet.create({
   },
   roleBadgeText: { fontSize: 13, color: BLUE, fontWeight: '600' },
   title: { fontSize: 28, fontWeight: '800', color: TEXT_MAIN, textAlign: 'center', letterSpacing: -0.5, lineHeight: 34, marginBottom: 8 },
-  subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center' },
+  subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center', lineHeight: 20, paddingHorizontal: 8 },
 
   // Server error
   serverErrorContainer: {
@@ -1053,6 +1006,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
     borderRadius: 8,
     alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
   },
   serverErrorText: { fontSize: 13, color: ERROR, flex: 1, lineHeight: 18 },
 
@@ -1073,18 +1027,18 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 0.8,
     marginBottom: 2,
   },
-  row: { flexDirection: 'row' },
+  row: { flexDirection: 'row', gap: 12 },
+  rowItem: { flex: 1 },
 
   // Client Type Styles
   clientTypeSubtext: {
     fontSize: 13,
     color: TEXT_MUTED,
-    marginBottom: 4,
+    marginTop: -8,
   },
   clientTypeContainer: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 4,
   },
   clientTypeOption: {
     flex: 1,
@@ -1092,9 +1046,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 2,
     borderColor: BORDER,
-    padding: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 14,
     alignItems: 'center',
-    position: 'relative',
   },
   clientTypeOptionActive: {
     borderColor: BLUE,
@@ -1107,7 +1061,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${BLUE}10`,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   clientTypeIconActive: {
     backgroundColor: BLUE,
@@ -1117,6 +1071,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: TEXT_MAIN,
     marginBottom: 4,
+    textAlign: 'center',
   },
   clientTypeLabelActive: {
     color: BLUE,
@@ -1125,61 +1080,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: TEXT_LIGHT,
     textAlign: 'center',
+    lineHeight: 15,
   },
   clientTypeCheck: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-  },
-
-  // Profile Picture
-  profilePictureContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-  },
-  profileImageWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-  },
-  profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: BLUE,
-  },
-  removeImageBtn: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: WHITE,
-    borderRadius: 12,
-  },
-  uploadButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: `${BLUE}08`,
-    borderWidth: 2,
-    borderColor: `${BLUE}30`,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  uploadButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: BLUE,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  uploadButtonSubtext: {
-    fontSize: 10,
-    color: TEXT_LIGHT,
-    marginTop: 2,
-    textAlign: 'center',
+    top: 10,
+    right: 10,
+    zIndex: 1,
   },
 
   // Inputs
@@ -1202,9 +1109,15 @@ const styles = StyleSheet.create({
   fieldErrorText: { fontSize: 11, color: ERROR },
 
   // Password
-  passwordWrap: { position: 'relative' },
+  passwordWrap: { position: 'relative', justifyContent: 'center' },
   passwordInput: { paddingRight: 46 },
-  eyeBtn: { position: 'absolute', right: 14, top: 14 },
+  eyeBtn: {
+    position: 'absolute',
+    right: 14,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
   // Checkbox
   checkboxRow: {
@@ -1218,9 +1131,10 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: `${BLUE}40`,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: BG,
+    flexShrink: 0,
   },
   checkboxChecked: { backgroundColor: BLUE, borderColor: BLUE },
-  checkboxLabel: { fontSize: 14, color: TEXT_MUTED, flex: 1 },
+  checkboxLabel: { fontSize: 14, color: TEXT_MUTED, flex: 1, lineHeight: 20 },
   checkboxLink: { color: BLUE, fontWeight: '700' },
 
   // Verification Modal Styles
@@ -1244,28 +1158,29 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 16,
   },
-  verificationTitle: { fontSize: 22, fontWeight: '700', color: TEXT_MAIN, marginBottom: 8 },
+  verificationTitle: { fontSize: 21, fontWeight: '700', color: TEXT_MAIN, marginBottom: 8, textAlign: 'center' },
   verificationSubtitle: {
     fontSize: 14, color: TEXT_MUTED, textAlign: 'center',
     marginBottom: 24, lineHeight: 20,
   },
   verificationEmail: { color: BLUE, fontWeight: '600' },
   verificationCodeContainer: {
-    flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 28,
+    flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 28,
   },
   verificationInput: {
-    width: 44, height: 56,
+    width: 44, height: 54,
     backgroundColor: BG,
     borderWidth: 2, borderColor: BORDER,
     borderRadius: 12,
     textAlign: 'center',
-    fontSize: 22, fontWeight: '600', color: TEXT_MAIN,
+    fontSize: 20, fontWeight: '700', color: TEXT_MAIN,
   },
   verifyButton: {
     backgroundColor: BLUE,
     borderRadius: 14, paddingVertical: 14,
-    width: '100%', alignItems: 'center',
+    width: '100%', alignItems: 'center', justifyContent: 'center',
     marginBottom: 16,
+    minHeight: 50,
     shadowColor: BLUE, shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 3,
   },
@@ -1284,10 +1199,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(7,26,62,0.55)',
     justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: 20,
   },
   modalContainer: {
     backgroundColor: CARD, borderRadius: 20,
-    width: '90%', maxHeight: '85%',
+    width: '100%', maxWidth: 420, maxHeight: '85%',
     overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25, shadowRadius: 8, elevation: 5,
@@ -1296,7 +1212,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: 20, borderBottomWidth: 1, borderBottomColor: BORDER, backgroundColor: CARD,
   },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: TEXT_MAIN },
+  modalTitle: { fontSize: 19, fontWeight: '700', color: TEXT_MAIN },
   modalClose: { padding: 4 },
   modalContent: { padding: 20, maxHeight: '70%' },
   termsText: { fontSize: 14, lineHeight: 22, color: TEXT_MUTED },
@@ -1308,12 +1224,12 @@ const styles = StyleSheet.create({
   },
   modalButtonCancel: {
     flex: 1, paddingVertical: 12, borderRadius: 10,
-    borderWidth: 1.5, borderColor: BORDER, alignItems: 'center',
+    borderWidth: 1.5, borderColor: BORDER, alignItems: 'center', justifyContent: 'center',
   },
   modalButtonCancelText: { fontSize: 14, fontWeight: '600', color: TEXT_MUTED },
   modalButtonAccept: {
     flex: 1, paddingVertical: 12, borderRadius: 10,
-    backgroundColor: BLUE, alignItems: 'center',
+    backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center',
   },
   modalButtonAcceptText: { fontSize: 14, fontWeight: '700', color: WHITE },
 
@@ -1323,6 +1239,7 @@ const styles = StyleSheet.create({
     backgroundColor: BLUE,
     borderRadius: 14, paddingVertical: 16,
     marginTop: 8, marginBottom: 14,
+    minHeight: 54,
     shadowColor: BLUE, shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3, shadowRadius: 12, elevation: 4,
   },
@@ -1337,10 +1254,10 @@ const styles = StyleSheet.create({
     backgroundColor: `${BLUE}08`,
     borderRadius: 12, borderWidth: 1, borderColor: `${BLUE}20`,
   },
-  infoText: { fontSize: 12, color: BLUE, fontWeight: '500' },
+  infoText: { fontSize: 12, color: BLUE, fontWeight: '500', textAlign: 'center' },
 
   // Login prompt
-  loginPrompt: { flexDirection: 'row', justifyContent: 'center', marginTop: 16, paddingBottom: 8 },
+  loginPrompt: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 16, paddingBottom: 8 },
   loginPromptText: { fontSize: 14, color: TEXT_MUTED },
   loginPromptLink: { fontSize: 14, color: BLUE, fontWeight: '700' },
 });

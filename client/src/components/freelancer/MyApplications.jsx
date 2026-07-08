@@ -14,8 +14,8 @@ import {
   FlatList,
   Image,
   Linking,
-  Share,
   Dimensions,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,7 +41,6 @@ import {
   getContractById,
   selectSelectedContract,
   selectContractsLoading,
-  selectContractById as selectContractByIdSelector,
 } from '../../Redux/slices/contractSlice';
 
 const { width } = Dimensions.get('window');
@@ -70,6 +69,7 @@ const BORDER_SOFT = '#EDF1F8';
 const SUCCESS = '#157F3C';
 const DANGER = '#C1272D';
 const WARNING = '#D4A017';
+const TEXT_LIGHT = '#7A90A8';
 
 const STATUS_CONFIG = {
   pending: { 
@@ -1866,7 +1866,7 @@ const modalStyles = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
-// BOTTOM TAB BAR
+// BOTTOM TAB BAR - Updated to match Messages component
 // ─────────────────────────────────────────────────────────
 function BottomTabBar({ activeTab, onTabPress }) {
   const tabs = [
@@ -1882,25 +1882,38 @@ function BottomTabBar({ activeTab, onTabPress }) {
       <View style={tabStyles.tabBar}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
-          const isApplications = tab.key === 'MyApplications';
+          const isMyJobs = tab.key === 'MyJobs';
 
           return (
             <TouchableOpacity
               key={tab.key}
-              style={[tabStyles.tabItem, isApplications && tabStyles.tabItemCenter]}
+              style={[
+                tabStyles.tabItem,
+                isMyJobs && tabStyles.tabItemCenter,
+              ]}
               onPress={() => onTabPress(tab.key)}
               activeOpacity={0.7}
             >
-              {isApplications ? (
+              {isMyJobs ? (
                 <View style={[tabStyles.centerButton, isActive && tabStyles.centerButtonActive]}>
-                  <Ionicons name={isActive ? tab.activeIcon : tab.icon} size={23} color={isActive ? WHITE : NAVY} />
+                  <Ionicons
+                    name={isActive ? tab.activeIcon : tab.icon}
+                    size={26}
+                    color={isActive ? WHITE : BLUE}
+                  />
                 </View>
               ) : (
                 <>
                   <View style={tabStyles.tabIconWrap}>
-                    <Ionicons name={isActive ? tab.activeIcon : tab.icon} size={21} color={isActive ? BLUE : TEXT_FAINT} />
+                    <Ionicons
+                      name={isActive ? tab.activeIcon : tab.icon}
+                      size={22}
+                      color={isActive ? BLUE : TEXT_LIGHT}
+                    />
                   </View>
-                  <Text style={[tabStyles.tabLabel, isActive && tabStyles.tabLabelActive]}>{tab.label}</Text>
+                  <Text style={[tabStyles.tabLabel, isActive && tabStyles.tabLabelActive]}>
+                    {tab.label}
+                  </Text>
                   {isActive && <View style={tabStyles.tabIndicator} />}
                 </>
               )}
@@ -1917,6 +1930,7 @@ const tabStyles = StyleSheet.create({
     backgroundColor: CARD,
     borderTopWidth: 1,
     borderTopColor: BORDER,
+    paddingBottom: 0,
   },
   tabBar: {
     flexDirection: 'row',
@@ -1936,26 +1950,26 @@ const tabStyles = StyleSheet.create({
   tabItemCenter: {
     flex: 0,
     marginHorizontal: 8,
-    marginTop: -14,
+    marginTop: -16,
   },
   centerButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 13,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: WHITE,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: GOLD_LINE,
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowColor: BLUE,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 2.5,
+    borderColor: WHITE,
   },
   centerButtonActive: {
     backgroundColor: BLUE,
-    borderColor: BLUE,
+    transform: [{ scale: 1.02 }],
   },
   tabIconWrap: {
     position: 'relative',
@@ -2004,6 +2018,7 @@ export default function MyApplications({ navigation, route, onNavigate: propNavi
   const [selectedContract, setSelectedContract] = useState(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   
   const statusOptions = useMemo(() => {
     const statuses = ['All', ...new Set(applications.map(app => app.status).filter(Boolean))];
@@ -2053,15 +2068,36 @@ export default function MyApplications({ navigation, route, onNavigate: propNavi
     }
   }, [dispatch, statusFilter, page]);
   
+  // Load applications on mount
   useEffect(() => {
-    fetchApplications(true);
-  }, []);
+    if (!initialLoadDone) {
+      fetchApplications(true);
+      setInitialLoadDone(true);
+    }
+  }, [fetchApplications, initialLoadDone]);
   
   useEffect(() => {
-    if (statusFilter) {
+    if (statusFilter && initialLoadDone) {
       fetchApplications(true);
     }
   }, [statusFilter]);
+  
+  // Handle hardware back button - go back to previous screen
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Navigate back to previous screen
+      if (propNavigate) {
+        propNavigate('FreelancerDashboard', { activeTab: 'MyApplications' });
+      } else if (navigation && navigation.canGoBack && navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        handleNavigate('FreelancerDashboard', { activeTab: 'MyApplications' });
+      }
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, [navigation, propNavigate]);
   
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

@@ -13,6 +13,7 @@ import {
   Platform,
   Modal,
   StatusBar,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -89,6 +90,20 @@ export default function FreelancerProfile({ onNavigate }) {
   useEffect(() => {
     loadLocalCV();
   }, []);
+
+  // Handle hardware back button press - navigate back to Profile
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Navigate back to FreelancerProfile
+      if (onNavigate) {
+        onNavigate('FreelancerProfile');
+        return true; // Prevent default behavior
+      }
+      return false;
+    });
+
+    return () => backHandler.remove();
+  }, [onNavigate]);
 
   // Load saved CV from local storage using new File API
   const loadLocalCV = async () => {
@@ -452,6 +467,13 @@ export default function FreelancerProfile({ onNavigate }) {
     </Text>
   );
 
+  // Handle back navigation
+  const handleBack = () => {
+    if (onNavigate) {
+      onNavigate('FreelancerProfile');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
@@ -463,8 +485,9 @@ export default function FreelancerProfile({ onNavigate }) {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => onNavigate('FreelancerProfile')}
+            onPress={handleBack}
             activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <View style={styles.iconWrap}>
               <Ionicons name="arrow-back" size={18} color={WHITE} />
@@ -957,7 +980,10 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: NAVY,
   },
-  backBtn: { alignSelf: 'flex-start' },
+  backBtn: { 
+    alignSelf: 'flex-start',
+    padding: 4,
+  },
   iconWrap: {
     width: 38, height: 38,
     backgroundColor: 'rgba(255,255,255,0.06)',

@@ -26,6 +26,7 @@ import {
   selectFormattedClientJobs
 } from '../../Redux/slices/jobSlice';
 import { getClientApplications } from '../../Redux/slices/applicationSlice';
+import { getNotificationCounts } from '../../Redux/slices/notificationSlice';
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const BLUE        = '#0068B5';
@@ -668,6 +669,9 @@ export default function ClientScreen({ onNavigate }) {
   const { applications, isLoading: applicationsLoading } = useSelector(s => s.applications);
   const { updateJobSuccess, deleteJobSuccess } = useSelector(s => s.jobs);
 
+  // Unread notifications count, pulled from the notifications slice
+  const { unreadCount } = useSelector(s => s.notifications);
+
   const [activeTab,    setActiveTab]    = useState('Home');
   const [activeFilter, setActiveFilter] = useState('all');
   const [refreshing,   setRefreshing]   = useState(false);
@@ -713,6 +717,18 @@ export default function ClientScreen({ onNavigate }) {
   useEffect(() => { 
     fetchDashboardData(); 
   }, [fetchDashboardData]);
+
+  // Load unread notification count on mount so the bell badge is accurate right away
+  useEffect(() => {
+    dispatch(getNotificationCounts());
+  }, [dispatch]);
+
+  // Refresh the notification count whenever the user comes back to Home
+  useEffect(() => {
+    if (activeTab === 'Home') {
+      dispatch(getNotificationCounts());
+    }
+  }, [activeTab, dispatch]);
 
   useEffect(() => {
     if (updateJobSuccess || deleteJobSuccess) {
@@ -760,9 +776,9 @@ export default function ClientScreen({ onNavigate }) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchDashboardData();
+    await Promise.all([fetchDashboardData(), dispatch(getNotificationCounts())]);
     setRefreshing(false);
-  }, [fetchDashboardData]);
+  }, [fetchDashboardData, dispatch]);
 
   const handleTabPress = (key) => {
     setActiveTab(key);
@@ -833,8 +849,15 @@ export default function ClientScreen({ onNavigate }) {
               <Text style={styles.topbarBrand}>Taskra</Text>
             </View>
             <View style={styles.topbarRight}>
-              <TouchableOpacity style={styles.notifBtn} onPress={() => onNavigate('Notif')}>
+              <TouchableOpacity style={styles.notifBtn} onPress={() => onNavigate('Notif')} activeOpacity={0.7}>
                 <Ionicons name="notifications-outline" size={22} color={TEXT_MUTED} />
+                {unreadCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity onPress={handleLogout} style={styles.avatarBtn}>
                 {user?.profile_picture
@@ -1124,7 +1147,26 @@ const styles = StyleSheet.create({
   },
   topbarBrand:  { fontSize: 17, fontWeight: '800', color: TEXT_MAIN, letterSpacing: 0.5 },
   topbarRight:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  notifBtn:     { padding: 4 },
+  notifBtn:     { padding: 4, position: 'relative' },
+  notifBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    backgroundColor: RED,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: WHITE,
+  },
+  notifBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: WHITE,
+  },
   avatarBtn: {
     width: 34, height: 34, borderRadius: 17, backgroundColor: BLUE_DARK,
     alignItems: 'center', justifyContent: 'center',

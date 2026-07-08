@@ -1,679 +1,443 @@
-import React from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  Svg,
-  Path,
-  Circle,
+  Dimensions,
+  Animated,
+  Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg2, { Path as SvgPath, Circle as SvgCircle } from 'react-native-svg';
+import Svg, { Path, Circle, Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 
-// ─── Palette ─────────────────────────────────────────────────────────────────
-const ELECTRIC      = '#2375e0';   // sky blue — main color
-const ELECTRIC_MID  = '#2375e0';   // lighter sky blue
-const SIDEBAR_DARK  = '#0A2A3A';   // dark teal-navy sidebar
+// ─── Palette — Taskra Branding ────────────────────────────────────────────
+const NAVY          = '#0A1F3D';
+const NAVY_DEEP     = '#071630';
+const ROYAL         = '#1E4FD6';
+const ROYAL_LIGHT   = '#3B6BF0';
+const GOLD          = '#C89520';
+const GOLD_LIGHT    = '#E5B84D';
 const WHITE         = '#FFFFFF';
-const TEXT_MAIN     = '#0B1929';
-const TEXT_BODY     = '#3D4F63';
-const TEXT_MUTED    = '#6B7A8D';
-const CARD_LINE     = '#E8EDF3';
-const BLUE_ICON_BG  = '#E0F7FA';
-const GREEN_ICON_BG = '#E6F7EE';
-const GOLD_ICON_BG  = '#FEF3DD';
-const GREEN         = '#22A55B';
-const GOLD          = '#E29E0A';
-const PILL_GREEN_BG = '#E6F7EE';
-const PILL_GREEN_TX = '#1A7A4B';
-const PILL_BLUE_BG  = '#E0F7FA';
-const PILL_BLUE_TX  = '#00B4C6';
-const PILL_GOLD_BG  = '#FEF3DD';
-const PILL_GOLD_TX  = '#9A6A00';
-// ─────────────────────────────────────────────────────────────────────────────
 
-export default function SplashScreen({ onNavigate }) {
+// Adjust this path if your project structure differs
+const TASKRA_LOGO = require('../../../assets/taskra.png');
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const AUTOPLAY_MS = 5000;
+
+// ─── Slide Content ─────────────────────────────────────────────────────────
+const SLIDES = [
+  {
+    id: '1',
+    eyebrow: 'FOR CLIENTS',
+    title: 'Find Top\nFreelancers',
+    description: 'Hire highly skilled professionals for your next project.',
+    cta: 'Browse Talent',
+    colors: [NAVY, ROYAL],
+    icon: 'talent',
+  },
+  {
+    id: '2',
+    eyebrow: 'FOR CLIENTS',
+    title: 'Post Projects\nFaster',
+    description: 'Create projects and receive qualified proposals within minutes.',
+    cta: 'Post a Job',
+    colors: [ROYAL, ROYAL_LIGHT],
+    icon: 'post',
+  },
+  {
+    id: '3',
+    eyebrow: 'POWERED BY AI',
+    title: 'AI Talent\nMatching',
+    description: 'Receive intelligent freelancer recommendations powered by AI.',
+    cta: 'Explore AI Match',
+    colors: [NAVY_DEEP, NAVY],
+    icon: 'ai',
+  },
+  {
+    id: '4',
+    eyebrow: 'STAY ON TRACK',
+    title: 'Track\nProjects',
+    description: 'Monitor milestones, team progress, contracts, and deadlines from one dashboard.',
+    cta: 'View Dashboard',
+    colors: [ROYAL, NAVY],
+    icon: 'track',
+  },
+  {
+    id: '5',
+    eyebrow: 'PEACE OF MIND',
+    title: 'Secure\nPayments',
+    description: 'Pay freelancers safely with milestone-based payment protection.',
+    cta: 'Learn More',
+    colors: [NAVY, ROYAL_LIGHT],
+    icon: 'secure',
+  },
+];
+
+// ─── Slide Illustration (lightweight inline SVG per icon type) ────────────
+function SlideIllustration({ type }) {
+  const size = 180;
+  switch (type) {
+    case 'talent':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 180 180">
+          <Circle cx="90" cy="62" r="34" fill="rgba(255,255,255,0.16)" />
+          <Circle cx="90" cy="62" r="22" fill="rgba(255,255,255,0.92)" />
+          <Path
+            d="M36 156c0-32 24-52 54-52s54 20 54 52"
+            stroke="rgba(255,255,255,0.55)"
+            strokeWidth="9"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <Circle cx="90" cy="156" r="8" fill={GOLD_LIGHT} />
+        </Svg>
+      );
+    case 'post':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 180 180">
+          <Rect x="32" y="26" width="116" height="126" rx="20" fill="rgba(255,255,255,0.14)" />
+          <Rect x="52" y="56" width="76" height="10" rx="5" fill="rgba(255,255,255,0.85)" />
+          <Rect x="52" y="80" width="76" height="10" rx="5" fill="rgba(255,255,255,0.5)" />
+          <Rect x="52" y="104" width="42" height="10" rx="5" fill="rgba(255,255,255,0.5)" />
+          <Circle cx="132" cy="132" r="24" fill={GOLD_LIGHT} />
+          <Path d="M132 120v24M120 132h24" stroke={NAVY} strokeWidth="5" strokeLinecap="round" />
+        </Svg>
+      );
+    case 'ai':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 180 180">
+          <Circle cx="90" cy="90" r="62" fill="rgba(255,255,255,0.1)" />
+          <Circle cx="90" cy="90" r="16" fill={GOLD_LIGHT} />
+          <Circle cx="90" cy="36" r="8" fill="rgba(255,255,255,0.9)" />
+          <Circle cx="138" cy="64" r="8" fill="rgba(255,255,255,0.9)" />
+          <Circle cx="138" cy="116" r="8" fill="rgba(255,255,255,0.9)" />
+          <Circle cx="90" cy="144" r="8" fill="rgba(255,255,255,0.9)" />
+          <Circle cx="42" cy="116" r="8" fill="rgba(255,255,255,0.9)" />
+          <Circle cx="42" cy="64" r="8" fill="rgba(255,255,255,0.9)" />
+          <Path
+            d="M90 90L90 36M90 90L138 64M90 90L138 116M90 90L90 144M90 90L42 116M90 90L42 64"
+            stroke="rgba(255,255,255,0.4)"
+            strokeWidth="3"
+          />
+        </Svg>
+      );
+    case 'track':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 180 180">
+          <Rect x="28" y="36" width="124" height="108" rx="20" fill="rgba(255,255,255,0.12)" />
+          <Path
+            d="M46 118 C62 98 74 106 86 86 C98 66 110 78 134 50"
+            stroke={GOLD_LIGHT}
+            strokeWidth="8"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <Circle cx="134" cy="50" r="9" fill={GOLD_LIGHT} />
+          <Circle cx="46" cy="118" r="9" fill="rgba(255,255,255,0.9)" />
+        </Svg>
+      );
+    case 'secure':
+    default:
+      return (
+        <Svg width={size} height={size} viewBox="0 0 180 180">
+          <Path
+            d="M90 24 L144 44 V86 C144 122 120 148 90 160 C60 148 36 122 36 86 V44 Z"
+            fill="rgba(255,255,255,0.14)"
+          />
+          <Path
+            d="M90 38 L130 54 V86 C130 114 112 134 90 145 C68 134 50 114 50 86 V54 Z"
+            fill="rgba(255,255,255,0.1)"
+          />
+          <Path
+            d="M68 90 L84 104 L114 70"
+            stroke={GOLD_LIGHT}
+            strokeWidth="9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </Svg>
+      );
+  }
+}
+
+// ─── Full-Screen Slide ─────────────────────────────────────────────────────
+function Slide({ item, onNavigate, index }) {
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor={ELECTRIC} />
+    <View style={styles.slide}>
+      <Svg width={SCREEN_W} height={SCREEN_H} style={StyleSheet.absoluteFill}>
+        <Defs>
+          <LinearGradient id={`grad-${item.id}`} x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={item.colors[0]} stopOpacity="1" />
+            <Stop offset="1" stopColor={item.colors[1]} stopOpacity="1" />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width={SCREEN_W} height={SCREEN_H} fill={`url(#grad-${item.id})`} />
+        <Circle cx={SCREEN_W - 60} cy={SCREEN_H * 0.16} r={130} fill="rgba(255,255,255,0.05)" />
+        <Circle cx={40} cy={SCREEN_H * 0.78} r={90} fill="rgba(255,255,255,0.04)" />
+      </Svg>
 
-      {/* ── Hero / Illustration Area ──────────────────────────────── */}
-      <View style={styles.heroArea}>
-        {/* Large translucent circle behind everything */}
-        <View style={styles.bgCircle} />
+      <SafeAreaView style={styles.slideSafe} edges={['top', 'bottom']}>
+        {/* Logo row — repeated consistently on every slide */}
+        <View style={styles.logoRow}>
+          <Image source={TASKRA_LOGO} style={styles.logoMark} resizeMode="contain" />
+          <Text style={styles.logoText}>Taskra</Text>
+        </View>
 
-        {/* ── Sidebar + Main dashboard card group ─────────────────── */}
-        <View style={styles.dashGroup}>
-
-          {/* Dark sidebar */}
-          <View style={styles.sidebar}>
-            {/* Grid icon */}
-            <View style={styles.sidebarIconActive}>
-              <View style={styles.grid2x2}>
-                <View style={styles.gridDot} />
-                <View style={styles.gridDot} />
-                <View style={styles.gridDot} />
-                <View style={styles.gridDot} />
-              </View>
-            </View>
-            <View style={styles.sidebarIcon}><View style={styles.sidebarLine} /></View>
-            <View style={styles.sidebarIcon}><View style={[styles.sidebarLine, { width: 18 }]} /></View>
-            <View style={styles.sidebarIcon}><View style={styles.sidebarCircle} /></View>
+        {/* Center illustration + copy */}
+        <View style={styles.slideBody}>
+          <View style={styles.illustrationWrap}>
+            <SlideIllustration type={item.icon} />
           </View>
 
-          {/* Main white dashboard card */}
-          <View style={styles.mainCard}>
-            {/* Card top bar */}
-            <View style={styles.cardTopBar}>
-              <View style={styles.cardBarBlue} />
-              <View style={styles.cardTopRight}>
-                <View style={styles.cardDotGray} />
-                <View style={styles.cardAvatar}>
-                  <View style={styles.cardAvatarCircle} />
-                </View>
-              </View>
-            </View>
-
-            {/* Stats row: 24 Projects | 12 In Progress | 5 Pending */}
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <View style={[styles.statIconBg, { backgroundColor: BLUE_ICON_BG }]}>
-                  <View style={styles.folderIcon}>
-                    <View style={styles.folderTab} />
-                    <View style={styles.folderBody} />
-                  </View>
-                </View>
-                <Text style={styles.statNum}>24</Text>
-                <Text style={styles.statLbl}>Projects</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statBox}>
-                <View style={[styles.statIconBg, { backgroundColor: GREEN_ICON_BG }]}>
-                  {/* Green checkmark circle */}
-                  <View style={[styles.checkCircle, { backgroundColor: GREEN }]}>
-                    <View style={styles.ckShort} />
-                    <View style={styles.ckLong} />
-                  </View>
-                </View>
-                <Text style={styles.statNum}>12</Text>
-                <Text style={styles.statLbl}>In Progress</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statBox}>
-                <View style={[styles.statIconBg, { backgroundColor: GOLD_ICON_BG }]}>
-                  {/* Gold clock circle */}
-                  <View style={[styles.checkCircle, { backgroundColor: GOLD }]}>
-                    <View style={styles.clockDot} />
-                    <View style={styles.clockHand} />
-                  </View>
-                </View>
-                <Text style={styles.statNum}>5</Text>
-                <Text style={styles.statLbl}>Pending</Text>
-              </View>
-            </View>
-
-            {/* Divider */}
-            <View style={styles.cardDivider} />
-
-            {/* Recent Applications label */}
-            <Text style={styles.recentLabel}>Recent Applications</Text>
-
-            {/* App rows */}
-            {[
-              { label: 'A1', bg: ELECTRIC,  status: 'Approved', pillBg: PILL_GREEN_BG, pillTx: PILL_GREEN_TX, w1: '72%', w2: '50%' },
-              { label: 'A2', bg: GREEN,     status: 'In Review', pillBg: PILL_BLUE_BG,  pillTx: PILL_BLUE_TX,  w1: '65%', w2: '45%' },
-              { label: 'A3', bg: GOLD,      status: 'Pending',  pillBg: PILL_GOLD_BG,  pillTx: PILL_GOLD_TX,  w1: '60%', w2: '40%' },
-            ].map((item) => (
-              <View key={item.label} style={styles.appRow}>
-                <View style={[styles.appAvatar, { backgroundColor: item.bg }]}>
-                  <Text style={styles.appAvatarText}>{item.label}</Text>
-                </View>
-                <View style={styles.appLines}>
-                  <View style={[styles.appLine, { width: item.w1 }]} />
-                  <View style={[styles.appLine, { width: item.w2, marginTop: 5 }]} />
-                </View>
-                <View style={[styles.statusPill, { backgroundColor: item.pillBg }]}>
-                  <Text style={[styles.statusPillText, { color: item.pillTx }]}>{item.status}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
+          <Text style={styles.slideEyebrow}>{item.eyebrow}</Text>
+          <Text style={styles.slideTitle}>{item.title}</Text>
+          <Text style={styles.slideDescription}>{item.description}</Text>
         </View>
 
-        {/* ── Blue checkmark badge — top right ─────────────────────── */}
-        <View style={styles.checkBadge}>
-          <View style={styles.ckShort2} />
-          <View style={styles.ckLong2} />
-        </View>
+        {/* Spacer to keep body vertically balanced above the fixed footer */}
+        <View style={styles.footerSpacer} />
+      </SafeAreaView>
+    </View>
+  );
+}
 
-        {/* ── "System Ready" pill — bottom left ────────────────────── */}
-        <View style={styles.systemPill}>
-          <View style={styles.systemDot} />
-          <Text style={styles.systemText}>System Ready</Text>
-        </View>
+// ─── Animated Pagination Dot ───────────────────────────────────────────────
+function PaginationDots({ scrollX }) {
+  return (
+    <View style={styles.dotsRow}>
+      {SLIDES.map((_, i) => {
+        const inputRange = [(i - 1) * SCREEN_W, i * SCREEN_W, (i + 1) * SCREEN_W];
+        const dotWidth = scrollX.interpolate({
+          inputRange,
+          outputRange: [7, 24, 7],
+          extrapolate: 'clamp',
+        });
+        const opacity = scrollX.interpolate({
+          inputRange,
+          outputRange: [0.4, 1, 0.4],
+          extrapolate: 'clamp',
+        });
+        return (
+          <Animated.View key={i} style={[styles.dot, { width: dotWidth, opacity }]} />
+        );
+      })}
+    </View>
+  );
+}
 
-        {/* ── Progress Overview card — bottom right ─────────────────── */}
-        <View style={styles.progressCard}>
-          <Text style={styles.progressTitle}>Progress Overview</Text>
-          {/* Simple SVG line chart */}
-          <Svg2 width="120" height="52" viewBox="0 0 120 52">
-            {/* Light area fill */}
-            <SvgPath
-              d="M4 46 C18 40 30 34 44 28 C58 22 70 24 84 16 C98 8 108 6 116 4 L116 52 L4 52 Z"
-              fill={BLUE_ICON_BG}
-            />
-            {/* Line */}
-            <SvgPath
-              d="M4 46 C18 40 30 34 44 28 C58 22 70 24 84 16 C98 8 108 6 116 4"
-              stroke={ELECTRIC}
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              fill="none"
-            />
-            {/* End dot */}
-            <SvgCircle cx="116" cy="4" r="4" fill={ELECTRIC} />
-          </Svg2>
-          <View style={styles.progressLine} />
-        </View>
-      </View>
+// ─── Main Home Screen — Full-View Carousel ─────────────────────────────────
+export default function Home({ onNavigate }) {
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const listRef = useRef(null);
+  const currentIndex = useRef(0);
+  const [pressedGetStarted, setPressedGetStarted] = useState(false);
 
-      {/* ── Bottom Sheet ──────────────────────────────────────────── */}
-      <View style={styles.bottomSheet}>
-        {/* Progress dots */}
-        <View style={styles.dotsRow}>
-          <View style={[styles.dot, styles.dotActive]} />
-          <View style={styles.dot} />
-          <View style={styles.dot} />
-          <View style={styles.dot} />
-        </View>
+  // ── Autoplay every 5s, infinite loop ──
+  useEffect(() => {
+    const timer = setInterval(() => {
+      currentIndex.current = (currentIndex.current + 1) % SLIDES.length;
+      listRef.current?.scrollToOffset({
+        offset: currentIndex.current * SCREEN_W,
+        animated: true,
+      });
+    }, AUTOPLAY_MS);
+    return () => clearInterval(timer);
+  }, []);
 
-        <Text style={styles.eyebrow}>APPLICATIONS SYSTEM</Text>
-        <Text style={styles.headline}>
-          {'Manage. Track. Approve.\n'}
-          <Text style={styles.headlineBlue}>All in One Place.</Text>
-        </Text>
-        <Text style={styles.subtext}>
-          Streamline your workflow, monitor applications in real-time, and make smarter decisions.
-        </Text>
+  const onMomentumScrollEnd = useCallback((e) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
+    currentIndex.current = Math.max(0, Math.min(idx, SLIDES.length - 1));
+  }, []);
 
-        {/* Get Started button */}
+  const renderSlide = useCallback(
+    ({ item, index }) => <Slide item={item} onNavigate={onNavigate} index={index} />,
+    [onNavigate]
+  );
+
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+
+      <Animated.FlatList
+        ref={listRef}
+        data={SLIDES}
+        keyExtractor={(item) => item.id}
+        renderItem={renderSlide}
+        horizontal
+        pagingEnabled
+        decelerationRate="fast"
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={onMomentumScrollEnd}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+      />
+
+      {/* ── Fixed overlay footer: pagination + CTAs, sits above every slide ── */}
+      <SafeAreaView style={styles.overlayFooter} edges={['bottom']} pointerEvents="box-none">
+        <PaginationDots scrollX={scrollX} />
+
         <TouchableOpacity
-          style={styles.btnPrimary}
+          style={[styles.btnPrimary, pressedGetStarted && styles.btnPrimaryPressed]}
           onPress={() => onNavigate('Login')}
-          activeOpacity={0.85}
+          onPressIn={() => setPressedGetStarted(true)}
+          onPressOut={() => setPressedGetStarted(false)}
+          activeOpacity={0.9}
         >
           <Text style={styles.btnPrimaryText}>Get Started</Text>
         </TouchableOpacity>
 
-        {/* Sign in row */}
         <View style={styles.loginRow}>
           <Text style={styles.loginText}>Already have an account? </Text>
           <TouchableOpacity onPress={() => onNavigate('Login')} activeOpacity={0.7}>
             <Text style={styles.loginLink}>Sign in</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
+// ─── Styles ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: {
+  root: {
     flex: 1,
-    backgroundColor: ELECTRIC,
+    backgroundColor: NAVY,
   },
 
-  // ── Hero Area ─────────────────────────────────────────────────
-  heroArea: {
+  // ── Slide ─────────────────────────────────────────────────────
+  slide: {
+    width: SCREEN_W,
+    height: SCREEN_H,
+  },
+  slideSafe: {
     flex: 1,
-    position: 'relative',
-    overflow: 'hidden',
-    paddingTop: 24,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 28,
   },
 
-  // Large translucent circle
-  bgCircle: {
-    position: 'absolute',
-    width: 340,
-    height: 340,
-    borderRadius: 170,
-    backgroundColor: 'rgba(255,255,255,0.09)',
-    top: 10,
-    alignSelf: 'center',
-  },
-
-  // Sidebar + main card group
-  dashGroup: {
+  // Logo
+  logoRow: {
     flexDirection: 'row',
-    marginTop: 20,
-    marginLeft: 8,
-    zIndex: 2,
-  },
-
-  // ── Sidebar ───────────────────────────────────────────────────
-  sidebar: {
-    width: 44,
-    backgroundColor: SIDEBAR_DARK,
-    borderTopLeftRadius: 14,
-    borderBottomLeftRadius: 14,
-    paddingVertical: 14,
     alignItems: 'center',
-    gap: 18,
+    marginTop: Platform.OS === 'android' ? 16 : 6,
   },
-  sidebarIconActive: {
+  logoMark: {
     width: 32,
     height: 32,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sidebarIcon: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  grid2x2: {
-    width: 14,
-    height: 14,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 3,
-  },
-  gridDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 1.5,
-    backgroundColor: WHITE,
-  },
-  sidebarLine: {
-    width: 22,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-  },
-  sidebarCircle: {
-    width: 18,
-    height: 18,
     borderRadius: 9,
-    borderWidth: 2.5,
-    borderColor: 'rgba(255,255,255,0.35)',
+    marginRight: 9,
   },
-
-  // ── Main dashboard card ───────────────────────────────────────
-  mainCard: {
-    flex: 1,
-    backgroundColor: WHITE,
-    borderTopRightRadius: 14,
-    borderBottomRightRadius: 14,
-    padding: 14,
-  },
-  cardTopBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  cardBarBlue: {
-    height: 4,
-    width: 56,
-    borderRadius: 2,
-    backgroundColor: ELECTRIC,
-  },
-  cardTopRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  cardDotGray: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: CARD_LINE,
-  },
-  cardAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: CARD_LINE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardAvatarCircle: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#BCC5D0',
-  },
-
-  // Stats
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  statBox: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statDivider: {
-    width: 0.5,
-    height: 40,
-    backgroundColor: CARD_LINE,
-  },
-  statIconBg: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  // Folder icon
-  folderIcon: { alignItems: 'center' },
-  folderTab: {
-    width: 10,
-    height: 4,
-    borderTopLeftRadius: 2,
-    borderTopRightRadius: 2,
-    backgroundColor: ELECTRIC,
-    alignSelf: 'flex-start',
-    marginLeft: 2,
-  },
-  folderBody: {
-    width: 16,
-    height: 11,
-    borderRadius: 2,
-    backgroundColor: ELECTRIC,
-  },
-  // Check/clock circle
-  checkCircle: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ckShort: {
-    position: 'absolute',
-    width: 5,
-    height: 2,
-    backgroundColor: WHITE,
-    borderRadius: 1,
-    bottom: 6,
-    left: 4,
-    transform: [{ rotate: '45deg' }],
-  },
-  ckLong: {
-    position: 'absolute',
-    width: 9,
-    height: 2,
-    backgroundColor: WHITE,
-    borderRadius: 1,
-    bottom: 5,
-    left: 7,
-    transform: [{ rotate: '-50deg' }],
-  },
-  clockDot: {
-    position: 'absolute',
-    width: 2,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: WHITE,
-    top: 8,
-    left: 8,
-  },
-  clockHand: {
-    position: 'absolute',
-    width: 1.5,
-    height: 6,
-    borderRadius: 1,
-    backgroundColor: WHITE,
-    bottom: 8,
-    left: 8,
-    transform: [{ rotate: '30deg' }],
-  },
-  statNum: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-  },
-  statLbl: {
-    fontSize: 8,
-    color: TEXT_MUTED,
-    marginTop: 1,
-  },
-
-  cardDivider: {
-    height: 0.5,
-    backgroundColor: CARD_LINE,
-    marginBottom: 8,
-  },
-  recentLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginBottom: 8,
-  },
-
-  // App rows
-  appRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 7,
-  },
-  appAvatar: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  appAvatarText: {
-    fontSize: 8,
+  logoText: {
+    fontSize: 18,
     fontWeight: '800',
     color: WHITE,
-  },
-  appLines: {
-    flex: 1,
-    marginHorizontal: 8,
-  },
-  appLine: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: CARD_LINE,
-  },
-  statusPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
-  statusPillText: {
-    fontSize: 7.5,
-    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 
-  // ── Check badge (top right floating) ─────────────────────────
-  checkBadge: {
-    position: 'absolute',
-    top: 30,
-    right: 22,
-    zIndex: 5,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: ELECTRIC,
+  // Body
+  slideBody: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  illustrationWrap: {
+    width: 180,
+    height: 180,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
+    marginBottom: 28,
+    alignSelf: 'center',
   },
-  ckShort2: {
-    position: 'absolute',
-    width: 8,
-    height: 2.5,
-    backgroundColor: WHITE,
-    borderRadius: 2,
-    bottom: 18,
-    left: 11,
-    transform: [{ rotate: '45deg' }],
+  slideEyebrow: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 2,
+    color: 'rgba(255,255,255,0.7)',
+    marginBottom: 12,
   },
-  ckLong2: {
-    position: 'absolute',
-    width: 14,
-    height: 2.5,
-    backgroundColor: WHITE,
-    borderRadius: 2,
-    bottom: 17,
-    left: 17,
-    transform: [{ rotate: '-50deg' }],
+  slideTitle: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: WHITE,
+    lineHeight: 40,
+    marginBottom: 14,
+  },
+  slideDescription: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
+    lineHeight: 22,
+    paddingRight: 12,
   },
 
-  // ── System Ready pill ────────────────────────────────────────
-  systemPill: {
-    position: 'absolute',
-    bottom: 28,
-    left: 16,
-    zIndex: 5,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: WHITE,
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  systemDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: ELECTRIC,
-  },
-  systemText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: TEXT_MAIN,
+  footerSpacer: {
+    height: 210,
   },
 
-  // ── Progress Overview card ────────────────────────────────────
-  progressCard: {
+  // ── Fixed Overlay Footer ──────────────────────────────────────
+  overlayFooter: {
     position: 'absolute',
-    bottom: 16,
-    right: 12,
-    zIndex: 5,
-    backgroundColor: WHITE,
-    borderRadius: 14,
-    padding: 12,
-    width: 150,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  progressTitle: {
-    fontSize: 9.5,
-    fontWeight: '700',
-    color: TEXT_MAIN,
-    marginBottom: 8,
-  },
-  progressLine: {
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: CARD_LINE,
-    marginTop: 8,
-    width: '70%',
-  },
-
-  // ── Bottom Sheet ──────────────────────────────────────────────
-  bottomSheet: {
-    backgroundColor: WHITE,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: 28,
-    paddingTop: 26,
-    paddingBottom: 36,
+    paddingTop: 18,
   },
   dotsRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 18,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginBottom: 22,
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#D0D8E4',
-  },
-  dotActive: {
-    width: 22,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: ELECTRIC,
-  },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 2.2,
-    color: ELECTRIC,
-    marginBottom: 10,
-  },
-  headline: {
-    fontSize: 27,
-    fontWeight: '400',
-    color: TEXT_MAIN,
-    lineHeight: 36,
-    marginBottom: 12,
-  },
-  headlineBlue: {
-    color: ELECTRIC,
-    fontWeight: '800',
-  },
-  subtext: {
-    fontSize: 14,
-    color: TEXT_BODY,
-    lineHeight: 22,
-    marginBottom: 26,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: WHITE,
   },
   btnPrimary: {
-    backgroundColor: ELECTRIC,
-    borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: GOLD_LIGHT,
+    borderRadius: 14,
+    paddingVertical: 17,
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  btnPrimaryPressed: {
+    backgroundColor: GOLD,
+    transform: [{ scale: 0.98 }],
   },
   btnPrimaryText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: WHITE,
+    fontSize: 16,
+    fontWeight: '800',
+    color: NAVY,
     letterSpacing: 0.3,
   },
   loginRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingBottom: 8,
   },
   loginText: {
-    fontSize: 13,
-    color: TEXT_MUTED,
+    fontSize: 13.5,
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '500',
   },
   loginLink: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: ELECTRIC,
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: WHITE,
+    textDecorationLine: 'underline',
   },
 });

@@ -1,6 +1,6 @@
-// screens/NotificationsScreen.jsx - Updated to remove counts dependency
+// screens/NotificationsScreen.jsx - Updated with professional detail modal + back button logic
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,11 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  BackHandler,
+  Modal,
+  Animated,
+  Easing,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +37,6 @@ import {
   selectTypeBreakdown,
 } from '../../Redux/slices/notificationSlice';
 
-// ── Vantara Design tokens ──────────────────────────────────────────────────────────
 const NAVY       = '#071A3E';
 const NAVY2      = '#0D2151';
 const BLUE       = '#0055A5';
@@ -61,6 +65,19 @@ const FILTER_TABS = [
   { key: 'offers', label: 'Offers', icon: 'briefcase-outline' },
   { key: 'messages', label: 'Messages', icon: 'chatbubble-outline' },
 ];
+
+// Maps a notification type/action to a human readable label + a follow-up
+// action button description used inside the detail modal.
+const ACTION_META = {
+  view_offer:        { label: 'View Offer',       icon: 'briefcase-outline' },
+  open_chat:         { label: 'Open Chat',        icon: 'chatbubble-outline' },
+  view_job:          { label: 'View Job Post',    icon: 'document-text-outline' },
+  view_contract:     { label: 'View Contract',    icon: 'clipboard-outline' },
+  view_transaction:  { label: 'View Transaction', icon: 'cash-outline' },
+  view_review:       { label: 'View Review',      icon: 'star-outline' },
+  complete_profile:  { label: 'Complete Profile', icon: 'person-circle-outline' },
+  default:           { label: 'View Details',     icon: 'arrow-forward-circle-outline' },
+};
 
 // Helper to get icon name based on notification type
 const getIconName = (type) => {
@@ -162,26 +179,46 @@ const getIconColor = (type) => {
   }
 };
 
+// Human friendly label for the type badge shown inside the modal
+const getTypeLabel = (type) => {
+  if (!type) return 'Notification';
+  return type
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+};
+
+const formatFullDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const formatTime = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+};
+
 function NotificationItem({ notification, onPress, onMarkRead }) {
   const iconName = getIconName(notification.type);
   const iconColor = getIconColor(notification.type);
-
-  // Format the time display
-  const formatTime = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  };
 
   return (
     <TouchableOpacity
@@ -271,6 +308,135 @@ function EmptyState({ filter }) {
   );
 }
 
+// ── Professional Notification Detail Modal ──────────────────────────────────
+function NotificationDetailModal({ visible, notification, onClose, onPrimaryAction }) {
+  const scale = useRef(new Animated.Value(0.92)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 180,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.spring(scale, {
+          toValue: 1,
+          friction: 9,
+          tension: 90,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      scale.setValue(0.92);
+      opacity.setValue(0);
+    }
+  }, [visible]);
+
+  if (!notification) return null;
+
+  const iconName = getIconName(notification.type);
+  const iconColor = getIconColor(notification.type);
+  const hasAction = notification.actions && notification.actions.length > 0;
+  const actionType = hasAction ? notification.actions[0].action_type : 'default';
+  const actionMeta = ACTION_META[actionType] || ACTION_META.default;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+
+        <Animated.View
+          style={[
+            styles.modalCard,
+            { opacity, transform: [{ scale }] },
+          ]}
+        >
+          {/* Close button */}
+          <TouchableOpacity
+            style={styles.modalCloseBtn}
+            onPress={onClose}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={18} color={TEXT_MUTED} />
+          </TouchableOpacity>
+
+          {/* Icon + type badge */}
+          <View style={[styles.modalIconWrap, { backgroundColor: `${iconColor}15` }]}>
+            <Ionicons name={iconName} size={30} color={iconColor} />
+          </View>
+
+          <View style={[styles.modalTypeBadge, { backgroundColor: `${iconColor}12`, borderColor: `${iconColor}30` }]}>
+            <View style={[styles.modalTypeDot, { backgroundColor: iconColor }]} />
+            <Text style={[styles.modalTypeText, { color: iconColor }]}>
+              {getTypeLabel(notification.type)}
+            </Text>
+          </View>
+
+          {/* Title */}
+          <Text style={styles.modalTitle}>{notification.title}</Text>
+
+          {/* Timestamp */}
+          <View style={styles.modalMetaRow}>
+            <Ionicons name="time-outline" size={13} color={TEXT_LIGHT} />
+            <Text style={styles.modalMetaText}>{formatFullDate(notification.created_at)}</Text>
+          </View>
+
+          {/* Divider */}
+          <View style={styles.modalDivider} />
+
+          {/* Message body */}
+          <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={false}>
+            <Text style={styles.modalMessage}>{notification.message}</Text>
+
+            {notification.sender_id?.first_name && (
+              <View style={styles.modalSenderRow}>
+                <View style={styles.modalSenderAvatar}>
+                  <Ionicons name="person" size={14} color={BLUE} />
+                </View>
+                <Text style={styles.modalSenderText}>
+                  From {notification.sender_id.first_name} {notification.sender_id.last_name || ''}
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Footer actions */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.modalSecondaryBtn}
+              onPress={onClose}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.modalSecondaryText}>Close</Text>
+            </TouchableOpacity>
+
+            {hasAction && (
+              <TouchableOpacity
+                style={styles.modalPrimaryBtn}
+                onPress={() => onPrimaryAction(notification)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name={actionMeta.icon} size={16} color={WHITE} />
+                <Text style={styles.modalPrimaryText}>{actionMeta.label}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function NotificationsScreen({ onNavigate, route }) {
   const dispatch = useDispatch();
   
@@ -289,11 +455,31 @@ export default function NotificationsScreen({ onNavigate, route }) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [page, setPage] = useState(1);
 
+  // Detail modal state
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState(null);
+
   // Load notifications on mount
   useEffect(() => {
     loadNotifications();
-    // Don't call getNotificationCounts - we get unreadCount from getNotifications
   }, []);
+
+  // Handle hardware back button press - close modal first, else navigate back to Dashboard
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (detailVisible) {
+        setDetailVisible(false);
+        return true;
+      }
+      if (onNavigate) {
+        onNavigate('FreelancerDashboard', { activeTab: 'Profile' });
+        return true; // Prevent default behavior
+      }
+      return false;
+    });
+
+    return () => backHandler.remove();
+  }, [onNavigate, detailVisible]);
 
   // Load notifications with current filter
   const loadNotifications = useCallback(async (pageNum = 1, refresh = false) => {
@@ -334,79 +520,81 @@ export default function NotificationsScreen({ onNavigate, route }) {
     loadNotifications(1, true);
   }, [loadNotifications]);
 
-  // Handle notification press
+  // Handle notification press -> mark as read + open the detail modal
   const handleNotificationPress = useCallback((notification) => {
-    // Mark as read if not already
     if (!notification.is_read) {
       dispatch(markNotificationAsRead(notification._id));
     }
+    setSelectedNotification(notification);
+    setDetailVisible(true);
+  }, [dispatch]);
 
-    // Handle action based on notification type and actions
-    if (notification.actions && notification.actions.length > 0) {
-      const action = notification.actions[0];
-      
-      switch (action.action_type) {
-        case 'view_offer':
-          if (onNavigate) {
-            onNavigate('OfferDetails', { 
-              offerId: notification.reference_id,
-              jobTitle: notification.title
-            });
-          } else {
-            Alert.alert('Offer Details', notification.message, [{ text: 'OK' }]);
-          }
-          break;
-          
-        case 'open_chat':
-          if (onNavigate) {
-            onNavigate('Messages', { 
-              userId: notification.sender_id?._id,
-              userName: notification.sender_id?.first_name 
-            });
-          }
-          break;
-          
-        case 'view_job':
-          if (onNavigate) {
-            onNavigate('JobDetails', { jobId: notification.reference_id });
-          } else {
-            Alert.alert('Job Details', notification.message);
-          }
-          break;
-          
-        case 'view_contract':
-          if (onNavigate) {
-            onNavigate('ContractDetails', { contractId: notification.reference_id });
-          }
-          break;
-          
-        case 'view_transaction':
-          if (onNavigate) {
-            onNavigate('TransactionDetails', { transactionId: notification.reference_id });
-          }
-          break;
-          
-        case 'view_review':
-          if (onNavigate) {
-            onNavigate('ReviewDetails', { reviewId: notification.reference_id });
-          }
-          break;
-          
-        case 'complete_profile':
-          if (onNavigate) {
-            onNavigate('FreelancerProfile');
-          }
-          break;
-          
-        default:
-          Alert.alert(notification.title, notification.message);
-          break;
-      }
-    } else {
-      // Default action - just show the notification details
-      Alert.alert(notification.title, notification.message);
+  // Close the detail modal
+  const handleCloseModal = useCallback(() => {
+    setDetailVisible(false);
+    setTimeout(() => setSelectedNotification(null), 200);
+  }, []);
+
+  // Fired when the user taps the primary CTA inside the modal
+  const handlePrimaryAction = useCallback((notification) => {
+    setDetailVisible(false);
+
+    const action = notification.actions?.[0];
+    if (!action) return;
+
+    switch (action.action_type) {
+      case 'view_offer':
+        if (onNavigate) {
+          onNavigate('OfferDetails', {
+            offerId: notification.reference_id,
+            jobTitle: notification.title,
+          });
+        }
+        break;
+
+      case 'open_chat':
+        if (onNavigate) {
+          onNavigate('Messages', {
+            userId: notification.sender_id?._id,
+            userName: notification.sender_id?.first_name,
+          });
+        }
+        break;
+
+      case 'view_job':
+        if (onNavigate) {
+          onNavigate('JobDetails', { jobId: notification.reference_id });
+        }
+        break;
+
+      case 'view_contract':
+        if (onNavigate) {
+          onNavigate('ContractDetails', { contractId: notification.reference_id });
+        }
+        break;
+
+      case 'view_transaction':
+        if (onNavigate) {
+          onNavigate('TransactionDetails', { transactionId: notification.reference_id });
+        }
+        break;
+
+      case 'view_review':
+        if (onNavigate) {
+          onNavigate('ReviewDetails', { reviewId: notification.reference_id });
+        }
+        break;
+
+      case 'complete_profile':
+        if (onNavigate) {
+          onNavigate('FreelancerProfile');
+        }
+        break;
+
+      default:
+        break;
     }
-  }, [dispatch, onNavigate]);
+  }, [onNavigate]);
 
   // Handle mark as read
   const handleMarkAsRead = useCallback((notificationId) => {
@@ -450,6 +638,13 @@ export default function NotificationsScreen({ onNavigate, route }) {
     );
   }, [dispatch, notifications.length, activeFilter]);
 
+  // Handle back navigation
+  const handleBack = () => {
+    if (onNavigate) {
+      onNavigate('FreelancerDashboard', { activeTab: 'Profile' });
+    }
+  };
+
   // Get filtered notifications based on active filter
   const getFilteredNotifications = useCallback(() => {
     if (activeFilter === 'unread') {
@@ -480,8 +675,9 @@ export default function NotificationsScreen({ onNavigate, route }) {
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backIconWrap}
-              onPress={() => onNavigate?.('FreelancerDashboard')}
+              onPress={handleBack}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons name="arrow-back" size={20} color={WHITE} />
             </TouchableOpacity>
@@ -505,8 +701,9 @@ export default function NotificationsScreen({ onNavigate, route }) {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backIconWrap}
-            onPress={() => onNavigate?.('FreelancerDashboard')}
+            onPress={handleBack}
             activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons name="arrow-back" size={20} color={WHITE} />
           </TouchableOpacity>
@@ -598,6 +795,14 @@ export default function NotificationsScreen({ onNavigate, route }) {
           }
         />
       </View>
+
+      {/* ── Notification Detail Modal ── */}
+      <NotificationDetailModal
+        visible={detailVisible}
+        notification={selectedNotification}
+        onClose={handleCloseModal}
+        onPrimaryAction={handlePrimaryAction}
+      />
     </SafeAreaView>
   );
 }
@@ -857,5 +1062,156 @@ const styles = StyleSheet.create({
   loadMoreContainer: {
     paddingVertical: 16,
     alignItems: 'center',
+  },
+
+  // ── Detail Modal ─────────────────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(7,26,62,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '80%',
+    backgroundColor: CARD,
+    borderRadius: 24,
+    paddingTop: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  modalCloseBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  modalIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  modalTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  modalTypeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  modalTypeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    lineHeight: 26,
+    marginBottom: 8,
+  },
+  modalMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 16,
+  },
+  modalMetaText: {
+    fontSize: 12,
+    color: TEXT_LIGHT,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: BORDER,
+    marginBottom: 16,
+  },
+  modalBodyScroll: {
+    marginBottom: 20,
+  },
+  modalMessage: {
+    fontSize: 14.5,
+    color: TEXT_MUTED,
+    lineHeight: 22,
+  },
+  modalSenderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    padding: 10,
+    backgroundColor: BG,
+    borderRadius: 10,
+  },
+  modalSenderAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: `${BLUE}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSenderText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalSecondaryBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSecondaryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+  },
+  modalPrimaryBtn: {
+    flex: 1.4,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: BLUE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  modalPrimaryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: WHITE,
   },
 });

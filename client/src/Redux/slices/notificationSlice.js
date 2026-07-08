@@ -1,11 +1,11 @@
-// Redux/slices/notificationSlice.js - UPDATED WITH BETTER ERROR HANDLING
+// Redux/slices/notificationSlice.js - COMPLETE FIXED VERSION
 
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../services/api';
 
 // ==================== ASYNC THUNKS ====================
 
-// Get all notifications for the authenticated user
+// Get all notifications for the authenticated user - FIXED
 export const getNotifications = createAsyncThunk(
   'notifications/getNotifications',
   async ({ page = 1, limit = 20, is_read, type, priority } = {}, { getState, rejectWithValue }) => {
@@ -28,7 +28,61 @@ export const getNotifications = createAsyncThunk(
       });
 
       console.log('Notifications response:', response.data);
-      return response.data;
+
+      // --- FIX: Handle the nested data structure ---
+      let notificationsArray = [];
+      let totalCount = 0;
+      let unreadCount = 0;
+      let totalPages = 1;
+      let currentPage = 1;
+      let typeBreakdown = {};
+
+      // Check if the response has the nested structure
+      if (response.data && response.data.notifications) {
+        // Check if notifications is an object with a 'notifications' property (nested)
+        if (response.data.notifications.notifications && Array.isArray(response.data.notifications.notifications)) {
+          // Nested structure: { notifications: { notifications: [...], total: X, unreadCount: Y } }
+          notificationsArray = response.data.notifications.notifications || [];
+          totalCount = response.data.notifications.total || 0;
+          unreadCount = response.data.notifications.unreadCount || 0;
+          totalPages = response.data.totalPages || 1;
+          currentPage = response.data.currentPage || 1;
+          typeBreakdown = response.data.typeBreakdown || {};
+        } else if (Array.isArray(response.data.notifications)) {
+          // Flat structure: { notifications: [...], totalCount: X, unreadCount: Y }
+          notificationsArray = response.data.notifications || [];
+          totalCount = response.data.totalCount || response.data.total || 0;
+          unreadCount = response.data.unreadCount || 0;
+          totalPages = response.data.totalPages || 1;
+          currentPage = response.data.currentPage || 1;
+          typeBreakdown = response.data.typeBreakdown || {};
+        } else {
+          // Fallback: try to use response.data directly
+          notificationsArray = response.data.notifications || [];
+          totalCount = response.data.total || response.data.totalCount || 0;
+          unreadCount = response.data.unreadCount || 0;
+          totalPages = response.data.totalPages || 1;
+          currentPage = response.data.currentPage || 1;
+          typeBreakdown = response.data.typeBreakdown || {};
+        }
+      } else if (Array.isArray(response.data)) {
+        // If response is directly an array
+        notificationsArray = response.data;
+        totalCount = response.data.length;
+      }
+
+      // Return normalized data structure
+      return {
+        notifications: notificationsArray,
+        totalNotifications: totalCount,
+        unreadCount: unreadCount,
+        totalPages: totalPages,
+        currentPage: currentPage,
+        typeBreakdown: typeBreakdown,
+        // Keep original data for debugging if needed
+        _original: response.data
+      };
+      
     } catch (error) {
       console.error('Get notifications error:', error.response?.data);
       return rejectWithValue(error.response?.data || { message: error.message });
@@ -36,7 +90,7 @@ export const getNotifications = createAsyncThunk(
   }
 );
 
-// Get unread notifications only
+// Get unread notifications only - FIXED
 export const getUnreadNotifications = createAsyncThunk(
   'notifications/getUnreadNotifications',
   async ({ page = 1, limit = 20 } = {}, { getState, rejectWithValue }) => {
@@ -51,7 +105,33 @@ export const getUnreadNotifications = createAsyncThunk(
         params: { page, limit }
       });
 
-      return response.data;
+      console.log('Unread notifications response:', response.data);
+
+      // Handle the nested data structure for unread as well
+      let notificationsArray = [];
+      let unreadCount = 0;
+
+      if (response.data && response.data.notifications) {
+        if (response.data.notifications.notifications && Array.isArray(response.data.notifications.notifications)) {
+          notificationsArray = response.data.notifications.notifications || [];
+          unreadCount = response.data.notifications.unreadCount || 0;
+        } else if (Array.isArray(response.data.notifications)) {
+          notificationsArray = response.data.notifications || [];
+          unreadCount = response.data.unreadCount || 0;
+        } else {
+          notificationsArray = response.data.notifications || [];
+          unreadCount = response.data.unreadCount || 0;
+        }
+      } else if (Array.isArray(response.data)) {
+        notificationsArray = response.data;
+      }
+
+      return {
+        notifications: notificationsArray,
+        unreadCount: unreadCount,
+        total: notificationsArray.length
+      };
+      
     } catch (error) {
       console.error('Get unread notifications error:', error.response?.data);
       return rejectWithValue(error.response?.data || { message: error.message });
@@ -199,9 +279,9 @@ export const deleteAllNotifications = createAsyncThunk(
   }
 );
 
-// ==================== GET NOTIFICATION COUNTS - IMPROVED ====================
+// ==================== GET NOTIFICATION COUNTS - FIXED ====================
 
-// Get notification counts - IMPROVED with better error handling
+// Get notification counts - FIXED: Uses notifications endpoint instead of /counts
 export const getNotificationCounts = createAsyncThunk(
   'notifications/getNotificationCounts',
   async (_, { getState, rejectWithValue }) => {
@@ -231,21 +311,52 @@ export const getNotificationCounts = createAsyncThunk(
 
       console.log('Fetching notification counts for user:', userId);
       
-      const response = await api.get('/notifications/counts', {
-        headers: { Authorization: `Bearer ${token}` }
+      // ✅ FIX: Use the notifications endpoint with limit=1 to get unread count
+      // This avoids the "/counts" endpoint error
+      const response = await api.get('/notifications', {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { 
+          page: 1, 
+          limit: 1,
+          is_read: false // This will give us unread count
+        }
       });
 
-      console.log('Counts response:', response.data);
-      
-      // Ensure we always return valid data
+      console.log('Counts from notifications endpoint:', response.data);
+
+      // Extract counts from the response
+      let unreadCount = 0;
+      let typeBreakdown = {};
+
+      if (response.data && response.data.notifications) {
+        // Get unread count from nested structure
+        if (response.data.notifications.unreadCount !== undefined) {
+          unreadCount = response.data.notifications.unreadCount;
+        } else if (response.data.unreadCount !== undefined) {
+          unreadCount = response.data.unreadCount;
+        }
+
+        // Get type breakdown if available
+        if (response.data.typeBreakdown) {
+          typeBreakdown = response.data.typeBreakdown;
+        } else if (response.data.notifications.typeBreakdown) {
+          typeBreakdown = response.data.notifications.typeBreakdown;
+        }
+      }
+
+      console.log('✅ Counts fetched successfully:', { totalUnread: unreadCount, typeBreakdown });
+
+      // Return the counts
       return {
-        totalUnread: response.data?.totalUnread || 0,
-        highPriorityUnread: response.data?.highPriorityUnread || 0,
-        unreadByType: response.data?.unreadByType || {}
+        totalUnread: unreadCount || 0,
+        highPriorityUnread: 0,
+        unreadByType: typeBreakdown || {}
       };
+
     } catch (error) {
       console.error('Get notification counts error:', error.response?.data || error.message);
-      // Always return default values instead of rejecting
+      
+      // ✅ Don't reject, just return default values
       return {
         totalUnread: 0,
         highPriorityUnread: 0,
@@ -338,7 +449,7 @@ const initialState = {
   deleteSuccess: false,
   updateSuccess: false,
   lastUpdated: null,
-  countsLoaded: false, // NEW: track if counts have been loaded
+  countsLoaded: false,
 };
 
 // ==================== SLICE ====================
@@ -411,7 +522,6 @@ const notificationSlice = createSlice({
         state.unreadCount += 1;
       }
     },
-    // NEW: Set counts loaded flag
     setCountsLoaded: (state, action) => {
       state.countsLoaded = action.payload;
     },
@@ -435,6 +545,7 @@ const notificationSlice = createSlice({
         }
         state.typeBreakdown = action.payload.typeBreakdown || {};
         state.lastUpdated = new Date().toISOString();
+        console.log('Notifications loaded:', state.notifications.length);
       })
       .addCase(getNotifications.rejected, (state, action) => {
         state.isLoading = false;
@@ -618,7 +729,7 @@ const notificationSlice = createSlice({
         state.deleteSuccess = false;
       })
 
-      // ==================== GET NOTIFICATION COUNTS - IMPROVED ====================
+      // ==================== GET NOTIFICATION COUNTS - FIXED ====================
       .addCase(getNotificationCounts.pending, (state) => {
         // Don't set loading to true for counts to avoid UI flicker
         state.error = null;
@@ -629,13 +740,13 @@ const notificationSlice = createSlice({
         state.highPriorityUnread = action.payload?.highPriorityUnread || 0;
         state.unreadByType = action.payload?.unreadByType || {};
         state.lastUpdated = new Date().toISOString();
+        console.log('✅ Notification counts updated:', state.unreadCount);
       })
       .addCase(getNotificationCounts.rejected, (state) => {
         state.countsLoaded = true;
         state.unreadCount = 0;
         state.highPriorityUnread = 0;
         state.unreadByType = {};
-        // Don't set error for counts - just use defaults
         console.log('Counts endpoint failed, using defaults');
       })
 
@@ -687,29 +798,36 @@ export const {
   incrementUnreadCount,
   resetUnreadCount,
   addNotificationLocally,
-  setCountsLoaded, // NEW
+  setCountsLoaded,
 } = notificationSlice.actions;
 
 // ==================== SELECTORS ====================
 
-export const selectAllNotifications = (state) => state.notifications.notifications;
-export const selectUnreadNotifications = (state) => state.notifications.unreadNotifications;
+export const selectAllNotifications = (state) => {
+  // Ensure we always return an array
+  return state.notifications.notifications || [];
+};
+
+export const selectUnreadNotifications = (state) => {
+  return state.notifications.unreadNotifications || [];
+};
+
 export const selectSelectedNotification = (state) => state.notifications.selectedNotification;
-export const selectNotificationsLoading = (state) => state.notifications.isLoading;
+export const selectNotificationsLoading = (state) => state.notifications.isLoading || false;
 export const selectNotificationsError = (state) => state.notifications.error;
-export const selectNotificationsTotal = (state) => state.notifications.totalCount;
-export const selectNotificationsTotalPages = (state) => state.notifications.totalPages;
-export const selectNotificationsCurrentPage = (state) => state.notifications.currentPage;
-export const selectUnreadCount = (state) => state.notifications.unreadCount;
-export const selectHighPriorityUnread = (state) => state.notifications.highPriorityUnread;
-export const selectTypeBreakdown = (state) => state.notifications.typeBreakdown;
-export const selectUnreadByType = (state) => state.notifications.unreadByType;
+export const selectNotificationsTotal = (state) => state.notifications.totalCount || 0;
+export const selectNotificationsTotalPages = (state) => state.notifications.totalPages || 1;
+export const selectNotificationsCurrentPage = (state) => state.notifications.currentPage || 1;
+export const selectUnreadCount = (state) => state.notifications.unreadCount || 0;
+export const selectHighPriorityUnread = (state) => state.notifications.highPriorityUnread || 0;
+export const selectTypeBreakdown = (state) => state.notifications.typeBreakdown || {};
+export const selectUnreadByType = (state) => state.notifications.unreadByType || {};
 export const selectNotificationPreferences = (state) => state.notifications.preferences;
-export const selectMarkSuccess = (state) => state.notifications.markSuccess;
-export const selectDeleteSuccess = (state) => state.notifications.deleteSuccess;
-export const selectUpdateSuccess = (state) => state.notifications.updateSuccess;
+export const selectMarkSuccess = (state) => state.notifications.markSuccess || false;
+export const selectDeleteSuccess = (state) => state.notifications.deleteSuccess || false;
+export const selectUpdateSuccess = (state) => state.notifications.updateSuccess || false;
 export const selectNotificationsLastUpdated = (state) => state.notifications.lastUpdated;
-export const selectCountsLoaded = (state) => state.notifications.countsLoaded; // NEW
+export const selectCountsLoaded = (state) => state.notifications.countsLoaded || false;
 
 // ==================== COMPLEX SELECTORS ====================
 
@@ -718,33 +836,33 @@ export const selectUnreadCountByType = (state, type) => {
 };
 
 export const selectNotificationsByType = (state, type) => {
-  return state.notifications.notifications.filter(n => n.type === type);
+  return (state.notifications.notifications || []).filter(n => n.type === type);
 };
 
 export const selectUnreadNotificationsByType = (state, type) => {
-  return state.notifications.unreadNotifications.filter(n => n.type === type);
+  return (state.notifications.unreadNotifications || []).filter(n => n.type === type);
 };
 
 export const selectHighPriorityNotifications = (state) => {
-  return state.notifications.notifications.filter(
+  return (state.notifications.notifications || []).filter(
     n => n.priority === 'high' || n.priority === 'urgent'
   );
 };
 
 export const selectUnreadHighPriorityNotifications = (state) => {
-  return state.notifications.unreadNotifications.filter(
+  return (state.notifications.unreadNotifications || []).filter(
     n => n.priority === 'high' || n.priority === 'urgent'
   );
 };
 
 export const selectNotificationsWithActions = (state) => {
-  return state.notifications.notifications.filter(
+  return (state.notifications.notifications || []).filter(
     n => n.actions && n.actions.length > 0
   );
 };
 
 export const selectNotificationsByReference = (state, referenceId, referenceModel) => {
-  return state.notifications.notifications.filter(
+  return (state.notifications.notifications || []).filter(
     n => n.reference_id === referenceId && n.reference_model === referenceModel
   );
 };

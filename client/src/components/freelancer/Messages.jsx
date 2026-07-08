@@ -12,7 +12,10 @@ import {
   getMessages, 
   sendMessage, 
   markAsRead,
-  clearMessages 
+  clearMessages,
+  clearError,
+  deleteConversation,
+  setSelectedUser,
 } from '../../Redux/slices/messageSlice';
 
 // ── Vantara Design tokens ──────────────────────────────────────────────────────────
@@ -34,9 +37,10 @@ const TEXT_MUTED = '#3A5070';
 const TEXT_LIGHT = '#7A90A8';
 const BORDER     = '#C8D8E8';
 const GREEN      = '#059669';
+const RED        = '#EF4444';
 // ─────────────────────────────────────────────────────────────────────────────────
 
-// ── Bottom Tab Bar with Centered My Jobs Button (BALANCED VERSION) ─────────────────
+// ── Bottom Tab Bar ────────────────────────────────────────────────────────────────
 function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   const tabs = [
     { key: 'FreelancerDashboard', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
@@ -49,7 +53,7 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   return (
     <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
       <View style={styles.tabBar}>
-        {tabs.map((tab, index) => {
+        {tabs.map((tab) => {
           const isActive = activeTab === tab.key;
           const isMyJobs = tab.key === 'MyJobs';
           const hasBadge = tab.key === 'Messages' && pendingOffers > 0;
@@ -96,272 +100,72 @@ function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
   );
 }
 
-// MOCK DATA for freelancer conversations (when API is not available)
-const MOCK_CONVERSATIONS = [
-  {
-    _id: 'conv1',
-    other_user_id: 'client1',
-    other_user_name: 'TechCorp Solutions',
-    other_user_first_name: 'TechCorp',
-    other_user_last_name: 'Solutions',
-    other_user_profile_picture: null,
-    last_message: 'We would like to schedule an interview for the Full-Stack position.',
-    last_message_time: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-    unread_count: 1,
-    is_online: true,
-    role: 'client',
-    job_title: 'Senior Full-Stack Developer'
-  },
-  {
-    _id: 'conv2',
-    other_user_id: 'client2',
-    other_user_name: 'Creative Agency PH',
-    other_user_first_name: 'Creative',
-    other_user_last_name: 'Agency',
-    other_user_profile_picture: null,
-    last_message: 'Your portfolio is impressive. Can you start next week?',
-    last_message_time: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    unread_count: 0,
-    is_online: false,
-    role: 'client',
-    job_title: 'UI/UX Designer'
-  },
-  {
-    _id: 'conv3',
-    other_user_id: 'client3',
-    other_user_name: 'StartUp Manila',
-    other_user_first_name: 'StartUp',
-    other_user_last_name: 'Manila',
-    other_user_profile_picture: null,
-    last_message: 'The contract has been sent to your email for review.',
-    last_message_time: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-    unread_count: 1,
-    is_online: true,
-    role: 'client',
-    job_title: 'Mobile App Developer'
-  },
-  {
-    _id: 'conv4',
-    other_user_id: 'client4',
-    other_user_name: 'Ecom Brands Inc',
-    other_user_first_name: 'Ecom',
-    other_user_last_name: 'Brands',
-    other_user_profile_picture: null,
-    last_message: 'Please send us the initial design concepts by Monday.',
-    last_message_time: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    unread_count: 0,
-    is_online: false,
-    role: 'client',
-    job_title: 'Graphic Designer'
-  },
-  {
-    _id: 'conv5',
-    other_user_id: 'client5',
-    other_user_name: 'Digital Marketing Pro',
-    other_user_first_name: 'Digital',
-    other_user_last_name: 'Marketing',
-    other_user_profile_picture: null,
-    last_message: 'We have approved your proposal. When can you start?',
-    last_message_time: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    unread_count: 3,
-    is_online: true,
-    role: 'client',
-    job_title: 'SEO Specialist'
-  },
-];
-
-// MOCK MESSAGES for each conversation
-const MOCK_MESSAGES = {
-  client1: [
-    { _id: 'm1', message: 'Hello! We saw your application for the Full-Stack position', sent: false, created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
-    { _id: 'm2', message: 'Thank you for considering my application', sent: true, created_at: new Date(Date.now() - 115 * 60 * 1000).toISOString() },
-    { _id: 'm3', message: 'We would like to schedule an interview for the Full-Stack position.', sent: false, created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
-  ],
-  client2: [
-    { _id: 'm1', message: 'Your UI/UX portfolio is outstanding!', sent: false, created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() },
-    { _id: 'm2', message: 'Thank you! I have worked with various startups', sent: true, created_at: new Date(Date.now() - 2.5 * 60 * 60 * 1000).toISOString() },
-    { _id: 'm3', message: 'Your portfolio is impressive. Can you start next week?', sent: false, created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
-  ],
-  client3: [
-    { _id: 'm1', message: 'We need a mobile app developer for our new project', sent: false, created_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() },
-    { _id: 'm2', message: 'I have experience with React Native and Flutter', sent: true, created_at: new Date(Date.now() - 5.5 * 60 * 60 * 1000).toISOString() },
-    { _id: 'm3', message: 'The contract has been sent to your email for review.', sent: false, created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString() },
-  ],
-  client4: [
-    { _id: 'm1', message: 'We are looking for a graphic designer for our brand', sent: false, created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() },
-    { _id: 'm2', message: 'I specialize in brand identity and logo design', sent: true, created_at: new Date(Date.now() - 1.8 * 24 * 60 * 60 * 1000).toISOString() },
-    { _id: 'm3', message: 'Please send us the initial design concepts by Monday.', sent: false, created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString() },
-  ],
-  client5: [
-    { _id: 'm1', message: 'We need an SEO specialist for our e-commerce site', sent: false, created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() },
-    { _id: 'm2', message: 'I have 4 years of SEO experience', sent: true, created_at: new Date(Date.now() - 1.5 * 24 * 60 * 60 * 1000).toISOString() },
-    { _id: 'm3', message: 'We have approved your proposal. When can you start?', sent: false, created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString() },
-  ],
-};
-
-export default function Messages({ onNavigate, route, userRole = 'freelancer' }) {
+// ── Chat Detail Component ──────────────────────────────────────────────────────
+function ChatDetail({ conversation, onBack, userRole, onNavigate, user }) {
   const dispatch = useDispatch();
-  const { conversations: reduxConversations, currentMessages, isLoading, sending } = useSelector((state) => state.messages);
-  const { user } = useSelector((state) => state.auth);
-  
-  const [selectedChat, setSelectedChat] = useState(null);
+  const { currentMessages, sending } = useSelector((state) => state.messages);
   const [messageText, setMessageText] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [useMockData, setUseMockData] = useState(true);
-  const [mockMessages, setMockMessages] = useState({});
   const flatListRef = useRef(null);
 
-  // Initialize mock messages
-  useEffect(() => {
-    if (useMockData) {
-      setMockMessages(MOCK_MESSAGES);
-    }
-  }, []);
+  const currentUserId = user?._id || user?.id;
 
-  // Handle hardware back button press
+  // Load messages when conversation is selected
+  useEffect(() => {
+    if (conversation?.other_user_id) {
+      console.log('Loading messages for user:', conversation.other_user_id);
+      dispatch(getMessages({ userId: conversation.other_user_id, limit: 50 }));
+    }
+
+    return () => {
+      dispatch(clearMessages());
+    };
+  }, [dispatch, conversation]);
+
+  // Handle hardware back button - goes back to conversation list
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (selectedChat) {
-        // If in chat view, go back to conversation list
-        handleBackFromChat();
-        return true; // Prevent default behavior
-      }
-      // If in conversation list, let the default back behavior happen
-      return false;
+      onBack();
+      return true;
     });
 
     return () => backHandler.remove();
-  }, [selectedChat]);
+  }, [onBack]);
 
-  // Check if route params has a user to chat with (from navigation)
-  useEffect(() => {
-    if (route?.params?.userId && route?.params?.userName) {
-      const tempConversation = {
-        _id: `temp_${route.params.userId}`,
-        other_user_id: route.params.userId,
-        other_user_name: route.params.userName,
-        other_user_first_name: route.params.userName.split(' ')[0],
-        other_user_last_name: route.params.userName.split(' ')[1] || '',
-        other_user_profile_picture: route.params.userProfilePicture || null,
-        last_message: 'Start a conversation',
-        last_message_time: new Date().toISOString(),
-        unread_count: 0,
-        is_online: false,
-      };
-      setSelectedChat(tempConversation);
-      if (!useMockData) {
-        fetchMessages(tempConversation.other_user_id);
-      }
-    }
-  }, [route?.params]);
+  const sendMessageHandler = async () => {
+    if (!messageText.trim() || !conversation?.other_user_id) return;
 
-  useEffect(() => {
-    if (!useMockData) {
-      fetchConversations();
-    }
-  }, []);
+    const receiverId = conversation.other_user_id;
+    const receiverModel = conversation.user?.model || 
+      (conversation.role === 'client' ? 'Client' : 'Freelancer');
 
-  const fetchConversations = async () => {
+    const messageContent = messageText.trim();
+    
+    setMessageText('');
+
     try {
-      await dispatch(getConversations()).unwrap();
-    } catch (error) {
-      console.error('Error fetching conversations:', error);
-    }
-  };
-
-  const fetchMessages = async (otherUserId) => {
-    try {
-      await dispatch(getMessages(otherUserId)).unwrap();
+      await dispatch(sendMessage({ 
+        receiver_id: receiverId,
+        receiver_model: receiverModel,
+        message: messageContent
+      })).unwrap();
+      
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
-      }, 200);
+      }, 100);
     } catch (error) {
-      console.error('Error fetching messages:', error);
-      Alert.alert('Error', 'Failed to load messages');
+      console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message');
     }
   };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    if (!useMockData) {
-      await fetchConversations();
-      if (selectedChat) {
-        await fetchMessages(selectedChat.other_user_id);
-      }
+    if (conversation?.other_user_id) {
+      await dispatch(getMessages({ userId: conversation.other_user_id, limit: 50 })).unwrap();
     }
     setRefreshing(false);
-  }, [selectedChat, useMockData]);
-
-  const sendMessageHandler = async () => {
-    if (!messageText.trim() || !selectedChat) return;
-
-    const receiverId = selectedChat._id.startsWith('temp') 
-      ? selectedChat.other_user_id 
-      : selectedChat.other_user_id;
-
-    if (useMockData) {
-      const newMessage = {
-        _id: Date.now().toString(),
-        message: messageText.trim(),
-        sent: true,
-        created_at: new Date().toISOString(),
-      };
-      
-      setMockMessages(prev => ({
-        ...prev,
-        [receiverId]: [...(prev[receiverId] || []), newMessage]
-      }));
-      
-      setMessageText('');
-      
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    } else {
-      try {
-        await dispatch(sendMessage({ 
-          receiverId, 
-          message: messageText.trim() 
-        })).unwrap();
-        
-        setMessageText('');
-        await fetchMessages(receiverId);
-        await fetchConversations();
-        
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      } catch (error) {
-        console.error('Error sending message:', error);
-        Alert.alert('Error', 'Failed to send message');
-      }
-    }
-  };
-
-  const handleSelectChat = async (conversation) => {
-    setSelectedChat(conversation);
-    
-    if (useMockData) {
-      if (conversation.unread_count > 0) {
-        conversation.unread_count = 0;
-      }
-    } else {
-      await fetchMessages(conversation.other_user_id);
-      
-      if (conversation.unread_count > 0) {
-        await dispatch(markAsRead(conversation.other_user_id)).unwrap();
-        await fetchConversations();
-      }
-    }
-  };
-
-  const handleBackFromChat = () => {
-    setSelectedChat(null);
-    if (!useMockData) {
-      dispatch(clearMessages());
-    }
-  };
+  }, [dispatch, conversation]);
 
   const formatTime = (dateString) => {
     if (!dateString) return '';
@@ -372,9 +176,9 @@ export default function Messages({ onNavigate, route, userRole = 'freelancer' })
     
     if (hours < 1) {
       const minutes = Math.floor(diff / (1000 * 60));
-      return `${minutes}m ago`;
+      return `${minutes}m`;
     } else if (hours < 24) {
-      return `${hours}h ago`;
+      return `${hours}h`;
     } else if (hours < 48) {
       return 'Yesterday';
     } else {
@@ -386,27 +190,323 @@ export default function Messages({ onNavigate, route, userRole = 'freelancer' })
     return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
   };
 
-  const getConversations = () => {
-    if (useMockData) {
-      return MOCK_CONVERSATIONS;
-    }
-    return reduxConversations;
-  };
+  const renderMessage = ({ item }) => {
+    const isSent = item.sent === true || 
+                   item.is_sender === true ||
+                   item.sender_id === 'me' ||
+                   (item.sender_id && currentUserId && item.sender_id.toString() === currentUserId.toString());
 
-  const getCurrentMessages = () => {
-    if (useMockData && selectedChat) {
-      return mockMessages[selectedChat.other_user_id] || [];
-    }
-    return currentMessages;
-  };
-
-  const filteredConversations = () => {
-    const conversations = getConversations();
-    if (!searchQuery) return conversations;
-    return conversations.filter(conv => 
-      conv.other_user_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    return (
+      <View style={[
+        styles.messageWrapper,
+        isSent ? styles.sentWrapper : styles.receivedWrapper
+      ]}>
+        <View style={[
+          styles.messageBubble,
+          isSent ? styles.sentBubble : styles.receivedBubble
+        ]}>
+          <Text style={[
+            styles.messageText,
+            isSent ? styles.sentMessageText : styles.receivedMessageText
+          ]}>
+            {item.message || item.text || 'Message'}
+          </Text>
+          <View style={styles.messageFooter}>
+            <Text style={[
+              styles.messageTime,
+              isSent && styles.sentMessageTime
+            ]}>
+              {formatTime(item.created_at)}
+            </Text>
+            {isSent && (
+              <Ionicons 
+                name={item.is_read ? 'checkmark-done' : 'checkmark'} 
+                size={12} 
+                color={item.is_read ? GOLD : 'rgba(255,255,255,0.5)'} 
+              />
+            )}
+          </View>
+        </View>
+      </View>
     );
   };
+
+  const userName = conversation?.user?.name || 
+                   conversation?.other_user_name || 
+                   'Unknown User';
+  const userProfilePic = conversation?.user?.profile_picture || 
+                         conversation?.other_user_profile_picture;
+  const isOnline = conversation?.is_online || false;
+  const userModel = conversation?.user?.model || 
+                    conversation?.role || 
+                    'User';
+
+  const initials = getInitials(
+    conversation?.user?.first_name || conversation?.other_user_first_name,
+    conversation?.user?.last_name || conversation?.other_user_last_name
+  );
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Chat Header */}
+      <View style={styles.chatHeader}>
+        <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={24} color={WHITE} />
+        </TouchableOpacity>
+        
+        <View style={styles.chatHeaderInfo}>
+          <View style={styles.chatAvatarContainer}>
+            {userProfilePic ? (
+              <Image source={{ uri: userProfilePic }} style={styles.chatAvatar} />
+            ) : (
+              <View style={[styles.chatAvatarPlaceholder, { backgroundColor: BLUE }]}>
+                <Text style={styles.chatAvatarInitials}>{initials}</Text>
+              </View>
+            )}
+            {isOnline && <View style={styles.chatOnlineDot} />}
+          </View>
+          <View style={styles.chatHeaderText}>
+            <Text style={styles.chatName}>{userName}</Text>
+            <Text style={styles.chatStatus}>
+              {isOnline ? 'Online' : 'Offline'}
+            </Text>
+            {userModel && (
+              <Text style={styles.chatJobTitle}>{userModel}</Text>
+            )}
+          </View>
+        </View>
+        
+        <TouchableOpacity style={styles.chatMenuBtn} activeOpacity={0.7}>
+          <Ionicons name="ellipsis-vertical" size={20} color={WHITE} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Messages */}
+      <FlatList
+        ref={flatListRef}
+        data={currentMessages}
+        renderItem={renderMessage}
+        keyExtractor={(item, index) => item._id || item.id || index.toString()}
+        contentContainerStyle={styles.messagesList}
+        showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
+        }
+        ListEmptyComponent={() => (
+          <View style={styles.emptyMessagesContainer}>
+            <View style={styles.emptyIconWrap}>
+              <Ionicons name="chatbubbles-outline" size={48} color={BLUE} />
+            </View>
+            <Text style={styles.emptyMessagesTitle}>No messages yet</Text>
+            <Text style={styles.emptyMessagesText}>
+              Send a message to start the conversation
+            </Text>
+          </View>
+        )}
+      />
+
+      {/* Input Area */}
+      <View style={styles.inputContainer}>
+        <TouchableOpacity style={styles.attachBtn} activeOpacity={0.7}>
+          <Ionicons name="attach-outline" size={20} color={GOLD} />
+        </TouchableOpacity>
+        
+        <View style={styles.textInputWrapper}>
+          <TextInput
+            style={styles.messageInput}
+            placeholder="Type a message..."
+            placeholderTextColor={TEXT_LIGHT}
+            value={messageText}
+            onChangeText={setMessageText}
+            multiline
+          />
+        </View>
+        
+        <TouchableOpacity 
+          style={[
+            styles.sendBtn, 
+            (!messageText.trim() || sending) && styles.sendBtnDisabled
+          ]}
+          onPress={sendMessageHandler}
+          disabled={!messageText.trim() || sending}
+          activeOpacity={0.7}
+        >
+          {sending ? (
+            <ActivityIndicator size="small" color={WHITE} />
+          ) : (
+            <Ionicons 
+              name="send" 
+              size={18} 
+              color={messageText.trim() ? WHITE : TEXT_LIGHT} 
+            />
+          )}
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ── Main Messages Component ──────────────────────────────────────────────────
+export default function Messages({ onNavigate, route, userRole = 'freelancer' }) {
+  const dispatch = useDispatch();
+  const { 
+    conversations: reduxConversations, 
+    isLoading, 
+    totalUnread,
+    error
+  } = useSelector((state) => state.messages);
+  const { user } = useSelector((state) => state.auth);
+  
+  const [selectedChat, setSelectedChat] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('all');
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Handle navigation params (when coming from job application, etc.)
+  useEffect(() => {
+    if (route?.params?.userId && route?.params?.userName) {
+      const tempConversation = {
+        _id: `temp_${route.params.userId}`,
+        other_user_id: route.params.userId,
+        user: {
+          id: route.params.userId,
+          name: route.params.userName,
+          profile_picture: route.params.userProfilePicture || null,
+          model: route.params.userModel || 'Freelancer',
+          account_status: 'active'
+        },
+        other_user_name: route.params.userName,
+        other_user_first_name: route.params.userName.split(' ')[0],
+        other_user_last_name: route.params.userName.split(' ')[1] || '',
+        other_user_profile_picture: route.params.userProfilePicture || null,
+        last_message: {
+          id: 'temp',
+          message: 'Start a conversation',
+          created_at: new Date().toISOString(),
+          is_read: false
+        },
+        unread_count: 0,
+        is_online: false,
+        role: route.params.userModel === 'Client' ? 'client' : 'freelancer',
+      };
+      setSelectedChat(tempConversation);
+      dispatch(setSelectedUser(route.params.userId));
+    }
+  }, [route?.params]);
+
+  // Load conversations on mount
+  useEffect(() => {
+    if (!initialLoadDone) {
+      console.log('Loading conversations...');
+      dispatch(getConversations());
+      setInitialLoadDone(true);
+    }
+  }, [dispatch, initialLoadDone]);
+
+  // Handle hardware back button - go back to previous screen
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // If in chat detail view, go back to conversation list
+      if (selectedChat) {
+        setSelectedChat(null);
+        dispatch(setSelectedUser(null));
+        dispatch(clearMessages());
+        return true; // Prevent default behavior
+      }
+      
+      // If in conversation list, navigate back to previous screen
+      // This will use the onNavigate function to go back
+      if (onNavigate) {
+        // Determine which dashboard to go back to based on user role
+        if (userRole === 'freelancer') {
+          onNavigate('FreelancerDashboard');
+        } else {
+          onNavigate('ClientDashboard');
+        }
+        return true; // Prevent default behavior
+      }
+      
+      return false; // Let default behavior happen
+    });
+
+    return () => backHandler.remove();
+  }, [selectedChat, onNavigate, userRole]);
+
+  const fetchConversations = async () => {
+    try {
+      await dispatch(getConversations()).unwrap();
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+    }
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchConversations();
+    setRefreshing(false);
+  }, []);
+
+  const handleSelectChat = (conversation) => {
+    setSelectedChat(conversation);
+    dispatch(setSelectedUser(conversation.other_user_id));
+    
+    // Mark messages as read if there are unread
+    if (conversation.unread_count > 0) {
+      dispatch(markAsRead(conversation.other_user_id));
+    }
+  };
+
+  const handleBackFromChat = () => {
+    setSelectedChat(null);
+    dispatch(setSelectedUser(null));
+    dispatch(clearMessages());
+  };
+
+  const formatTime = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now - date;
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    
+    if (hours < 1) {
+      const minutes = Math.floor(diff / (1000 * 60));
+      return `${minutes}m`;
+    } else if (hours < 24) {
+      return `${hours}h`;
+    } else if (hours < 48) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+  };
+
+  const getInitials = (firstName, lastName) => {
+    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
+  };
+
+  // Filter conversations
+  const getFilteredConversations = () => {
+    let filtered = reduxConversations || [];
+
+    if (searchQuery) {
+      const searchLower = searchQuery.toLowerCase();
+      filtered = filtered.filter((c) => {
+        const name = c.user?.name || c.other_user_name || '';
+        return name.toLowerCase().includes(searchLower);
+      });
+    }
+
+    if (activeTab === 'unread') {
+      filtered = filtered.filter((c) => (c.unread_count || 0) > 0);
+    }
+
+    return filtered;
+  };
+
+  const filteredConversations = getFilteredConversations();
 
   // Handle tab bar navigation
   const handleTabBarPress = (key) => {
@@ -424,186 +524,137 @@ export default function Messages({ onNavigate, route, userRole = 'freelancer' })
     }
   };
 
-  const ConversationItem = ({ item }) => (
-    <TouchableOpacity 
-      style={[styles.conversationItem, selectedChat?.other_user_id === item.other_user_id && styles.conversationActive]}
-      onPress={() => handleSelectChat(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.avatarContainer}>
-        {item.other_user_profile_picture ? (
-          <Image source={{ uri: item.other_user_profile_picture }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatarPlaceholder, { backgroundColor: BLUE }]}>
-            <Text style={styles.avatarInitials}>
-              {getInitials(item.other_user_first_name, item.other_user_last_name)}
-            </Text>
-          </View>
-        )}
-        {item.is_online && <View style={styles.onlineDot} />}
-      </View>
-      
-      <View style={styles.conversationInfo}>
-        <View style={styles.conversationHeader}>
-          <Text style={styles.conversationName}>{item.other_user_name}</Text>
-          <Text style={styles.conversationTime}>{formatTime(item.last_message_time)}</Text>
-        </View>
-        <View style={styles.conversationPreview}>
-          <Text style={styles.lastMessage} numberOfLines={1}>
-            {item.last_message || 'No messages yet'}
-          </Text>
-          {item.unread_count > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>{item.unread_count}</Text>
-            </View>
-          )}
-        </View>
-        {item.job_title && (
-          <View style={styles.jobBadge}>
-            <Ionicons name="briefcase-outline" size={10} color={GOLD} />
-            <Text style={styles.jobBadgeText}>{item.job_title}</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+  // Conversation Item Component
+  const ConversationItem = ({ item }) => {
+    const userName = item.user?.name || item.other_user_name || 'Unknown User';
+    const userProfilePic = item.user?.profile_picture || item.other_user_profile_picture;
+    const isOnline = item.is_online || false;
+    const unreadCount = item.unread_count || 0;
+    const lastMsg = item.last_message?.message || 'No messages yet';
+    const lastMsgTime = item.last_message?.created_at || item.last_message_time;
 
-  const MessageBubble = ({ item }) => (
-    <View style={[styles.messageWrapper, item.sent ? styles.sentWrapper : styles.receivedWrapper]}>
-      <View style={[styles.messageBubble, item.sent ? styles.sentBubble : styles.receivedBubble]}>
-        <Text style={[styles.messageText, item.sent && styles.sentMessageText]}>
-          {item.message}
-        </Text>
-        <Text style={[styles.messageTime, item.sent && styles.sentMessageTime]}>
-          {formatTime(item.created_at)}
-        </Text>
-      </View>
-    </View>
-  );
+    const firstName = item.user?.first_name || item.other_user_first_name || '';
+    const lastName = item.user?.last_name || item.other_user_last_name || '';
 
-  const ChatHeader = () => (
-    <View style={styles.chatHeader}>
-      {/* Removed the custom back button here - now using device back button */}
-      
-      <View style={styles.chatHeaderInfo}>
-        <View style={styles.chatAvatarContainer}>
-          {selectedChat?.other_user_profile_picture ? (
-            <Image source={{ uri: selectedChat.other_user_profile_picture }} style={styles.chatAvatar} />
+    return (
+      <TouchableOpacity 
+        style={[styles.conversationItem, selectedChat?.other_user_id === item.other_user_id && styles.conversationActive]}
+        onPress={() => handleSelectChat(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.avatarContainer}>
+          {userProfilePic ? (
+            <Image source={{ uri: userProfilePic }} style={styles.avatar} />
           ) : (
-            <View style={[styles.chatAvatarPlaceholder, { backgroundColor: BLUE }]}>
-              <Text style={styles.chatAvatarInitials}>
-                {getInitials(selectedChat?.other_user_first_name, selectedChat?.other_user_last_name)}
+            <View style={[styles.avatarPlaceholder, { backgroundColor: BLUE }]}>
+              <Text style={styles.avatarInitials}>
+                {getInitials(firstName, lastName)}
               </Text>
             </View>
           )}
-          {selectedChat?.is_online && <View style={styles.chatOnlineDot} />}
+          {isOnline && <View style={styles.onlineDot} />}
         </View>
-        <View>
-          <Text style={styles.chatName}>{selectedChat?.other_user_name}</Text>
-          <Text style={styles.chatStatus}>
-            {selectedChat?.is_online ? 'Online' : 'Offline'}
-          </Text>
-          {selectedChat?.job_title && (
-            <Text style={styles.chatJobTitle}>{selectedChat.job_title}</Text>
+        
+        <View style={styles.conversationInfo}>
+          <View style={styles.conversationHeader}>
+            <Text style={styles.conversationName}>{userName}</Text>
+            <Text style={styles.conversationTime}>{formatTime(lastMsgTime)}</Text>
+          </View>
+          <View style={styles.conversationPreview}>
+            <Text style={styles.lastMessage} numberOfLines={1}>
+              {lastMsg}
+            </Text>
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
+          {item.user?.model && (
+            <View style={styles.jobBadge}>
+              <Ionicons name="person-outline" size={10} color={GOLD} />
+              <Text style={styles.jobBadgeText}>{item.user.model}</Text>
+            </View>
           )}
-        </View>
-      </View>
-      
-      <TouchableOpacity style={styles.chatMenuBtn} activeOpacity={0.7}>
-        <View style={styles.menuIconWrap}>
-          <Ionicons name="ellipsis-vertical" size={18} color={WHITE} />
         </View>
       </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
-  // Chat Detail View
+  // If a chat is selected, show the chat detail
   if (selectedChat) {
-    const messages = getCurrentMessages();
-    
+    return (
+      <ChatDetail 
+        conversation={selectedChat}
+        onBack={handleBackFromChat}
+        userRole={userRole}
+        onNavigate={onNavigate}
+        user={user}
+      />
+    );
+  }
+
+  // Show loading state
+  if (isLoading && !initialLoadDone) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
-        <ChatHeader />
-        
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item._id || item.id}
-          renderItem={({ item }) => <MessageBubble item={item} />}
-          contentContainerStyle={styles.messagesList}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
-          }
-          ListEmptyComponent={() => (
-            <View style={styles.emptyMessagesContainer}>
-              <View style={styles.emptyIconWrap}>
-                <Ionicons name="chatbubbles-outline" size={48} color={BLUE} />
-              </View>
-              <Text style={styles.emptyMessagesTitle}>No messages yet</Text>
-              <Text style={styles.emptyMessagesText}>
-                Send a message to start the conversation
-              </Text>
-            </View>
-          )}
-        />
-        
-        <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.attachBtn} activeOpacity={0.7}>
-            <View style={styles.attachIconWrap}>
-              <Ionicons name="attach-outline" size={20} color={BLUE} />
-            </View>
-          </TouchableOpacity>
-          
-          <TextInput
-            style={styles.messageInput}
-            placeholder="Type a message..."
-            placeholderTextColor={TEXT_LIGHT}
-            value={messageText}
-            onChangeText={setMessageText}
-            multiline
-          />
-          
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={BLUE} />
+          <Text style={styles.loadingText}>Loading conversations...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show error state
+  if (error && !initialLoadDone) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={RED} />
+          <Text style={styles.errorTitle}>Failed to load messages</Text>
+          <Text style={styles.errorSubtitle}>
+            {typeof error === 'string' ? error : error.message || 'Please try again'}
+          </Text>
           <TouchableOpacity 
-            style={[styles.sendBtn, (!messageText.trim() || sending) && styles.sendBtnDisabled]}
-            onPress={sendMessageHandler}
-            disabled={!messageText.trim() || sending}
-            activeOpacity={0.7}
+            style={styles.retryBtn} 
+            onPress={() => {
+              dispatch(clearError());
+              dispatch(getConversations());
+            }}
           >
-            {sending ? (
-              <ActivityIndicator size="small" color={WHITE} />
-            ) : (
-              <Ionicons 
-                name="send" 
-                size={18} 
-                color={messageText.trim() ? WHITE : TEXT_LIGHT} 
-              />
-            )}
+            <Text style={styles.retryBtnText}>Retry</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Conversations List View
-  const conversations = filteredConversations();
-  const isLoadingState = !useMockData && isLoading && !refreshing;
-  const pendingOffers = 0;
-
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
       
       <View style={styles.header}>
-        {/* Removed the custom back button in header as requested */}
         <Text style={styles.title}>Messages</Text>
-        <TouchableOpacity style={styles.newMsgBtn} activeOpacity={0.7}>
-          <View style={styles.newMsgIconWrap}>
-            <Ionicons name="create-outline" size={18} color={GOLD} />
-          </View>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {totalUnread > 0 && (
+            <View style={styles.totalUnreadBadge}>
+              <Text style={styles.totalUnreadText}>{totalUnread}</Text>
+            </View>
+          )}
+          <TouchableOpacity 
+            style={styles.refreshBtn} 
+            onPress={onRefresh}
+            disabled={isLoading}
+            activeOpacity={0.7}
+          >
+            <Ionicons 
+              name="refresh-outline" 
+              size={20} 
+              color={WHITE} 
+            />
+          </TouchableOpacity>
+        </View>
       </View>
       
       <View style={styles.searchContainer}>
@@ -621,57 +672,66 @@ export default function Messages({ onNavigate, route, userRole = 'freelancer' })
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Tabs */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'all' && styles.activeTab]} 
+          onPress={() => setActiveTab('all')}
+        >
+          <Ionicons name="chatbubbles-outline" size={14} color={activeTab === 'all' ? BLUE : TEXT_LIGHT} />
+          <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>All</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'unread' && styles.activeTab]} 
+          onPress={() => setActiveTab('unread')}
+        >
+          <Ionicons name="mail-unread-outline" size={14} color={activeTab === 'unread' ? BLUE : TEXT_LIGHT} />
+          <Text style={[styles.tabText, activeTab === 'unread' && styles.activeTabText]}>Unread</Text>
+          {totalUnread > 0 && (
+            <View style={styles.tabBadge}>
+              <Text style={styles.tabBadgeText}>{totalUnread}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
       
-      {isLoadingState ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={BLUE} />
-          <Text style={styles.loadingText}>Loading conversations...</Text>
+      {filteredConversations.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIconWrap}>
+            <Ionicons name="chatbubbles-outline" size={48} color={BLUE} />
+          </View>
+          <Text style={styles.emptyTitle}>No conversations yet</Text>
+          <Text style={styles.emptyText}>
+            {userRole === 'freelancer' 
+              ? 'When clients message you about jobs, your conversations will appear here'
+              : 'When you message freelancers, your conversations will appear here'}
+          </Text>
         </View>
       ) : (
         <FlatList
-          data={conversations}
-          keyExtractor={(item) => item._id}
+          data={filteredConversations}
+          keyExtractor={(item) => item._id || item.user?.id || Date.now().toString()}
           renderItem={({ item }) => <ConversationItem item={item} />}
           contentContainerStyle={styles.conversationsList}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
           }
-          ListEmptyComponent={() => (
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconWrap}>
-                <Ionicons name="chatbubbles-outline" size={48} color={BLUE} />
-              </View>
-              <Text style={styles.emptyTitle}>No conversations yet</Text>
-              <Text style={styles.emptyText}>
-                {userRole === 'freelancer' 
-                  ? 'When clients message you about jobs, your conversations will appear here'
-                  : 'When you message freelancers, your conversations will appear here'}
-              </Text>
-              <TouchableOpacity 
-                style={styles.browseJobsBtn}
-                onPress={() => onNavigate(userRole === 'freelancer' ? 'BrowseJobs' : 'BrowseFreelancers')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.browseJobsText}>
-                  {userRole === 'freelancer' ? 'Browse Jobs' : 'Find Freelancers'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
         />
       )}
       
-      {/* Balanced Bottom Tab Bar */}
+      {/* Bottom Tab Bar */}
       <BottomTabBar 
         activeTab="Messages" 
         onTabPress={handleTabBarPress} 
-        pendingOffers={pendingOffers}
+        pendingOffers={0}
       />
     </SafeAreaView>
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
   
@@ -685,20 +745,35 @@ const styles = StyleSheet.create({
     backgroundColor: NAVY,
   },
   title: { fontSize: 18, fontWeight: '700', color: WHITE, letterSpacing: -0.3 },
-  newMsgBtn: { alignSelf: 'flex-start' },
-  newMsgIconWrap: {
-    width: 40, height: 40,
-    backgroundColor: 'rgba(200,149,32,0.1)',
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  totalUnreadBadge: {
+    backgroundColor: GOLD,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(200,149,32,0.25)',
-    alignItems: 'center', justifyContent: 'center',
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  totalUnreadText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: WHITE,
+  },
+  refreshBtn: {
+    padding: 4,
   },
   
   // Search Styles
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    margin: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 12,
     paddingHorizontal: 14,
     backgroundColor: CARD,
     borderRadius: 12,
@@ -715,16 +790,95 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   
+  // Tabs
+  tabsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 12,
+    marginBottom: 8,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: CARD,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  activeTab: {
+    backgroundColor: `${BLUE}10`,
+    borderColor: BLUE,
+  },
+  tabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: TEXT_LIGHT,
+  },
+  activeTabText: {
+    color: BLUE,
+  },
+  tabBadge: {
+    backgroundColor: BLUE,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: WHITE,
+  },
+  
   // Loading State
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: BG,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
     color: TEXT_MUTED,
+  },
+  
+  // Error State
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: BG,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    marginTop: 12,
+  },
+  errorSubtitle: {
+    fontSize: 14,
+    color: TEXT_MUTED,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  retryBtn: {
+    backgroundColor: BLUE,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryBtnText: {
+    color: WHITE,
+    fontWeight: '600',
+    fontSize: 14,
   },
   
   // Conversation List Styles
@@ -837,8 +991,10 @@ const styles = StyleSheet.create({
   
   // Empty State
   emptyContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 40,
     paddingVertical: 60,
   },
   emptyIconWrap: {
@@ -862,30 +1018,20 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingHorizontal: 40,
   },
-  browseJobsBtn: {
-    backgroundColor: BLUE,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-    shadowColor: BLUE, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28, shadowRadius: 20, elevation: 4,
-  },
-  browseJobsText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: WHITE,
-  },
   
   // Chat View Styles
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center', // Changed from 'space-between' to center the content
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
     backgroundColor: NAVY,
+  },
+  backBtn: {
+    padding: 4,
+    marginRight: 8,
   },
   chatHeaderInfo: {
     flexDirection: 'row',
@@ -924,6 +1070,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: NAVY,
   },
+  chatHeaderText: {
+    flex: 1,
+  },
   chatName: {
     fontSize: 16,
     fontWeight: '600',
@@ -939,15 +1088,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   chatMenuBtn: {
-    alignSelf: 'flex-start',
-    marginLeft: 8,
-  },
-  menuIconWrap: {
-    width: 40, height: 40,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center', justifyContent: 'center',
+    padding: 8,
   },
   
   // Messages Styles
@@ -992,10 +1133,19 @@ const styles = StyleSheet.create({
   sentMessageText: {
     color: WHITE,
   },
+  receivedMessageText: {
+    color: TEXT_MAIN,
+  },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: 4,
+  },
   messageTime: {
     fontSize: 10,
     color: TEXT_LIGHT,
-    textAlign: 'right',
   },
   sentMessageTime: {
     color: 'rgba(255,255,255,0.7)',
@@ -1003,6 +1153,7 @@ const styles = StyleSheet.create({
   
   // Empty Messages
   emptyMessagesContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
@@ -1032,26 +1183,24 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   attachBtn: {
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-end',
+    padding: 8,
   },
-  attachIconWrap: {
-    width: 40, height: 40,
-    backgroundColor: 'rgba(0,104,181,0.08)',
-    borderRadius: 20,
-    borderWidth: 1.5, borderColor: 'rgba(0,104,181,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  messageInput: {
+  textInputWrapper: {
     flex: 1,
     backgroundColor: BG,
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    color: TEXT_MAIN,
-    fontSize: 14,
-    maxHeight: 100,
     borderWidth: 1,
     borderColor: BORDER,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    maxHeight: 100,
+  },
+  messageInput: {
+    fontSize: 14,
+    color: TEXT_MAIN,
+    padding: 0,
+    maxHeight: 80,
   },
   sendBtn: {
     width: 40,
@@ -1068,7 +1217,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
   },
   
-  // Balanced Bottom Tab Bar Styles
+  // Bottom Tab Bar Styles
   tabSafe: { 
     backgroundColor: CARD,
     borderTopWidth: 1,

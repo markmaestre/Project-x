@@ -33,6 +33,8 @@ import MyApplications from './components/freelancer/MyApplications';
 import EditProfile from './components/freelancer/EditProfile';
 import RatingFreelancer from './components/freelancer/RatingFreelancer';
 import Notification from './components/freelancer/Notifications';
+import Search from './components/freelancer/Search'; 
+
 
 export default function AppNavigator() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
@@ -181,6 +183,8 @@ export default function AppNavigator() {
       return <RatingFreelancer onNavigate={handleNavigate} />;
     case 'Notification':
       return <Notification onNavigate={handleNavigate} />;
+    case 'Search':
+      return <Search onNavigate={handleNavigate} />;
 
     // ── Messages ──────────────────────────────────────────────
     case 'Message':
