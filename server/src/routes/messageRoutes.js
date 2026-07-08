@@ -1,528 +1,596 @@
-// Redux/slices/messageSlice.js - UPDATED FOR BACKEND ROUTES
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import api from '../../services/api';
+// routes/messageRoutes.js
 
-// Get all conversations for the current user
-export const getConversations = createAsyncThunk(
-  'messages/getConversations',
-  async (_, { getState, rejectWithValue }) => {
-    try {
-      const state = getState();
-      const token = state.auth.token;
-      
-      if (!token) {
-        console.error('No token found in state');
-        return rejectWithValue({ message: 'No token found' });
-      }
+import express from "express";
+import mongoose from "mongoose";
+import { authMiddleware } from "../middleware/authMiddleware.js";
+import Message from "../models/Message.js";
+import Client from "../models/Client.js";
+import Freelancer from "../models/Freelancer.js";
+import NotificationService from "../services/notificationService.js";
 
-      console.log('Fetching conversations...');
-      const response = await api.get('/messages/conversations', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      console.log('Conversations response:', response.data);
-      
-      return {
-        conversations: response.data.conversations || [],
-        totalPages: response.data.totalPages || 1,
-        currentPage: response.data.currentPage || 1,
-        totalConversations: response.data.totalConversations || 0
-      };
-    } catch (error) {
-      console.error('Get conversations error:', error.response?.status, error.response?.data || error.message);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
+const router = express.Router();
 
-// Get messages with a specific user (conversation)
-export const getMessages = createAsyncThunk(
-  'messages/getMessages',
-  async ({ userId, page = 1, limit = 50 }, { getState, rejectWithValue }) => {
-    try {
-      const state = getState();
-      const token = state.auth.token;
-      
-      if (!token) {
-        console.error('No token found in state');
-        return rejectWithValue({ message: 'No token found' });
-      }
+// ==================== HELPER FUNCTIONS ====================
 
-      console.log('Fetching conversation with user:', userId);
-      const response = await api.get(`/messages/conversation/${userId}?page=${page}&limit=${limit}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      console.log('Conversation response:', response.data);
-      
-      return {
-        messages: response.data.messages || [],
-        otherUser: response.data.otherUser || null,
-        totalPages: response.data.totalPages || 1,
-        currentPage: response.data.currentPage || 1,
-        totalMessages: response.data.totalMessages || 0,
-        userId: userId
-      };
-    } catch (error) {
-      console.error('Get messages error:', error.response?.status, error.response?.data || error.message);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
-
-// Send a message
-export const sendMessage = createAsyncThunk(
-  'messages/sendMessage',
-  async ({ receiver_id, receiver_model, message }, { getState, rejectWithValue }) => {
-    try {
-      const state = getState();
-      const token = state.auth.token;
-      
-      if (!token) {
-        console.error('No token found in state');
-        return rejectWithValue({ message: 'No token found' });
-      }
-
-      // Determine receiver_model if not provided
-      let finalReceiverModel = receiver_model;
-      if (!finalReceiverModel) {
-        // Try to find the user in conversations
-        const conversation = state.messages.conversations.find(
-          c => c.user?.id === receiver_id
-        );
-        if (conversation) {
-          finalReceiverModel = conversation.user.model;
-        } else {
-          // Default to 'Freelancer' if we can't determine
-          finalReceiverModel = 'Freelancer';
-        }
-      }
-
-      console.log('Sending message to:', receiver_id, 'model:', finalReceiverModel, 'Message:', message);
-      
-      const response = await api.post('/messages', 
-        { 
-          receiver_id, 
-          receiver_model: finalReceiverModel, 
-          message 
-        },
-        {
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      console.log('Send message response:', response.data);
-      
-      // Return the message data from the response
-      return response.data.data || response.data;
-    } catch (error) {
-      console.error('Send message error:', error.response?.status, error.response?.data || error.message);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
-
-// Mark messages as read in a conversation
-export const markAsRead = createAsyncThunk(
-  'messages/markAsRead',
-  async (userId, { getState, rejectWithValue }) => {
-    try {
-      const state = getState();
-      const token = state.auth.token;
-      
-      if (!token) {
-        console.error('No token found in state');
-        return rejectWithValue({ message: 'No token found' });
-      }
-
-      const response = await api.patch(`/messages/read/${userId}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      console.log('Mark as read response:', response.data);
-      
-      return { 
-        userId, 
-        updatedCount: response.data.updatedCount || 0 
-      };
-    } catch (error) {
-      console.error('Mark as read error:', error.response?.status, error.response?.data || error.message);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
-
-// Get unread message count
-export const getUnreadCount = createAsyncThunk(
-  'messages/getUnreadCount',
-  async (_, { getState, rejectWithValue }) => {
-    try {
-      const state = getState();
-      const token = state.auth.token;
-      
-      if (!token) {
-        console.error('No token found in state');
-        return rejectWithValue({ message: 'No token found' });
-      }
-
-      const response = await api.get('/messages/unread/count', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      console.log('Unread count response:', response.data);
-      
-      return response.data.unreadCount || 0;
-    } catch (error) {
-      console.error('Get unread count error:', error.response?.status, error.response?.data || error.message);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
-
-// Delete a single message
-export const deleteMessage = createAsyncThunk(
-  'messages/deleteMessage',
-  async (messageId, { getState, rejectWithValue }) => {
-    try {
-      const state = getState();
-      const token = state.auth.token;
-      
-      if (!token) {
-        console.error('No token found in state');
-        return rejectWithValue({ message: 'No token found' });
-      }
-
-      const response = await api.delete(`/messages/${messageId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      console.log('Delete message response:', response.data);
-      
-      return { messageId };
-    } catch (error) {
-      console.error('Delete message error:', error.response?.status, error.response?.data || error.message);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
-
-// Delete entire conversation
-export const deleteConversation = createAsyncThunk(
-  'messages/deleteConversation',
-  async (userId, { getState, rejectWithValue }) => {
-    try {
-      const state = getState();
-      const token = state.auth.token;
-      
-      if (!token) {
-        console.error('No token found in state');
-        return rejectWithValue({ message: 'No token found' });
-      }
-
-      const response = await api.delete(`/messages/conversation/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      console.log('Delete conversation response:', response.data);
-      
-      return { userId };
-    } catch (error) {
-      console.error('Delete conversation error:', error.response?.status, error.response?.data || error.message);
-      return rejectWithValue(error.response?.data || { message: error.message });
-    }
-  }
-);
-
-const initialState = {
-  conversations: [],
-  currentMessages: [],
-  currentOtherUser: null,
-  isLoading: false,
-  sending: false,
-  deleting: false,
-  error: null,
-  totalUnread: 0,
-  // Pagination
-  totalPages: 1,
-  currentPage: 1,
-  totalItems: 0,
-  // Selected conversation
-  selectedUserId: null,
-  // Filter/sort options
-  filter: 'all', // 'all', 'unread'
-  sortOrder: 'desc', // 'desc', 'asc'
+const getSenderInfo = (req) => {
+  const userId = req.user?.id || req.user?._id || req.user?.userId;
+  const role = req.user?.role || 'client';
+  
+  return {
+    sender_id: userId,
+    sender_model: role === 'client' ? 'Client' : 'Freelancer'
+  };
 };
 
-const messageSlice = createSlice({
-  name: 'messages',
-  initialState,
-  reducers: {
-    clearMessages: (state) => {
-      state.currentMessages = [];
-      state.currentOtherUser = null;
-      state.selectedUserId = null;
-      state.totalPages = 1;
-      state.currentPage = 1;
-      state.totalItems = 0;
-    },
-    addNewMessage: (state, action) => {
-      const newMsg = {
-        ...action.payload,
-        sent: true,
-        is_sender: true,
-      };
-      state.currentMessages.unshift(newMsg); // Add to beginning for newest first
-      
-      // Update the conversation list
-      const existingConv = state.conversations.find(
-        c => c.user?.id === (action.payload.receiver_id || state.selectedUserId)
-      );
-      if (existingConv) {
-        existingConv.last_message = {
-          id: newMsg._id,
-          message: newMsg.message,
-          sender_id: newMsg.sender_id,
-          sender_model: newMsg.sender_model,
-          created_at: newMsg.created_at,
-          is_read: newMsg.is_read
-        };
-        // Move conversation to top
-        const index = state.conversations.indexOf(existingConv);
-        state.conversations.splice(index, 1);
-        state.conversations.unshift(existingConv);
-      }
-    },
-    clearError: (state) => {
-      state.error = null;
-    },
-    resetMessages: (state) => {
-      return { ...initialState };
-    },
-    setSelectedUser: (state, action) => {
-      state.selectedUserId = action.payload;
-    },
-    setFilter: (state, action) => {
-      state.filter = action.payload;
-    },
-    updateConversation: (state, action) => {
-      const { userId, updates } = action.payload;
-      const conversation = state.conversations.find(c => c.user?.id === userId);
-      if (conversation) {
-        Object.assign(conversation, updates);
-      }
-    },
-    // Optimistic update for sent messages
-    optimisticSend: (state, action) => {
-      const { receiverId, message, tempId } = action.payload;
-      const newMsg = {
-        _id: tempId || `temp_${Date.now()}`,
-        message: message,
-        sent: true,
-        is_sender: true,
-        created_at: new Date().toISOString(),
-        is_read: false,
-        sender_id: 'me',
-        sender_model: 'Client', // Will be updated by backend
-        receiver_id: receiverId,
-        receiver_model: 'Freelancer', // Will be updated by backend
-        temp: true // Flag for temporary messages
-      };
-      state.currentMessages.unshift(newMsg);
-    },
-    // Remove temporary message if send fails
-    removeTempMessage: (state, action) => {
-      const tempId = action.payload;
-      state.currentMessages = state.currentMessages.filter(
-        msg => msg._id !== tempId
-      );
-    }
-  },
-  extraReducers: (builder) => {
-    builder
-      // Get Conversations
-      .addCase(getConversations.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-      })
-      .addCase(getConversations.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.conversations = action.payload.conversations || [];
-        state.totalPages = action.payload.totalPages || 1;
-        state.currentPage = action.payload.currentPage || 1;
-        state.totalItems = action.payload.totalConversations || 0;
-        
-        // Calculate total unread
-        state.totalUnread = state.conversations.reduce(
-          (sum, conv) => sum + (conv.unread_count || 0), 0
-        );
-        state.error = null;
-        console.log('Conversations loaded:', state.conversations.length);
-      })
-      .addCase(getConversations.rejected, (state, action) => {
-        state.isLoading = false;
-        state.error = action.payload || { message: 'Failed to load conversations' };
-        console.error('Conversations rejected:', state.error);
-      })
-      
-      // Get Messages
-      .addCase(getMessages.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-      })
-      .addCase(getMessages.fulfilled, (state, action) => {
-        state.isLoading = false;
-        
-        // Process messages to ensure proper flags
-        state.currentMessages = (action.payload.messages || []).map(msg => {
-          // Determine if message is sent by current user
-          // If sender_id is 'me', it's sent by current user
-          const isSent = msg.sender_id === 'me' || msg.sent === true;
-          
-          return {
-            ...msg,
-            sent: isSent,
-            is_sender: isSent,
-          };
-        });
-        
-        state.currentOtherUser = action.payload.otherUser;
-        state.selectedUserId = action.payload.userId;
-        state.totalPages = action.payload.totalPages || 1;
-        state.currentPage = action.payload.currentPage || 1;
-        state.totalItems = action.payload.totalMessages || 0;
-        state.error = null;
-        console.log('Messages loaded:', state.currentMessages.length);
-      })
-      .addCase(getMessages.rejected, (state, action) => {
-        state.isLoading = false;
-        state.error = action.payload || { message: 'Failed to load messages' };
-        console.error('Messages rejected:', state.error);
-      })
-      
-      // Send Message
-      .addCase(sendMessage.pending, (state) => {
-        state.sending = true;
-        state.error = null;
-      })
-      .addCase(sendMessage.fulfilled, (state, action) => {
-        state.sending = false;
-        if (action.payload) {
-          const newMessage = {
-            ...action.payload,
-            sent: true,
-            is_sender: true,
-          };
-          // Add to beginning for newest first
-          state.currentMessages.unshift(newMessage);
-          console.log('Message sent and added to state:', newMessage);
-        }
-        state.error = null;
-      })
-      .addCase(sendMessage.rejected, (state, action) => {
-        state.sending = false;
-        state.error = action.payload || { message: 'Failed to send message' };
-        console.error('Send message rejected:', state.error);
-      })
-      
-      // Mark as Read
-      .addCase(markAsRead.pending, (state) => {
-        state.error = null;
-      })
-      .addCase(markAsRead.fulfilled, (state, action) => {
-        // Update conversation unread count
-        const conversation = state.conversations.find(
-          c => c.user?.id === action.payload.userId
-        );
-        if (conversation) {
-          conversation.unread_count = 0;
-        }
-        
-        // Update messages in current conversation
-        if (state.selectedUserId === action.payload.userId) {
-          state.currentMessages = state.currentMessages.map(msg => ({
-            ...msg,
-            is_read: true
-          }));
-        }
-        
-        // Update total unread count
-        state.totalUnread = state.conversations.reduce(
-          (sum, c) => sum + (c.unread_count || 0), 0
-        );
-        state.error = null;
-        console.log('Messages marked as read for user:', action.payload.userId);
-      })
-      .addCase(markAsRead.rejected, (state, action) => {
-        state.error = action.payload || { message: 'Failed to mark messages as read' };
-        console.error('Mark as read rejected:', state.error);
-      })
-      
-      // Get Unread Count
-      .addCase(getUnreadCount.fulfilled, (state, action) => {
-        state.totalUnread = action.payload || 0;
-      })
-      .addCase(getUnreadCount.rejected, (state) => {
-        // Keep existing value on error
-      })
-      
-      // Delete Message
-      .addCase(deleteMessage.pending, (state) => {
-        state.deleting = true;
-        state.error = null;
-      })
-      .addCase(deleteMessage.fulfilled, (state, action) => {
-        state.deleting = false;
-        state.currentMessages = state.currentMessages.filter(
-          msg => msg._id !== action.payload.messageId
-        );
-        state.error = null;
-      })
-      .addCase(deleteMessage.rejected, (state, action) => {
-        state.deleting = false;
-        state.error = action.payload || { message: 'Failed to delete message' };
-      })
-      
-      // Delete Conversation
-      .addCase(deleteConversation.pending, (state) => {
-        state.deleting = true;
-        state.error = null;
-      })
-      .addCase(deleteConversation.fulfilled, (state, action) => {
-        state.deleting = false;
-        state.conversations = state.conversations.filter(
-          c => c.user?.id !== action.payload.userId
-        );
-        if (state.selectedUserId === action.payload.userId) {
-          state.currentMessages = [];
-          state.selectedUserId = null;
-          state.currentOtherUser = null;
-        }
-        // Update total unread
-        state.totalUnread = state.conversations.reduce(
-          (sum, c) => sum + (c.unread_count || 0), 0
-        );
-        state.error = null;
-      })
-      .addCase(deleteConversation.rejected, (state, action) => {
-        state.deleting = false;
-        state.error = action.payload || { message: 'Failed to delete conversation' };
+const isValidObjectId = (id) => {
+  if (!id) return false;
+  if (typeof id !== 'string' && typeof id !== 'object') return false;
+  return mongoose.Types.ObjectId.isValid(id);
+};
+
+const getUserModel = (modelType) => {
+  return modelType === 'Client' ? Client : Freelancer;
+};
+
+// ==================== SEND MESSAGE ====================
+
+// Send a new message
+router.post("/messages", authMiddleware, async (req, res) => {
+  try {
+    const { receiver_id, receiver_model, message } = req.body;
+
+    // Validate required fields
+    if (!receiver_id || !receiver_model || !message) {
+      return res.status(400).json({ 
+        message: "receiver_id, receiver_model, and message are required" 
       });
-  },
+    }
+
+    // Validate receiver_id format
+    if (!isValidObjectId(receiver_id)) {
+      return res.status(400).json({ message: "Invalid receiver ID format" });
+    }
+
+    // Validate receiver_model
+    if (!['Client', 'Freelancer'].includes(receiver_model)) {
+      return res.status(400).json({ 
+        message: "receiver_model must be either 'Client' or 'Freelancer'" 
+      });
+    }
+
+    // Get sender info from authenticated user
+    const { sender_id, sender_model } = getSenderInfo(req);
+
+    if (!sender_id || !isValidObjectId(sender_id)) {
+      return res.status(400).json({ message: "Invalid sender ID" });
+    }
+
+    // Check if receiver exists
+    const ReceiverModel = getUserModel(receiver_model);
+    const receiver = await ReceiverModel.findById(receiver_id);
+    
+    if (!receiver) {
+      return res.status(404).json({ message: "Receiver not found" });
+    }
+
+    // Check if receiver is active
+    if (receiver.account_status !== 'active') {
+      return res.status(403).json({ message: "Receiver account is not active" });
+    }
+
+    // Create the message
+    const newMessage = new Message({
+      sender_id: new mongoose.Types.ObjectId(sender_id),
+      sender_model,
+      receiver_id: new mongoose.Types.ObjectId(receiver_id),
+      receiver_model,
+      message: message.trim(),
+      is_read: false,
+    });
+
+    await newMessage.save();
+
+    // Populate sender info for response
+    const populatedMessage = await Message.findById(newMessage._id)
+      .populate('sender_id', 'first_name last_name profile_picture company_name username')
+      .populate('receiver_id', 'first_name last_name profile_picture company_name username');
+
+    // Create notification for the receiver
+    try {
+      const senderName = sender_model === 'Client' 
+        ? `${req.user?.first_name || 'Client'} ${req.user?.last_name || ''}` 
+        : `${req.user?.first_name || 'Freelancer'} ${req.user?.last_name || ''}`;
+
+      await NotificationService.createNotification({
+        recipient_id: receiver_id,
+        recipient_model: receiver_model,
+        sender_id: sender_id,
+        sender_model: sender_model,
+        type: 'new_message',
+        title: 'New Message',
+        message: `${senderName}: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`,
+        reference_id: newMessage._id,
+        reference_model: 'Message',
+        priority: 'high',
+        metadata: {
+          sender_name: senderName,
+          message_preview: message.substring(0, 100),
+          full_message_id: newMessage._id,
+        }
+      });
+    } catch (notificationError) {
+      // Don't fail the message sending if notification fails
+      console.error("Error creating notification for message:", notificationError);
+    }
+
+    res.status(201).json({
+      message: "Message sent successfully",
+      data: populatedMessage
+    });
+
+  } catch (error) {
+    console.error("Error sending message:", error);
+    res.status(500).json({ 
+      message: "Error sending message", 
+      error: error.message 
+    });
+  }
 });
 
-export const { 
-  clearMessages, 
-  addNewMessage, 
-  clearError,
-  resetMessages,
-  setSelectedUser,
-  setFilter,
-  updateConversation,
-  optimisticSend,
-  removeTempMessage
-} = messageSlice.actions;
+// ==================== GET MESSAGES ====================
 
-export default messageSlice.reducer;
+// Get conversation between two users
+router.get("/messages/conversation/:userId", authMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 50 } = req.query;
+
+    // Validate userId
+    if (!userId || !isValidObjectId(userId)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    // Get current user info
+    const { sender_id, sender_model } = getSenderInfo(req);
+
+    if (!sender_id || !isValidObjectId(sender_id)) {
+      return res.status(400).json({ message: "Invalid sender ID" });
+    }
+
+    // Determine the other user's model
+    // We need to check if the userId belongs to a Client or Freelancer
+    let otherUserModel = null;
+    let otherUser = await Client.findById(userId);
+    
+    if (otherUser) {
+      otherUserModel = 'Client';
+    } else {
+      otherUser = await Freelancer.findById(userId);
+      if (otherUser) {
+        otherUserModel = 'Freelancer';
+      }
+    }
+
+    if (!otherUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Query messages between the two users
+    const query = {
+      $or: [
+        {
+          sender_id: new mongoose.Types.ObjectId(sender_id),
+          sender_model: sender_model,
+          receiver_id: new mongoose.Types.ObjectId(userId),
+          receiver_model: otherUserModel,
+        },
+        {
+          sender_id: new mongoose.Types.ObjectId(userId),
+          sender_model: otherUserModel,
+          receiver_id: new mongoose.Types.ObjectId(sender_id),
+          receiver_model: sender_model,
+        }
+      ]
+    };
+
+    const messages = await Message.find(query)
+      .sort({ created_at: -1 })
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit))
+      .populate('sender_id', 'first_name last_name profile_picture company_name username')
+      .populate('receiver_id', 'first_name last_name profile_picture company_name username');
+
+    const total = await Message.countDocuments(query);
+
+    // Mark messages as read
+    await Message.updateMany(
+      {
+        sender_id: new mongoose.Types.ObjectId(userId),
+        sender_model: otherUserModel,
+        receiver_id: new mongoose.Types.ObjectId(sender_id),
+        receiver_model: sender_model,
+        is_read: false
+      },
+      {
+        is_read: true,
+        read_at: new Date()
+      }
+    );
+
+    res.json({
+      messages: messages || [],
+      totalPages: Math.ceil(total / limit) || 1,
+      currentPage: parseInt(page) || 1,
+      totalMessages: total || 0,
+      otherUser: {
+        id: otherUser._id,
+        name: otherUser.display_name || `${otherUser.first_name} ${otherUser.last_name}`,
+        profile_picture: otherUser.profile_picture,
+        model: otherUserModel
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching conversation:", error);
+    res.status(500).json({ 
+      message: "Error fetching conversation", 
+      error: error.message 
+    });
+  }
+});
+
+// Get all conversations for the authenticated user
+router.get("/messages/conversations", authMiddleware, async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+
+    const { sender_id, sender_model } = getSenderInfo(req);
+
+    if (!sender_id || !isValidObjectId(sender_id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    // Get all unique conversation partners
+    const conversations = await Message.aggregate([
+      {
+        $match: {
+          $or: [
+            {
+              sender_id: new mongoose.Types.ObjectId(sender_id),
+              sender_model: sender_model,
+            },
+            {
+              receiver_id: new mongoose.Types.ObjectId(sender_id),
+              receiver_model: sender_model,
+            }
+          ]
+        }
+      },
+      {
+        $sort: { created_at: -1 }
+      },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: ["$sender_id", new mongoose.Types.ObjectId(sender_id)] },
+              {
+                user_id: "$receiver_id",
+                user_model: "$receiver_model"
+              },
+              {
+                user_id: "$sender_id",
+                user_model: "$sender_model"
+              }
+            ]
+          },
+          last_message: { $first: "$$ROOT" },
+          unread_count: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$receiver_id", new mongoose.Types.ObjectId(sender_id)] },
+                    { $eq: ["$receiver_model", sender_model] },
+                    { $eq: ["$is_read", false] }
+                  ]
+                },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      },
+      {
+        $sort: { "last_message.created_at": -1 }
+      },
+      {
+        $skip: (parseInt(page) - 1) * parseInt(limit)
+      },
+      {
+        $limit: parseInt(limit)
+      }
+    ]);
+
+    // Populate user details for each conversation
+    const populatedConversations = await Promise.all(
+      conversations.map(async (conv) => {
+        const userId = conv._id.user_id;
+        const userModel = conv._id.user_model;
+        const UserModel = getUserModel(userModel);
+        const user = await UserModel.findById(userId)
+          .select('first_name last_name profile_picture company_name username account_status');
+
+        if (!user) {
+          return null;
+        }
+
+        return {
+          user: {
+            id: user._id,
+            name: user.display_name || `${user.first_name} ${user.last_name}`,
+            profile_picture: user.profile_picture,
+            model: userModel,
+            account_status: user.account_status
+          },
+          last_message: {
+            id: conv.last_message._id,
+            message: conv.last_message.message,
+            sender_id: conv.last_message.sender_id,
+            sender_model: conv.last_message.sender_model,
+            created_at: conv.last_message.created_at,
+            is_read: conv.last_message.is_read
+          },
+          unread_count: conv.unread_count || 0
+        };
+      })
+    );
+
+    // Filter out null values (deleted users)
+    const validConversations = populatedConversations.filter(conv => conv !== null);
+
+    const total = await Message.aggregate([
+      {
+        $match: {
+          $or: [
+            {
+              sender_id: new mongoose.Types.ObjectId(sender_id),
+              sender_model: sender_model,
+            },
+            {
+              receiver_id: new mongoose.Types.ObjectId(sender_id),
+              receiver_model: sender_model,
+            }
+          ]
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: ["$sender_id", new mongoose.Types.ObjectId(sender_id)] },
+              {
+                user_id: "$receiver_id",
+                user_model: "$receiver_model"
+              },
+              {
+                user_id: "$sender_id",
+                user_model: "$sender_model"
+              }
+            ]
+          }
+        }
+      },
+      {
+        $count: "total"
+      }
+    ]);
+
+    res.json({
+      conversations: validConversations || [],
+      totalPages: Math.ceil((total[0]?.total || 0) / limit) || 1,
+      currentPage: parseInt(page) || 1,
+      totalConversations: total[0]?.total || 0
+    });
+
+  } catch (error) {
+    console.error("Error fetching conversations:", error);
+    res.status(500).json({ 
+      message: "Error fetching conversations", 
+      error: error.message 
+    });
+  }
+});
+
+// Get unread message count
+router.get("/messages/unread/count", authMiddleware, async (req, res) => {
+  try {
+    const { sender_id, sender_model } = getSenderInfo(req);
+
+    if (!sender_id || !isValidObjectId(sender_id)) {
+      return res.status(200).json({ unreadCount: 0 });
+    }
+
+    const unreadCount = await Message.countDocuments({
+      receiver_id: new mongoose.Types.ObjectId(sender_id),
+      receiver_model: sender_model,
+      is_read: false
+    });
+
+    res.json({ unreadCount: unreadCount || 0 });
+
+  } catch (error) {
+    console.error("Error fetching unread count:", error);
+    res.status(200).json({ unreadCount: 0 });
+  }
+});
+
+// ==================== MARK MESSAGES ====================
+
+// Mark messages as read in a conversation
+router.patch("/messages/read/:userId", authMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId || !isValidObjectId(userId)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    const { sender_id, sender_model } = getSenderInfo(req);
+
+    if (!sender_id || !isValidObjectId(sender_id)) {
+      return res.status(400).json({ message: "Invalid sender ID" });
+    }
+
+    // Determine the other user's model
+    let otherUserModel = null;
+    let otherUser = await Client.findById(userId);
+    
+    if (otherUser) {
+      otherUserModel = 'Client';
+    } else {
+      otherUser = await Freelancer.findById(userId);
+      if (otherUser) {
+        otherUserModel = 'Freelancer';
+      }
+    }
+
+    if (!otherUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const result = await Message.updateMany(
+      {
+        sender_id: new mongoose.Types.ObjectId(userId),
+        sender_model: otherUserModel,
+        receiver_id: new mongoose.Types.ObjectId(sender_id),
+        receiver_model: sender_model,
+        is_read: false
+      },
+      {
+        is_read: true,
+        read_at: new Date()
+      }
+    );
+
+    res.json({
+      message: "Messages marked as read",
+      updatedCount: result?.modifiedCount || 0
+    });
+
+  } catch (error) {
+    console.error("Error marking messages as read:", error);
+    res.status(500).json({ 
+      message: "Error marking messages as read", 
+      error: error.message 
+    });
+  }
+});
+
+// ==================== DELETE MESSAGES ====================
+
+// Delete a single message
+router.delete("/messages/:messageId", authMiddleware, async (req, res) => {
+  try {
+    const { messageId } = req.params;
+
+    if (!messageId || !isValidObjectId(messageId)) {
+      return res.status(400).json({ message: "Invalid message ID" });
+    }
+
+    const { sender_id, sender_model } = getSenderInfo(req);
+
+    if (!sender_id || !isValidObjectId(sender_id)) {
+      return res.status(400).json({ message: "Invalid sender ID" });
+    }
+
+    // Only allow sender to delete their own messages
+    const message = await Message.findOneAndDelete({
+      _id: new mongoose.Types.ObjectId(messageId),
+      sender_id: new mongoose.Types.ObjectId(sender_id),
+      sender_model: sender_model
+    });
+
+    if (!message) {
+      return res.status(404).json({ message: "Message not found or you don't have permission to delete it" });
+    }
+
+    res.json({
+      message: "Message deleted successfully",
+      deletedMessage: message
+    });
+
+  } catch (error) {
+    console.error("Error deleting message:", error);
+    res.status(500).json({ 
+      message: "Error deleting message", 
+      error: error.message 
+    });
+  }
+});
+
+// Delete entire conversation
+router.delete("/messages/conversation/:userId", authMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId || !isValidObjectId(userId)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    const { sender_id, sender_model } = getSenderInfo(req);
+
+    if (!sender_id || !isValidObjectId(sender_id)) {
+      return res.status(400).json({ message: "Invalid sender ID" });
+    }
+
+    // Determine the other user's model
+    let otherUserModel = null;
+    let otherUser = await Client.findById(userId);
+    
+    if (otherUser) {
+      otherUserModel = 'Client';
+    } else {
+      otherUser = await Freelancer.findById(userId);
+      if (otherUser) {
+        otherUserModel = 'Freelancer';
+      }
+    }
+
+    if (!otherUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const result = await Message.deleteMany({
+      $or: [
+        {
+          sender_id: new mongoose.Types.ObjectId(sender_id),
+          sender_model: sender_model,
+          receiver_id: new mongoose.Types.ObjectId(userId),
+          receiver_model: otherUserModel,
+        },
+        {
+          sender_id: new mongoose.Types.ObjectId(userId),
+          sender_model: otherUserModel,
+          receiver_id: new mongoose.Types.ObjectId(sender_id),
+          receiver_model: sender_model,
+        }
+      ]
+    });
+
+    res.json({
+      message: "Conversation deleted successfully",
+      deletedCount: result?.deletedCount || 0
+    });
+
+  } catch (error) {
+    console.error("Error deleting conversation:", error);
+    res.status(500).json({ 
+      message: "Error deleting conversation", 
+      error: error.message 
+    });
+  }
+});
+
+export default router;
