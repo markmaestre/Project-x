@@ -16,7 +16,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import Svg, { Circle } from 'react-native-svg';
 import { useDispatch, useSelector } from 'react-redux';
 import { getProfile, logout } from '../../Redux/slices/authSlice';
@@ -34,7 +33,6 @@ const GOLD_SOFT    = 'rgba(200,149,32,0.14)';
 const WHITE        = '#FFFFFF';
 const BG           = '#EEF4FA';
 const CARD         = '#FFFFFF';
-const GLASS        = 'rgba(255,255,255,0.14)';
 const TEXT_MAIN    = '#071A3E';
 const TEXT_MUTED   = '#3A5070';
 const TEXT_LIGHT   = '#7A90A8';
@@ -494,18 +492,10 @@ export default function ClientProfile({ onNavigate }) {
             ))}
           </View>
 
-          {/* ── Footer ── */}
-          <View style={s.footer}>
-            <Text style={s.footerText}>
-              © 2026 Taskra ·{' '}
-              <Text style={s.footerLink} onPress={() => onNavigate('ClientEditProfile')}>
-                Privacy & Terms
-              </Text>
-            </Text>
-          </View>
-          
-          {/* Extra bottom padding to account for tab bar */}
-          <View style={{ height: 20 }} />
+        
+
+          {/* Extra bottom padding to account for the fixed tab bar */}
+          <View style={{ height: 24 }} />
         </ScrollView>
       </SafeAreaView>
 
@@ -516,10 +506,9 @@ export default function ClientProfile({ onNavigate }) {
         </Animated.View>
       )}
 
-      {/* Right Drawer */}
+      {/* Right Drawer — solid background, no blur/transparency */}
       {drawerOpen && (
         <Animated.View style={[s.drawer, { transform: [{ translateX: drawerTranslateX }] }]}>
-          <BlurView intensity={50} tint="light" style={StyleSheet.absoluteFill} />
           <SafeAreaView style={s.drawerInner} edges={['top', 'bottom']}>
             <LinearGradient colors={[NAVY_DEEP, NAVY, NAVY_SOFT]} style={s.drawerHeader}>
               <TouchableOpacity style={s.drawerCloseBtn} onPress={closeDrawer} activeOpacity={0.7}>
@@ -715,7 +704,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
 
-  scroll: { paddingBottom: 80, paddingTop: 4 },
+  scroll: { paddingBottom: 110, paddingTop: 4 },
 
   // Hero
   hero: {
@@ -870,22 +859,24 @@ const s = StyleSheet.create({
   recommendRewardChip: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', backgroundColor: GOLD_SOFT, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   recommendRewardText: { fontSize: 10, fontWeight: '700', color: GOLD_DK },
 
-  // Footer
-  footer:     { paddingVertical: 18, paddingHorizontal: 16, alignItems: 'center', marginTop: 6 },
-  footerText: { fontSize: 11, color: TEXT_LIGHT },
-  footerLink: { color: BLUE, textDecorationLine: 'underline' },
+  // Footer — bottom-most element of the page
+  footer:        { paddingTop: 20, paddingBottom: 8, paddingHorizontal: 16, alignItems: 'center', marginTop: 20 },
+  footerDivider: { width: 40, height: 3, borderRadius: 999, backgroundColor: BORDER, marginBottom: 14 },
+  footerText:    { fontSize: 11, color: TEXT_LIGHT },
+  footerLink:    { color: BLUE, textDecorationLine: 'underline' },
 
   // Overlay
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,15,38,0.6)', zIndex: 10 },
 
-  // Drawer
+  // Drawer — now fully solid/opaque, no BlurView, no translucent panels
   drawer: {
     position: 'absolute', top: 0, right: 0, bottom: 0, width: '80%',
     zIndex: 20, overflow: 'hidden',
+    backgroundColor: CARD,
     borderLeftWidth: 1, borderLeftColor: BORDER,
     ...SHADOW_FLOAT,
   },
-  drawerInner: { flex: 1 },
+  drawerInner: { flex: 1, backgroundColor: CARD },
   drawerHeader: {
     paddingHorizontal: 20, paddingTop: 18, paddingBottom: 20,
     borderBottomLeftRadius: 26,
@@ -915,7 +906,7 @@ const s = StyleSheet.create({
   drawerCompletionBadge: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   drawerCompletionText: { fontSize: 10.5, fontWeight: '700', color: GOLD_LT },
 
-  drawerBody: { flex: 1, paddingTop: 6, backgroundColor: 'rgba(255,255,255,0.55)' },
+  drawerBody: { flex: 1, paddingTop: 6, backgroundColor: CARD },
   drawerItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 14 },
   drawerItemPressed: { backgroundColor: 'rgba(0,85,165,0.06)' },
   drawerItemIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: BLUE_SOFT, alignItems: 'center', justifyContent: 'center' },
@@ -923,7 +914,7 @@ const s = StyleSheet.create({
   drawerItemLabel: { fontSize: 14, fontWeight: '700', color: TEXT_MAIN },
   drawerItemSub: { fontSize: 11, color: TEXT_LIGHT, marginTop: 1 },
   drawerDivider: { height: 1, backgroundColor: BORDER, marginHorizontal: 20 },
-  drawerFooter: { paddingHorizontal: 20, paddingVertical: 16, backgroundColor: 'rgba(255,255,255,0.7)' },
+  drawerFooter: { paddingHorizontal: 20, paddingVertical: 16, backgroundColor: CARD, borderTopWidth: 1, borderTopColor: BORDER },
   signOutWrap: { borderRadius: 16, ...SHADOW_CARD },
   signOutWrapPressed: { transform: [{ scale: 0.97 }], opacity: 0.92 },
   signOutBtn: {

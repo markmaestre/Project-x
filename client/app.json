@@ -30,8 +30,10 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.CAMERA"
-      ]
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.markmaestre.Taskra"
     },
     "web": {
       "favicon": "./assets/taskra.png"
@@ -45,6 +47,11 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to take a profile picture."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d680c591-6d24-4dac-9363-12e35ff60eb6"
+      }
+    }
   }
 }

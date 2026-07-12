@@ -1,7 +1,7 @@
-// screens/ClientNotifications.jsx - Fully connected to Redux notificationSlice
-// UPDATED with client-side navigation, fixed counts, refreshed UI, and Taskra branding
+// screens/ClientNotifications.jsx - Email-inbox style UI + peso currency
+// WITH ARCHIVE FUNCTIONALITY - FIXED for undefined state
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,14 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
-  StatusBar,
+  FlatList,
   Alert,
   ActivityIndicator,
-  Image,
   BackHandler,
+  Modal,
+  Animated,
+  Easing,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,390 +35,493 @@ import {
   resetUnreadCount,
 } from '../../Redux/slices/notificationSlice';
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
-const NAVY        = '#061630';
-const BLUE        = '#1A56DB';
-const BLUE_DK     = '#123F9E';
-const BLUE_SOFT   = '#EBF2FF';
-const GOLD        = '#B8860B';
-const GOLD_LT     = '#D4A017';
-const GOLD_SOFT   = '#FDF6E3';
-const WHITE       = '#FFFFFF';
-const BG          = '#F0F4F8';
-const SURFACE     = '#FFFFFF';
-const TEXT_DARK   = '#0D1B2A';
-const TEXT_MED    = '#3D5166';
-const TEXT_MUTED  = '#8497AA';
-const DIVIDER     = '#E2EAF3';
-const GREEN       = '#0B7A4A';
-const GREEN_SOFT  = '#E8F7F0';
-const RED         = '#B91C1C';
-const RED_SOFT    = '#FEF2F2';
-const ORANGE      = '#C45B0A';
-const ORANGE_SOFT = '#FFF3E4';
-const PURPLE      = '#5B21B6';
-const PURPLE_SOFT = '#F5F3FF';
+// ── Design Tokens ─────────────────────────────────────────────────────────────
+const NAVY       = '#071A3E';
+const NAVY2      = '#0D2151';
+const BLUE       = '#0055A5';
+const BLUE_MD    = '#0073CF';
+const BLUE_LT    = '#1E90FF';
+const GOLD       = '#C89520';
+const GOLD_LT    = '#E8B84B';
+const GOLD_DK    = '#8A6410';
+const SILVER     = '#8899B0';
+const SILVER2    = '#B8C8D8';
+const WHITE      = '#FFFFFF';
+const BG         = '#EEF4FA';
+const CARD       = '#FFFFFF';
+const TEXT_MAIN  = '#071A3E';
+const TEXT_MUTED = '#3A5070';
+const TEXT_LIGHT = '#7A90A8';
+const BORDER     = '#C8D8E8';
+const GREEN      = '#059669';
+const ORANGE     = '#F97316';
+const RED        = '#EF4444';
+const PURPLE     = '#7C3AED';
 
-// ── Filter definitions ────────────────────────────────────────────────────────
-const FILTERS = [
-  { key: 'All',        label: 'All',          type: null },
-  { key: 'Unread',     label: 'Unread',       type: 'unread' },
-  { key: 'Messages',   label: 'Messages',     type: 'message' },
-  { key: 'Applicants', label: 'Applicants',   type: 'application' },
-  { key: 'Projects',   label: 'Projects',     type: 'project_updates' },
-  { key: 'Payments',   label: 'Payments',     type: 'payment_updates' },
-  { key: 'System',     label: 'System',       type: 'system' },
+// Peso currency symbol
+const PESO = '₱';
+
+// ── Filter Tabs ──────────────────────────────────────────────────────────────
+const FILTER_TABS = [
+  { key: 'all', label: 'Inbox', icon: 'mail-outline' },
+  { key: 'unread', label: 'Unread', icon: 'mail-unread-outline' },
+  { key: 'offers', label: 'Offers', icon: 'briefcase-outline' },
+  { key: 'messages', label: 'Messages', icon: 'chatbubble-outline' },
 ];
 
-const SECTION_LABELS = {
-  today: 'Today',
-  yesterday: 'Yesterday',
-  older: 'Earlier',
+// ── Action Metadata ──────────────────────────────────────────────────────────
+const ACTION_META = {
+  view_offer:        { label: 'View Offer',       icon: 'briefcase-outline' },
+  open_chat:         { label: 'Reply',            icon: 'arrow-undo-outline' },
+  view_job:          { label: 'View Job Post',    icon: 'document-text-outline' },
+  view_contract:     { label: 'View Contract',    icon: 'clipboard-outline' },
+  view_transaction:  { label: 'View Transaction', icon: 'cash-outline' },
+  view_review:       { label: 'View Review',      icon: 'star-outline' },
+  complete_profile:  { label: 'Complete Profile', icon: 'person-circle-outline' },
+  view_posting:      { label: 'View Posting',     icon: 'briefcase-outline' },
+  view_applicant:    { label: 'View Applicant',   icon: 'person-add-outline' },
+  view_application:  { label: 'View Application', icon: 'document-text-outline' },
+  view_talent:       { label: 'View Talent',      icon: 'person-outline' },
+  default:           { label: 'View Details',     icon: 'arrow-forward-circle-outline' },
 };
 
-const TYPE_COLORS = {
-  message: { bg: BLUE_SOFT, color: BLUE, icon: 'mail-outline' },
-  application: { bg: PURPLE_SOFT, color: PURPLE, icon: 'person-add-outline' },
-  contract_updates: { bg: GREEN_SOFT, color: GREEN, icon: 'document-text-outline' },
-  project_updates: { bg: ORANGE_SOFT, color: ORANGE, icon: 'flag-outline' },
-  payment_updates: { bg: GREEN_SOFT, color: GREEN, icon: 'wallet-outline' },
-  system: { bg: ORANGE_SOFT, color: ORANGE, icon: 'alert-circle-outline' },
-  rating_updates: { bg: GOLD_SOFT, color: GOLD, icon: 'star-outline' },
-  job_posted: { bg: BLUE_SOFT, color: BLUE, icon: 'briefcase-outline' },
-  offer_accepted: { bg: GREEN_SOFT, color: GREEN, icon: 'checkmark-circle-outline' },
-  interview: { bg: GOLD_SOFT, color: GOLD, icon: 'calendar-outline' },
-  review_request: { bg: GOLD_SOFT, color: GOLD, icon: 'star-outline' },
-  milestone: { bg: ORANGE_SOFT, color: ORANGE, icon: 'flag-outline' },
+// ── Helper Functions ──────────────────────────────────────────────────────────
+
+// Get icon name based on notification type
+const getIconName = (type) => {
+  switch (type) {
+    case 'offer':
+    case 'offer_received':
+      return 'briefcase-outline';
+    case 'message':
+    case 'new_message':
+      return 'chatbubble-outline';
+    case 'application':
+    case 'application_submitted':
+    case 'application_status_updated':
+      return 'document-text-outline';
+    case 'job':
+    case 'job_posted':
+      return 'briefcase-outline';
+    case 'milestone':
+    case 'milestone_completed':
+      return 'checkmark-circle-outline';
+    case 'payment':
+    case 'payment_updates':
+      return 'cash-outline';
+    case 'review':
+    case 'rating_updates':
+      return 'star-outline';
+    case 'alert':
+    case 'system':
+      return 'alert-circle-outline';
+    case 'contract':
+    case 'contract_updates':
+      return 'clipboard-outline';
+    case 'project':
+    case 'project_updates':
+      return 'refresh-circle-outline';
+    case 'deadline_approaching':
+      return 'time-outline';
+    case 'interview':
+      return 'calendar-outline';
+    case 'offer_accepted':
+      return 'checkmark-done-circle-outline';
+    case 'offer_rejected':
+      return 'close-circle-outline';
+    default:
+      return 'notifications-outline';
+  }
 };
 
-// ── Notification Detail Component ────────────────────────────────────────────
-function NotificationDetail({ notification, onBack, onMarkRead, onDelete, onNavigate }) {
-  const n = notification;
-  const typeColors = TYPE_COLORS[n.type] || { bg: BLUE_SOFT, color: BLUE, icon: 'notifications-outline' };
-  const avatarBg = n.sender?.profile_picture ? null : (n.sender?.avatar_color || NAVY);
+// Get icon color based on notification type
+const getIconColor = (type) => {
+  switch (type) {
+    case 'offer':
+    case 'offer_received':
+      return BLUE;
+    case 'message':
+    case 'new_message':
+      return GREEN;
+    case 'application':
+    case 'application_submitted':
+    case 'application_status_updated':
+      return BLUE;
+    case 'job':
+    case 'job_posted':
+      return GOLD;
+    case 'milestone':
+    case 'milestone_completed':
+      return GREEN;
+    case 'payment':
+    case 'payment_updates':
+      return GREEN;
+    case 'review':
+    case 'rating_updates':
+      return GOLD;
+    case 'alert':
+    case 'system':
+      return ORANGE;
+    case 'contract':
+    case 'contract_updates':
+      return BLUE;
+    case 'project':
+    case 'project_updates':
+      return BLUE;
+    case 'deadline_approaching':
+      return ORANGE;
+    case 'interview':
+      return BLUE;
+    case 'offer_accepted':
+      return GREEN;
+    case 'offer_rejected':
+      return RED;
+    default:
+      return TEXT_MUTED;
+  }
+};
 
-  const senderInitials = n.sender?.first_name && n.sender?.last_name
-    ? `${n.sender.first_name[0]}${n.sender.last_name[0]}`.toUpperCase()
-    : n.sender?.company_name
-    ? n.sender.company_name.substring(0, 2).toUpperCase()
-    : 'U';
+// Human friendly label for the type badge
+const getTypeLabel = (type) => {
+  if (!type) return 'Notification';
+  return type
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+};
 
-  const handleMarkRead = () => {
-    if (!n.is_read) {
-      onMarkRead(n._id);
-    }
-  };
+// Format amount as Philippine peso
+const formatPeso = (amount) => {
+  if (amount === null || amount === undefined || isNaN(amount)) return null;
+  const num = Number(amount);
+  const formatted = num.toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${PESO}${formatted}`;
+};
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete Notification',
-      'Are you sure you want to delete this notification?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => onDelete(n._id) },
-      ]
-    );
-  };
+// Format full date for detail modal
+const formatFullDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
-  // ── Client-side navigation handlers ──
-  const handleActionPress = (action) => {
-    const actionType = action.action_type;
-    const data = action.data || {};
+// Format time for list items (Gmail-style)
+const formatTime = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
 
-    switch (actionType) {
-      case 'view_application':
-        if (onNavigate) {
-          onNavigate('Applications', {
-            applicationId: data.application_id || n.reference_id,
-            jobId: data.job_id || n.job_id,
-            talentId: data.talent_id || n.sender_id?._id,
-          });
-        }
-        break;
+  if (diffMins < 1) return 'now';
+  if (diffMins < 60) return `${diffMins}m`;
+  if (diffHours < 24 && date.getDate() === now.getDate()) {
+    return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+  if (diffDays < 7) {
+    return date.toLocaleDateString(undefined, { weekday: 'short' });
+  }
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
 
-      case 'view_job':
-        if (onNavigate) {
-          onNavigate('Mypostings', {
-            jobId: data.job_id || n.reference_id,
-            view: 'details',
-          });
-        }
-        break;
+// Get sender initials for avatar
+const getInitials = (notification) => {
+  if (!notification) return 'N';
+  const sender = notification.sender_id || notification.sender;
+  if (sender?.first_name) {
+    return `${sender.first_name.charAt(0)}${sender.last_name ? sender.last_name.charAt(0) : ''}`.toUpperCase();
+  }
+  if (sender?.company_name) {
+    return sender.company_name.substring(0, 2).toUpperCase();
+  }
+  const source = notification.title || notification.type || 'N';
+  return source.charAt(0).toUpperCase();
+};
 
-      case 'view_offer':
-        if (onNavigate) {
-          onNavigate('Mypostings', {
-            offerId: data.offer_id || n.reference_id,
-            jobId: data.job_id || n.job_id,
-          });
-        }
-        break;
+// Get sender display name
+const getSenderName = (notification) => {
+  if (!notification) return 'Taskra System';
+  const sender = notification.sender_id || notification.sender;
+  if (sender?.first_name) {
+    return `${sender.first_name} ${sender.last_name || ''}`.trim();
+  }
+  if (sender?.company_name) {
+    return sender.company_name;
+  }
+  return 'Taskra System';
+};
 
-      case 'view_contract':
-        if (onNavigate) {
-          onNavigate('Contract', {
-            contractId: data.contract_id || n.reference_id,
-            jobId: data.job_id || n.job_id,
-          });
-        }
-        break;
-
-      case 'view_talent':
-        if (onNavigate) {
-          onNavigate('Hiredtalents', {
-            talentId: data.talent_id || n.sender_id?._id,
-            userId: data.talent_id || n.sender_id?._id,
-          });
-        }
-        break;
-
-      case 'view_review':
-        if (onNavigate) {
-          onNavigate('RatingClient', {
-            reviewId: data.review_id || n.reference_id,
-            jobId: data.job_id || n.job_id,
-          });
-        }
-        break;
-
-      case 'open_chat':
-        if (onNavigate) {
-          onNavigate('Messages', {
-            userId: data.user_id || n.sender_id?._id,
-            userName: data.user_name || n.sender?.first_name || 'User',
-          });
-        }
-        break;
-
-      case 'view_transaction':
-        if (onNavigate) {
-          onNavigate('TransactionDetails', {
-            transactionId: data.transaction_id || n.reference_id,
-          });
-        }
-        break;
-
-      case 'view_posting':
-        if (onNavigate) {
-          onNavigate('Mypostings', {
-            jobId: data.job_id || n.reference_id,
-          });
-        }
-        break;
-
-      case 'view_applicant':
-        if (onNavigate) {
-          onNavigate('Applications', {
-            applicationId: data.application_id || n.reference_id,
-            jobId: data.job_id || n.job_id,
-          });
-        }
-        break;
-
-      case 'complete_profile':
-        if (onNavigate) {
-          onNavigate('ClientEditProfile');
-        }
-        break;
-
-      default:
-        // Default: go back and show alert
-        onBack();
-        Alert.alert(
-          n.title || 'Notification',
-          n.message || 'View details in the app.'
-        );
-        break;
-    }
-  };
-
-  // Handle hardware back button in detail view
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      onBack();
-      return true;
-    });
-    return () => backHandler.remove();
-  }, [onBack]);
-
-  const formatDate = (date) => {
-    if (!date) return '';
-    try {
-      const d = new Date(date);
-      return d.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return 'Invalid date';
-    }
-  };
-
-  const getDisplayName = (sender) => {
-    if (!sender) return 'Taskra System';
-    if (sender.company_name) return sender.company_name;
-    if (sender.first_name && sender.last_name) {
-      return `${sender.first_name} ${sender.last_name}`;
-    }
-    return sender.username || 'Unknown User';
-  };
-
-  const senderName = n.sender ? getDisplayName(n.sender) : 'Taskra System';
+// ── Notification List Item ────────────────────────────────────────────────────
+function NotificationItem({ notification, onPress, onMarkRead }) {
+  if (!notification) return null;
+  
+  const iconColor = getIconColor(notification.type);
+  const initials = getInitials(notification);
+  const senderName = getSenderName(notification);
+  const amountText = formatPeso(notification.amount);
+  const unread = !notification.is_read;
 
   return (
-    <SafeAreaView style={ds.safe} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
-
-      <View style={ds.header}>
-        <TouchableOpacity style={ds.backBtn} onPress={onBack} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="arrow-back" size={20} color={WHITE} />
-        </TouchableOpacity>
-        <Text style={ds.headerTitle} numberOfLines={1}>{n.title || 'Notification'}</Text>
-        <TouchableOpacity style={ds.deleteBtn} onPress={handleDelete} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="trash-outline" size={18} color={WHITE} />
-        </TouchableOpacity>
+    <TouchableOpacity
+      style={[styles.mailRow, unread && styles.mailRowUnread]}
+      onPress={() => onPress(notification)}
+      activeOpacity={0.6}
+    >
+      {/* Sender avatar bubble */}
+      <View style={[styles.avatar, { backgroundColor: `${iconColor}18`, borderColor: `${iconColor}30` }]}>
+        <Text style={[styles.avatarText, { color: iconColor }]}>{initials}</Text>
+        {unread && <View style={styles.avatarUnreadDot} />}
       </View>
 
-      <ScrollView style={ds.scroll} contentContainerStyle={ds.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={ds.subjectCard}>
-          <View style={[ds.typeIcon, { backgroundColor: typeColors.bg }]}>
-            <Ionicons name={typeColors.icon} size={24} color={typeColors.color} />
-          </View>
-          <View style={ds.subjectMeta}>
-            <Text style={ds.subjectText}>{n.title}</Text>
-            <View style={[ds.tag, { backgroundColor: typeColors.bg, borderColor: typeColors.color + '40' }]}>
-              <Text style={[ds.tagText, { color: typeColors.color }]}>
-                {n.type?.replace('_', ' ').toUpperCase() || 'NOTIFICATION'}
-              </Text>
-            </View>
-          </View>
+      <View style={styles.mailBody}>
+        <View style={styles.mailTopRow}>
+          <Text style={[styles.mailSender, unread && styles.mailSenderUnread]} numberOfLines={1}>
+            {senderName}
+          </Text>
+          <Text style={[styles.mailTime, unread && styles.mailTimeUnread]}>
+            {formatTime(notification.created_at || notification.createdAt)}
+          </Text>
         </View>
 
-        <View style={ds.metaCard}>
-          <View style={ds.senderRow}>
-            {n.sender?.profile_picture ? (
-              <Image source={{ uri: n.sender.profile_picture }} style={ds.avatarImage} />
-            ) : (
-              <View style={[ds.avatar, { backgroundColor: avatarBg || NAVY }]}>
-                <Text style={ds.avatarText}>{senderInitials}</Text>
-              </View>
-            )}
-            <View style={ds.senderMeta}>
-              <Text style={ds.senderName}>{senderName}</Text>
-              <Text style={ds.dateText}>{formatDate(n.created_at || n.createdAt)}</Text>
-            </View>
-          </View>
+        <Text style={[styles.mailSubject, unread && styles.mailSubjectUnread]} numberOfLines={1}>
+          {notification.title || 'Notification'}
+        </Text>
 
-          <View style={ds.innerDivider} />
-          <View style={ds.toRow}>
-            <Text style={ds.toLabel}>To</Text>
-            <View style={ds.toChip}>
-              <Ionicons name="person-circle-outline" size={14} color={GOLD} />
-              <Text style={ds.toName}>You</Text>
-            </View>
-          </View>
+        <View style={styles.mailPreviewRow}>
+          <Text style={styles.mailPreview} numberOfLines={1}>
+            {notification.message || ''}
+          </Text>
+          {amountText && (
+            <Text style={[styles.mailAmount, { color: iconColor }]}>{amountText}</Text>
+          )}
         </View>
 
-        <View style={ds.bodyCard}>
-          {n.message ? (
-            <Text style={ds.bodyText}>{n.message}</Text>
-          ) : null}
-        </View>
-
-        {n.actions && n.actions.length > 0 && (
-          <View style={ds.actionsCard}>
-            <Text style={ds.actionsLabel}>Quick Actions</Text>
-            <View style={ds.actionsWrap}>
-              {n.actions.map((a, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={[ds.actionBtn, { backgroundColor: typeColors.bg, borderColor: typeColors.color + '35' }]}
-                  activeOpacity={0.75}
-                  onPress={() => handleActionPress(a)}
-                >
-                  <Ionicons name={a.icon || 'arrow-forward-outline'} size={15} color={typeColors.color} />
-                  <Text style={[ds.actionText, { color: typeColors.color }]}>{a.label || 'View'}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {!n.is_read && (
-          <TouchableOpacity style={ds.markReadBtn} onPress={handleMarkRead} activeOpacity={0.85}>
-            <Ionicons name="checkmark-circle-outline" size={18} color={WHITE} />
-            <Text style={ds.markReadText}>Mark as Read</Text>
+        {unread && (
+          <TouchableOpacity
+            style={styles.markReadPill}
+            onPress={() => onMarkRead(notification._id)}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+          >
+            <Ionicons name="checkmark-circle-outline" size={12} color={TEXT_MUTED} />
+            <Text style={styles.markReadPillText}>Mark as read</Text>
           </TouchableOpacity>
         )}
+      </View>
+    </TouchableOpacity>
+  );
+}
 
-        <View style={ds.footer}>
-          <Ionicons name="shield-checkmark-outline" size={12} color={TEXT_MUTED} />
-          <Text style={ds.footerText}>Taskra Notification</Text>
-        </View>
+// ── Empty State ──────────────────────────────────────────────────────────────
+function EmptyState({ filter }) {
+  const getMessage = () => {
+    switch (filter) {
+      case 'unread': return 'You\'re all caught up';
+      case 'offers': return 'No offers in your inbox';
+      case 'messages': return 'No message notifications';
+      default: return 'Your inbox is empty';
+    }
+  };
 
-        <View style={{ height: 40 }} />
-      </ScrollView>
-    </SafeAreaView>
+  const getIcon = () => {
+    switch (filter) {
+      case 'offers': return 'briefcase-outline';
+      case 'messages': return 'chatbubble-outline';
+      default: return 'mail-open-outline';
+    }
+  };
+
+  return (
+    <View style={styles.emptyContainer}>
+      <View style={styles.emptyIconWrap}>
+        <Ionicons name={getIcon()} size={48} color={TEXT_LIGHT} />
+      </View>
+      <Text style={styles.emptyTitle}>{getMessage()}</Text>
+      <Text style={styles.emptySubtitle}>
+        {filter === 'all' && 'New notifications will land here, just like a real inbox'}
+        {filter === 'unread' && 'You have read every notification'}
+        {filter === 'offers' && 'When talents send you offers, they will appear here'}
+        {filter === 'messages' && 'When you receive messages, they will appear here'}
+      </Text>
+    </View>
+  );
+}
+
+// ── Notification Detail Modal ────────────────────────────────────────────────
+function NotificationDetailModal({ visible, notification, onClose, onPrimaryAction }) {
+  const scale = useRef(new Animated.Value(0.94)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 180,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.spring(scale, {
+          toValue: 1,
+          friction: 9,
+          tension: 90,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      scale.setValue(0.94);
+      opacity.setValue(0);
+    }
+  }, [visible]);
+
+  if (!notification) return null;
+
+  const iconName = getIconName(notification.type);
+  const iconColor = getIconColor(notification.type);
+  const hasAction = notification.actions && notification.actions.length > 0;
+  const actionType = hasAction ? notification.actions[0].action_type : 'default';
+  const actionMeta = ACTION_META[actionType] || ACTION_META.default;
+  const initials = getInitials(notification);
+  const senderName = getSenderName(notification);
+  const amountText = formatPeso(notification.amount);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+
+        <Animated.View
+          style={[
+            styles.modalCard,
+            { opacity, transform: [{ scale }] },
+          ]}
+        >
+          {/* Header bar */}
+          <View style={styles.modalHeaderBar}>
+            <View style={[styles.modalTypeBadge, { backgroundColor: `${iconColor}12`, borderColor: `${iconColor}30` }]}>
+              <Ionicons name={iconName} size={12} color={iconColor} />
+              <Text style={[styles.modalTypeText, { color: iconColor }]}>
+                {getTypeLabel(notification.type)}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={onClose}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={18} color={TEXT_MUTED} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Subject line */}
+          <Text style={styles.modalTitle}>{notification.title || 'Notification'}</Text>
+
+          {/* From / date row */}
+          <View style={styles.modalFromRow}>
+            <View style={[styles.modalAvatar, { backgroundColor: `${iconColor}18`, borderColor: `${iconColor}30` }]}>
+              <Text style={[styles.modalAvatarText, { color: iconColor }]}>{initials}</Text>
+            </View>
+            <View style={styles.modalFromTextWrap}>
+              <Text style={styles.modalFromName}>{senderName}</Text>
+              <Text style={styles.modalFromMeta}>to me</Text>
+            </View>
+            <Text style={styles.modalMetaText}>{formatFullDate(notification.created_at || notification.createdAt)}</Text>
+          </View>
+
+          {/* Divider */}
+          <View style={styles.modalDivider} />
+
+          {/* Message body */}
+          <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={false}>
+            <Text style={styles.modalMessage}>{notification.message || ''}</Text>
+
+            {amountText && (
+              <View style={[styles.modalAmountCard, { borderColor: `${iconColor}30`, backgroundColor: `${iconColor}0C` }]}>
+                <Ionicons name="cash-outline" size={16} color={iconColor} />
+                <Text style={[styles.modalAmountText, { color: iconColor }]}>{amountText}</Text>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Footer actions */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.modalSecondaryBtn}
+              onPress={onClose}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="archive-outline" size={15} color={TEXT_MUTED} />
+              <Text style={styles.modalSecondaryText}>Archive</Text>
+            </TouchableOpacity>
+
+            {hasAction && (
+              <TouchableOpacity
+                style={styles.modalPrimaryBtn}
+                onPress={() => onPrimaryAction(notification)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name={actionMeta.icon} size={16} color={WHITE} />
+                <Text style={styles.modalPrimaryText}>{actionMeta.label}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function ClientNotifications({ onNavigate }) {
+export default function ClientNotifications({ onNavigate, route }) {
   const dispatch = useDispatch();
 
-  const {
-    notifications,
-    selectedNotification,
-    isLoading,
-    error,
-    totalCount,
-    totalPages,
-    unreadCount,
-    markSuccess,
-    deleteSuccess,
-    countsLoaded,
-  } = useSelector((state) => state.notifications);
+  // Redux state - with safe defaults
+  const notifications = useSelector((state) => state.notifications?.notifications || []);
+  const selectedNotification = useSelector((state) => state.notifications?.selectedNotification || null);
+  const isLoading = useSelector((state) => state.notifications?.isLoading || false);
+  const error = useSelector((state) => state.notifications?.error || null);
+  const totalPages = useSelector((state) => state.notifications?.totalPages || 1);
+  const unreadCount = useSelector((state) => state.notifications?.unreadCount || 0);
+  const markSuccess = useSelector((state) => state.notifications?.markSuccess || false);
+  const deleteSuccess = useSelector((state) => state.notifications?.deleteSuccess || false);
 
-  const { token } = useSelector((state) => state.auth);
+  const { token } = useSelector((state) => state.auth || {});
 
   const [refreshing, setRefreshing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('All');
-  const [showDetail, setShowDetail] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all');
   const [page, setPage] = useState(1);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Detail modal state
+  const [detailVisible, setDetailVisible] = useState(false);
 
   // Load notifications on mount
   useEffect(() => {
     if (token && !initialLoadDone) {
-      loadNotifications();
+      loadNotifications(1, true);
       dispatch(getNotificationCounts());
       setInitialLoadDone(true);
     }
   }, [token, initialLoadDone, dispatch]);
-
-  // Handle hardware back button press - navigate back to ClientDashboard
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      // If in detail view, close it first
-      if (showDetail) {
-        handleBack();
-        return true;
-      }
-      // Otherwise navigate back to ClientDashboard
-      if (onNavigate) {
-        onNavigate('ClientDashboard');
-        return true;
-      }
-      return false;
-    });
-
-    return () => backHandler.remove();
-  }, [onNavigate, showDetail]);
 
   // Handle mark success
   useEffect(() => {
@@ -432,544 +538,735 @@ export default function ClientNotifications({ onNavigate }) {
       dispatch(clearNotificationSuccess());
       if (selectedNotification) {
         dispatch(clearSelectedNotification());
-        setShowDetail(false);
+        setDetailVisible(false);
       }
     }
   }, [deleteSuccess, dispatch, selectedNotification]);
 
-  const loadNotifications = useCallback(() => {
-    if (token) {
-      dispatch(getNotifications({ page: 1, limit: 20 }));
-    }
-  }, [dispatch, token]);
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    Promise.all([
-      dispatch(getNotifications({ page: 1, limit: 20 })),
-      dispatch(getNotificationCounts()),
-    ]).finally(() => {
-      setRefreshing(false);
-      setPage(1);
+  // Handle hardware back button
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (detailVisible) {
+        setDetailVisible(false);
+        return true;
+      }
+      if (onNavigate) {
+        onNavigate('ClientDashboard');
+        return true;
+      }
+      return false;
     });
+
+    return () => backHandler.remove();
+  }, [onNavigate, detailVisible]);
+
+  // Load notifications with current filter
+  const loadNotifications = useCallback(async (pageNum = 1, refresh = false) => {
+    if (!token) return;
+
+    try {
+      let filterParams = { page: pageNum, limit: 20 };
+
+      // Apply filters
+      if (activeFilter === 'unread') {
+        filterParams.is_read = false;
+      } else if (activeFilter === 'offers') {
+        filterParams.type = 'offer';
+      } else if (activeFilter === 'messages') {
+        filterParams.type = 'message';
+      }
+
+      await dispatch(getNotifications(filterParams)).unwrap();
+
+      if (refresh) {
+        setPage(1);
+      } else {
+        setPage(pageNum);
+      }
+    } catch (err) {
+      console.error('Failed to load notifications:', err);
+    }
+  }, [dispatch, token, activeFilter]);
+
+  // Handle refresh
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadNotifications(1, true);
+    await dispatch(getNotificationCounts());
+    setRefreshing(false);
+  }, [loadNotifications, dispatch]);
+
+  // Handle filter change
+  const handleFilterChange = useCallback((filterKey) => {
+    setActiveFilter(filterKey);
+    loadNotifications(1, true);
+  }, [loadNotifications]);
+
+  // Handle notification press
+  const handleNotificationPress = useCallback((notification) => {
+    dispatch(setSelectedNotification(notification));
+    setDetailVisible(true);
+    if (!notification.is_read) {
+      dispatch(markNotificationAsRead(notification._id));
+    }
   }, [dispatch]);
 
-  const loadMore = useCallback(() => {
-    if (loadingMore || page >= totalPages || !token) return;
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    dispatch(getNotifications({ page: nextPage, limit: 20 }))
-      .finally(() => {
-        setLoadingMore(false);
-        setPage(nextPage);
-      });
-  }, [dispatch, page, totalPages, loadingMore, token]);
+  // Close detail modal
+  const handleCloseModal = useCallback(() => {
+    setDetailVisible(false);
+    setTimeout(() => dispatch(clearSelectedNotification()), 200);
+  }, [dispatch]);
 
-  const handleMarkRead = useCallback((notificationId) => {
-    if (token) {
+  // Handle primary action from modal
+  const handlePrimaryAction = useCallback((notification) => {
+    setDetailVisible(false);
+
+    const action = notification?.actions?.[0];
+    if (!action) {
+      Alert.alert(
+        notification?.title || 'Notification',
+        notification?.message || 'View details in the app.'
+      );
+      return;
+    }
+
+    const data = action.data || {};
+    const actionType = action.action_type;
+
+    switch (actionType) {
+      case 'view_offer':
+        if (onNavigate) {
+          onNavigate('OfferDetails', {
+            offerId: notification.reference_id || data.offer_id,
+            jobTitle: notification.title,
+          });
+        }
+        break;
+
+      case 'open_chat':
+        if (onNavigate) {
+          onNavigate('Messages', {
+            userId: notification.sender_id?._id || data.user_id,
+            userName: notification.sender_id?.first_name || data.user_name || 'User',
+          });
+        }
+        break;
+
+      case 'view_job':
+      case 'view_posting':
+        if (onNavigate) {
+          onNavigate('Mypostings', {
+            jobId: notification.reference_id || data.job_id,
+            view: 'details',
+          });
+        }
+        break;
+
+      case 'view_contract':
+        if (onNavigate) {
+          onNavigate('Contract', {
+            contractId: notification.reference_id || data.contract_id,
+            jobId: data.job_id,
+          });
+        }
+        break;
+
+      case 'view_transaction':
+        if (onNavigate) {
+          onNavigate('TransactionDetails', {
+            transactionId: notification.reference_id || data.transaction_id,
+          });
+        }
+        break;
+
+      case 'view_review':
+        if (onNavigate) {
+          onNavigate('RatingClient', {
+            reviewId: notification.reference_id || data.review_id,
+            jobId: data.job_id,
+          });
+        }
+        break;
+
+      case 'complete_profile':
+        if (onNavigate) {
+          onNavigate('ClientEditProfile');
+        }
+        break;
+
+      case 'view_applicant':
+      case 'view_application':
+        if (onNavigate) {
+          onNavigate('Applications', {
+            applicationId: notification.reference_id || data.application_id,
+            jobId: data.job_id,
+            talentId: data.talent_id || notification.sender_id?._id,
+          });
+        }
+        break;
+
+      case 'view_talent':
+        if (onNavigate) {
+          onNavigate('Hiredtalents', {
+            talentId: notification.reference_id || data.talent_id || notification.sender_id?._id,
+          });
+        }
+        break;
+
+      default:
+        Alert.alert(
+          notification?.title || 'Notification',
+          notification?.message || 'View details in the app.'
+        );
+        break;
+    }
+  }, [onNavigate]);
+
+  // Handle mark as read
+  const handleMarkAsRead = useCallback((notificationId) => {
+    if (notificationId) {
       dispatch(markNotificationAsRead(notificationId));
     }
-  }, [dispatch, token]);
+  }, [dispatch]);
 
-  const handleMarkAllRead = useCallback(() => {
+  // Handle mark all as read
+  const handleMarkAllAsRead = useCallback(() => {
     if (unreadCount === 0) {
       Alert.alert('No Unread', 'You have no unread notifications.');
       return;
     }
+
     Alert.alert(
       'Mark All as Read',
       `Mark all ${unreadCount} unread notifications as read?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Mark All Read',
+        { 
+          text: 'Mark All', 
           onPress: () => {
             dispatch(markAllNotificationsAsRead());
             dispatch(resetUnreadCount());
-          },
+          }
         },
       ]
     );
   }, [dispatch, unreadCount]);
 
-  const handleDeleteAll = useCallback(() => {
-    if (notifications.length === 0) {
-      Alert.alert('Empty', 'You have no notifications to delete.');
+  // Handle delete all
+  const handleClearAll = useCallback(() => {
+    if (!notifications || notifications.length === 0) {
+      Alert.alert('Empty', 'You have no notifications to clear.');
       return;
     }
+
+    let filter = {};
+    if (activeFilter === 'offers') filter.type = 'offer';
+    else if (activeFilter === 'messages') filter.type = 'message';
+
     Alert.alert(
-      'Delete All Notifications',
-      `Delete all ${notifications.length} notifications? This cannot be undone.`,
+      'Clear All',
+      `Are you sure you want to clear all ${activeFilter === 'all' ? '' : activeFilter + ' '}notifications? This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete All',
+          text: 'Clear All',
           style: 'destructive',
-          onPress: () => {
-            dispatch(deleteAllNotifications({}));
-          },
+          onPress: () => dispatch(deleteAllNotifications(filter)),
         },
       ]
     );
-  }, [dispatch, notifications.length]);
+  }, [dispatch, notifications, activeFilter]);
 
-  const handleDelete = useCallback((notificationId) => {
-    if (token) {
-      dispatch(deleteNotification(notificationId));
-    }
-  }, [dispatch, token]);
-
-  const handleSelect = useCallback((notification) => {
-    dispatch(setSelectedNotification(notification));
-    setShowDetail(true);
-    if (!notification.is_read) {
-      handleMarkRead(notification._id);
-    }
-  }, [dispatch, handleMarkRead]);
-
-  const handleBack = useCallback(() => {
-    setShowDetail(false);
-    dispatch(clearSelectedNotification());
-  }, [dispatch]);
-
-  const handleNavigateBack = useCallback(() => {
+  // Handle back navigation
+  const handleBack = () => {
     if (onNavigate) {
       onNavigate('ClientDashboard');
     }
-  }, [onNavigate]);
+  };
 
+  // Get filtered notifications - with safety checks
   const getFilteredNotifications = useCallback(() => {
-    const filter = FILTERS.find(f => f.key === activeFilter);
-    if (!filter) return notifications;
-
-    if (filter.key === 'All') return notifications;
-    if (filter.key === 'Unread') return notifications.filter(n => !n.is_read);
-    if (filter.type) return notifications.filter(n => n.type === filter.type);
+    if (!notifications || !Array.isArray(notifications)) return [];
+    
+    if (activeFilter === 'unread') {
+      return notifications.filter(n => n && !n.is_read);
+    }
+    if (activeFilter === 'offers') {
+      return notifications.filter(n => n && (n.type === 'offer' || n.type === 'offer_received'));
+    }
+    if (activeFilter === 'messages') {
+      return notifications.filter(n => n && (n.type === 'message' || n.type === 'new_message'));
+    }
     return notifications;
-  }, [notifications, activeFilter]);
+  }, [activeFilter, notifications]);
 
-  const getGroupedNotifications = useCallback(() => {
-    const filtered = getFilteredNotifications();
-    const groups = {};
+  const filteredNotifications = getFilteredNotifications();
 
-    filtered.forEach(n => {
-      const date = new Date(n.created_at || n.createdAt);
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-
-      let key;
-      if (date >= today) key = 'today';
-      else if (date >= yesterday) key = 'yesterday';
-      else key = 'older';
-
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(n);
-    });
-
-    return groups;
-  }, [getFilteredNotifications]);
-
-  const getTypeColor = (type) => {
-    return TYPE_COLORS[type] || { bg: BLUE_SOFT, color: BLUE, icon: 'notifications-outline' };
-  };
-
-  const getInitials = (sender) => {
-    if (!sender) return 'U';
-    if (sender.company_name) return sender.company_name.substring(0, 2).toUpperCase();
-    if (sender.first_name && sender.last_name) {
-      return `${sender.first_name[0]}${sender.last_name[0]}`.toUpperCase();
+  // Get badge count for filter tabs - with safety checks
+  const getBadgeCount = useCallback((filter) => {
+    if (!notifications || !Array.isArray(notifications)) return 0;
+    
+    if (filter === 'unread') return unreadCount;
+    if (filter === 'offers') {
+      return notifications.filter(n => n && (n.type === 'offer' || n.type === 'offer_received') && !n.is_read).length;
     }
-    if (sender.username) return sender.username.substring(0, 2).toUpperCase();
-    return 'U';
-  };
-
-  const getSenderName = (sender) => {
-    if (!sender) return 'Taskra System';
-    if (sender.company_name) return sender.company_name;
-    if (sender.first_name && sender.last_name) {
-      return `${sender.first_name} ${sender.last_name}`;
+    if (filter === 'messages') {
+      return notifications.filter(n => n && (n.type === 'message' || n.type === 'new_message') && !n.is_read).length;
     }
-    if (sender.username) return sender.username;
-    return 'Unknown User';
-  };
+    return 0;
+  }, [notifications, unreadCount]);
 
-  const renderNotificationRow = (n, isLast) => {
-    const typeColor = getTypeColor(n.type);
-    const isUnread = !n.is_read;
-    const displayName = getSenderName(n.sender);
-
-    return (
-      <TouchableOpacity
-        key={n._id}
-        style={[s.row, isUnread && s.rowUnread, isLast && s.rowLast]}
-        onPress={() => handleSelect(n)}
-        activeOpacity={0.72}
-      >
-        {isUnread && <View style={[s.unreadBar, { backgroundColor: typeColor.color }]} />}
-
-        <View style={[s.avatar, { backgroundColor: typeColor.color }]}>
-          <Ionicons name={typeColor.icon} size={18} color={WHITE} />
-        </View>
-
-        <View style={s.body}>
-          <View style={s.rowTop}>
-            <Text style={[s.sender, isUnread && s.senderBold]} numberOfLines={1}>
-              {displayName}
-            </Text>
-            <Text style={s.time}>
-              {(() => {
-                try {
-                  const d = new Date(n.created_at || n.createdAt);
-                  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                } catch {
-                  return '';
-                }
-              })()}
-            </Text>
-          </View>
-          <Text style={[s.title, isUnread && s.titleBold]} numberOfLines={1}>
-            {n.title}
-          </Text>
-          <Text style={s.preview} numberOfLines={2}>
-            {n.message}
-          </Text>
-          <View style={[s.tag, { backgroundColor: typeColor.bg, borderColor: typeColor.color + '30' }]}>
-            <Text style={[s.tagText, { color: typeColor.color }]}>
-              {n.type?.replace('_', ' ').toUpperCase() || 'NOTIFICATION'}
-            </Text>
-          </View>
-        </View>
-
-        {isUnread && <View style={[s.dot, { backgroundColor: typeColor.color }]} />}
-      </TouchableOpacity>
-    );
-  };
-
-  // If showing detail
-  if (showDetail && selectedNotification) {
-    return (
-      <NotificationDetail
-        notification={selectedNotification}
-        onBack={handleBack}
-        onMarkRead={handleMarkRead}
-        onDelete={handleDelete}
-        onNavigate={onNavigate}
-      />
-    );
-  }
-
-  const grouped = getGroupedNotifications();
-  const sectionKeys = Object.keys(grouped);
-
-  // Show loading only on initial load, not when refreshing
-  const showLoading = isLoading && notifications.length === 0 && !refreshing;
+  // Show loading only on initial load
+  const showLoading = isLoading && (!notifications || notifications.length === 0) && !refreshing;
 
   return (
-    <SafeAreaView style={s.safe} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.root}>
 
-      <View style={s.header}>
-        <TouchableOpacity
-          style={s.backBtn}
-          onPress={handleNavigateBack}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="arrow-back" size={20} color={WHITE} />
-        </TouchableOpacity>
-        <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>Notifications</Text>
-          {unreadCount > 0 && (
-            <View style={s.headerBadge}>
-              <Text style={s.headerBadgeText}>{unreadCount}</Text>
-            </View>
-          )}
-        </View>
-        <View style={s.headerActions}>
-          {unreadCount > 0 && (
-            <TouchableOpacity style={s.markAllBtn} onPress={handleMarkAllRead} activeOpacity={0.75}>
-              <Ionicons name="checkmark-done-outline" size={14} color={GOLD_LT} />
-              <Text style={s.markAllText}>Mark read</Text>
-            </TouchableOpacity>
-          )}
-          {notifications.length > 0 && (
-            <TouchableOpacity style={s.deleteAllBtn} onPress={handleDeleteAll} activeOpacity={0.75}>
-              <Ionicons name="trash-outline" size={16} color={RED} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      <View style={s.filterBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterScroll}>
-          {FILTERS.map(f => {
-            const active = activeFilter === f.key;
-            const count = f.key === 'Unread' ? unreadCount :
-                         f.type ? notifications.filter(n => n.type === f.type).length :
-                         notifications.length;
-            return (
-              <TouchableOpacity
-                key={f.key}
-                style={[s.filterChip, active && s.filterChipActive]}
-                onPress={() => setActiveFilter(f.key)}
-                activeOpacity={0.75}
-              >
-                <Text style={[s.filterChipText, active && s.filterChipTextActive]}>
-                  {f.label}
-                </Text>
-                {count > 0 && (
-                  <View style={[s.chipBadge, active && s.chipBadgeActive]}>
-                    <Text style={[s.chipBadgeText, active && s.chipBadgeTextActive]}>{count}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {showLoading ? (
-        <View style={s.loading}>
-          <ActivityIndicator size="large" color={BLUE} />
-          <Text style={s.loadingText}>Loading notifications...</Text>
-        </View>
-      ) : (
-        <ScrollView
-          style={s.list}
-          contentContainerStyle={s.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={BLUE}
-              colors={[BLUE]}
-            />
-          }
-          onScroll={({ nativeEvent }) => {
-            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-            if (layoutMeasurement + contentOffset.y >= contentSize.height - 20) {
-              loadMore();
-            }
-          }}
-          scrollEventThrottle={400}
-        >
-          {sectionKeys.length === 0 ? (
-            <View style={s.empty}>
-              <View style={s.emptyIcon}>
-                <Ionicons name="notifications-off-outline" size={40} color={TEXT_MUTED} />
-              </View>
-              <Text style={s.emptyTitle}>Nothing here</Text>
-              <Text style={s.emptyBody}>
-                {activeFilter === 'All' ? 'No notifications yet.' : `No ${activeFilter.toLowerCase()} notifications.`}
-              </Text>
-            </View>
-          ) : (
-            sectionKeys.map(sk => (
-              <View key={sk}>
-                <View style={s.sectionHeader}>
-                  <Text style={s.sectionLabel}>{SECTION_LABELS[sk] || sk}</Text>
-                  <View style={s.sectionLine} />
-                </View>
-                {grouped[sk].map((n, idx) => renderNotificationRow(n, idx === grouped[sk].length - 1))}
-              </View>
-            ))
-          )}
-
-          {loadingMore && (
-            <View style={s.loadingMore}>
-              <ActivityIndicator size="small" color={BLUE} />
-              <Text style={s.loadingMoreText}>Loading more...</Text>
-            </View>
-          )}
-
-          {notifications.length > 0 && totalCount > notifications.length && !loadingMore && (
-            <TouchableOpacity style={s.loadMoreBtn} onPress={loadMore} activeOpacity={0.8}>
-              <Text style={s.loadMoreText}>Load More</Text>
-            </TouchableOpacity>
-          )}
-
-          <View style={{ height: 40 }} />
-        </ScrollView>
-      )}
-
-      {/* Only show error if not a counts error */}
-      {error && error.code !== 'COUNTS_ERROR' && (
-        <View style={s.errorContainer}>
-          <Ionicons name="alert-circle-outline" size={16} color={RED} />
-          <Text style={s.errorText}>{typeof error === 'string' ? error : error.message || 'An error occurred'}</Text>
-          <TouchableOpacity onPress={() => dispatch(clearNotificationError())}>
-            <Ionicons name="close-outline" size={16} color={TEXT_MUTED} />
+        {/* ── Header ── */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backIconWrap}
+            onPress={handleBack}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="arrow-back" size={20} color={WHITE} />
           </TouchableOpacity>
+
+          <View style={styles.headerTitleWrap}>
+            <Ionicons name="mail" size={16} color={GOLD} style={{ marginRight: 6 }} />
+            <Text style={styles.headerTitle}>Inbox</Text>
+            {unreadCount > 0 && (
+              <View style={styles.headerCountBadge}>
+                <Text style={styles.headerCountText}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.headerActions}>
+            {unreadCount > 0 && (
+              <TouchableOpacity style={styles.headerActionBtn} onPress={handleMarkAllAsRead} activeOpacity={0.7}>
+                <Ionicons name="checkmark-done-outline" size={20} color={GOLD} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.headerActionBtn} onPress={handleClearAll} activeOpacity={0.7}>
+              <Ionicons name="trash-outline" size={20} color={SILVER2} />
+            </TouchableOpacity>
+          </View>
         </View>
-      )}
+
+        {/* ── Filter Tabs ── */}
+        <View style={styles.filterContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScrollContent}
+          >
+            {FILTER_TABS.map((tab) => {
+              const isActive = activeFilter === tab.key;
+              const badgeCount = getBadgeCount(tab.key);
+
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[styles.filterTab, isActive && styles.filterTabActive]}
+                  onPress={() => handleFilterChange(tab.key)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={tab.icon} size={15} color={isActive ? BLUE : TEXT_MUTED} />
+                  <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+                    {tab.label}
+                  </Text>
+                  {badgeCount > 0 && (
+                    <View style={styles.filterBadge}>
+                      <Text style={styles.filterBadgeText}>{badgeCount}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* ── Notification List ── */}
+        {showLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={BLUE} />
+            <Text style={styles.loadingText}>Loading your inbox...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredNotifications}
+            keyExtractor={(item) => item?._id || item?.id || Math.random().toString()}
+            renderItem={({ item }) => {
+              if (!item) return null;
+              return (
+                <NotificationItem
+                  notification={item}
+                  onPress={handleNotificationPress}
+                  onMarkRead={handleMarkAsRead}
+                />
+              );
+            }}
+            ItemSeparatorComponent={() => <View style={styles.mailSeparator} />}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BLUE} />
+            }
+            ListEmptyComponent={() => <EmptyState filter={activeFilter} />}
+            ListHeaderComponent={
+              filteredNotifications && filteredNotifications.length > 0 && unreadCount > 0 && activeFilter === 'all' ? (
+                <TouchableOpacity style={styles.markAllButton} onPress={handleMarkAllAsRead}>
+                  <Ionicons name="checkmark-done-circle-outline" size={18} color={BLUE} />
+                  <Text style={styles.markAllText}>Mark all as read</Text>
+                </TouchableOpacity>
+              ) : null
+            }
+            onEndReached={() => {
+              if (page < totalPages && !isLoading) {
+                loadNotifications(page + 1);
+              }
+            }}
+            onEndReachedThreshold={0.3}
+            ListFooterComponent={
+              isLoading && notifications && notifications.length > 0 ? (
+                <View style={styles.loadMoreContainer}>
+                  <ActivityIndicator size="small" color={BLUE} />
+                </View>
+              ) : null
+            }
+          />
+        )}
+
+        {/* Error banner */}
+        {error && error.code !== 'COUNTS_ERROR' && (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle-outline" size={16} color={RED} />
+            <Text style={styles.errorText}>{typeof error === 'string' ? error : error.message || 'An error occurred'}</Text>
+            <TouchableOpacity onPress={() => dispatch(clearNotificationError())}>
+              <Ionicons name="close-outline" size={16} color={TEXT_MUTED} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* ── Notification Detail Modal ── */}
+      <NotificationDetailModal
+        visible={detailVisible}
+        notification={selectedNotification}
+        onClose={handleCloseModal}
+        onPrimaryAction={handlePrimaryAction}
+      />
     </SafeAreaView>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: NAVY },
+  root: { flex: 1, backgroundColor: BG },
+
+  // ── Header ──
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: NAVY,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: NAVY,
+    minHeight: 60,
   },
-  backBtn: {
-    width: 38, height: 38, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center', justifyContent: 'center',
+  backIconWrap: {
+    width: 40,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: WHITE, letterSpacing: -0.3 },
-  headerBadge: {
-    backgroundColor: GOLD, borderRadius: 10,
-    minWidth: 22, height: 20, paddingHorizontal: 6,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: GOLD, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.4, shadowRadius: 3,
+  headerTitleWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerBadgeText: { fontSize: 11, fontWeight: '700', color: WHITE },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  markAllBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: 'rgba(212,160,23,0.14)', borderRadius: 18,
-    paddingHorizontal: 11, paddingVertical: 7,
-    borderWidth: 1, borderColor: 'rgba(212,160,23,0.3)',
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: WHITE,
+    letterSpacing: -0.3,
   },
-  markAllText: { fontSize: 11.5, fontWeight: '600', color: GOLD_LT },
-  deleteAllBtn: {
-    width: 34, height: 34, borderRadius: 10,
-    backgroundColor: 'rgba(185,28,28,0.14)',
-    borderWidth: 1, borderColor: 'rgba(185,28,28,0.25)',
-    alignItems: 'center', justifyContent: 'center',
+  headerCountBadge: {
+    marginLeft: 8,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
   },
-  filterBar: { backgroundColor: WHITE, borderBottomWidth: 1, borderBottomColor: DIVIDER },
-  filterScroll: { paddingHorizontal: 14, paddingVertical: 11, gap: 8, flexDirection: 'row' },
-  filterChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 20, borderWidth: 1.5, borderColor: DIVIDER, backgroundColor: WHITE,
+  headerCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: NAVY,
   },
-  filterChipActive: {
-    backgroundColor: NAVY, borderColor: NAVY,
-    shadowColor: NAVY, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 2,
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    width: 84,
+    justifyContent: 'flex-end',
   },
-  filterChipText: { fontSize: 13, fontWeight: '500', color: TEXT_MED },
-  filterChipTextActive: { color: WHITE, fontWeight: '600' },
-  chipBadge: {
-    backgroundColor: BLUE_SOFT, borderRadius: 8,
-    minWidth: 18, height: 17, paddingHorizontal: 5,
-    alignItems: 'center', justifyContent: 'center',
+  headerActionBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  chipBadgeActive: { backgroundColor: 'rgba(212,160,23,0.22)' },
-  chipBadgeText: { fontSize: 10, fontWeight: '700', color: BLUE },
-  chipBadgeTextActive: { color: GOLD_LT },
-  list: { flex: 1, backgroundColor: BG },
-  listContent: { paddingTop: 6 },
-  sectionHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingTop: 18, paddingBottom: 10, gap: 10,
+
+  // ── Filter Tabs ──
+  filterContainer: {
+    backgroundColor: CARD,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
   },
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700', color: TEXT_MUTED,
-    textTransform: 'uppercase', letterSpacing: 0.8,
+  filterScrollContent: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
   },
-  sectionLine: { flex: 1, height: 1, backgroundColor: DIVIDER },
-  row: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: SURFACE, marginHorizontal: 12, marginBottom: 8,
-    paddingHorizontal: 14, paddingVertical: 14,
-    borderRadius: 14, borderWidth: 1, borderColor: DIVIDER,
-    position: 'relative', overflow: 'hidden',
-    shadowColor: '#0D1B2A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1,
+  filterTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 48,
+    paddingHorizontal: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+    marginHorizontal: 2,
   },
-  rowUnread: {
-    backgroundColor: WHITE, borderColor: '#D0DFF5',
-    shadowColor: '#1A56DB', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
+  filterTabActive: {
+    borderBottomColor: BLUE,
   },
-  rowLast: { marginBottom: 6 },
-  unreadBar: {
-    position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+  filterText: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    fontWeight: '500',
+  },
+  filterTextActive: {
+    color: BLUE,
+    fontWeight: '600',
+  },
+  filterBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    marginLeft: 2,
+  },
+  filterBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: WHITE,
+    lineHeight: 18,
+  },
+
+  // ── Mail List ──
+  listContainer: {
+    paddingBottom: 40,
+  },
+  mailSeparator: {
+    height: 1,
+    backgroundColor: BORDER,
+    marginLeft: 72,
+  },
+  markAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: `${BLUE}08`,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 10,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: `${BLUE}20`,
+  },
+  markAllText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: BLUE,
+  },
+
+  // ── Mail Row ──
+  mailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: CARD,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  mailRowUnread: {
+    backgroundColor: `${BLUE}05`,
   },
   avatar: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
-    marginRight: 12, marginTop: 2, flexShrink: 0,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    marginTop: 1,
+    flexShrink: 0,
   },
-  avatarText: { fontSize: 14, fontWeight: '700', color: WHITE },
-  body: { flex: 1 },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  sender: { fontSize: 13.5, fontWeight: '600', color: TEXT_DARK, flex: 1, marginRight: 8 },
-  senderBold: { color: TEXT_DARK, fontWeight: '700' },
-  time: { fontSize: 10.5, color: TEXT_MUTED, flexShrink: 0 },
-  title: { fontSize: 12.5, fontWeight: '400', color: TEXT_MUTED, marginBottom: 3 },
-  titleBold: { fontWeight: '600', color: TEXT_MED },
-  preview: { fontSize: 12, color: TEXT_MUTED, lineHeight: 17, marginBottom: 9 },
-  tag: {
-    alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 6, borderWidth: 1,
+  avatarText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
-  tagText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2, textTransform: 'uppercase' },
-  dot: { width: 8, height: 8, borderRadius: 4, marginTop: 4, marginLeft: 8, flexShrink: 0 },
-  empty: { alignItems: 'center', paddingTop: 90, paddingHorizontal: 40 },
-  emptyIcon: {
-    width: 76, height: 76, borderRadius: 38, backgroundColor: SURFACE,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: DIVIDER, marginBottom: 18,
+  avatarUnreadDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: BLUE,
+    borderWidth: 2,
+    borderColor: CARD,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: TEXT_DARK, marginBottom: 6 },
-  emptyBody: { fontSize: 13, color: TEXT_MUTED, textAlign: 'center', lineHeight: 19 },
-  loading: {
+  mailBody: {
+    flex: 1,
+  },
+  mailTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  mailSender: {
+    flex: 1,
+    fontSize: 13.5,
+    fontWeight: '500',
+    color: TEXT_MUTED,
+    marginRight: 8,
+  },
+  mailSenderUnread: {
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  mailTime: {
+    fontSize: 11,
+    color: TEXT_LIGHT,
+    flexShrink: 0,
+  },
+  mailTimeUnread: {
+    color: BLUE,
+    fontWeight: '600',
+  },
+  mailSubject: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: TEXT_MAIN,
+    marginBottom: 2,
+  },
+  mailSubjectUnread: {
+    fontWeight: '700',
+  },
+  mailPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mailPreview: {
+    flex: 1,
+    fontSize: 12.5,
+    color: TEXT_LIGHT,
+    lineHeight: 18,
+  },
+  mailAmount: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  markReadPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: BG,
+  },
+  markReadPillText: {
+    fontSize: 11,
+    color: TEXT_MUTED,
+  },
+
+  // ── Empty State ──
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 64,
+    paddingHorizontal: 40,
+  },
+  emptyIconWrap: {
+    width: 80,
+    height: 80,
+    backgroundColor: `${BLUE}08`,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: TEXT_MAIN,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: TEXT_MUTED,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  // ── Loading States ──
+  loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: BG,
-    padding: 40,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: 16,
     fontSize: 14,
     color: TEXT_MUTED,
-    fontWeight: '500',
   },
-  loadingMore: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  loadMoreContainer: {
     paddingVertical: 16,
-    gap: 8,
-  },
-  loadingMoreText: {
-    fontSize: 12,
-    color: TEXT_MUTED,
-  },
-  loadMoreBtn: {
     alignItems: 'center',
-    paddingVertical: 14,
-    marginHorizontal: 12,
-    marginTop: 4,
-    backgroundColor: SURFACE,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: DIVIDER,
   },
-  loadMoreText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: BLUE,
-  },
+
+  // ── Error Container ──
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: RED_SOFT,
+    backgroundColor: `${RED}10`,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: RED + '30',
+    borderTopColor: `${RED}30`,
     gap: 8,
   },
   errorText: {
@@ -977,109 +1274,160 @@ const s = StyleSheet.create({
     fontSize: 12,
     color: RED,
   },
-});
 
-// ── Detail Screen Styles ─────────────────────────────────────────────────────
-const ds = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: NAVY },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: NAVY,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
+  // ── Detail Modal ──
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(7,26,62,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
-  backBtn: {
-    width: 38, height: 38, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center', justifyContent: 'center',
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '82%',
+    backgroundColor: CARD,
+    borderRadius: 20,
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
   },
-  deleteBtn: {
-    width: 38, height: 38, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center', justifyContent: 'center',
+  modalHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
   },
-  headerTitle: { fontSize: 14.5, fontWeight: '600', color: WHITE, flex: 1, marginHorizontal: 10, textAlign: 'center' },
-  scroll: { flex: 1, backgroundColor: BG },
-  scrollContent: { padding: 16, gap: 12 },
-  subjectCard: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: SURFACE, borderRadius: 16, padding: 18,
-    borderWidth: 1, borderColor: DIVIDER, gap: 14,
-    shadowColor: '#0D1B2A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
+  modalCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: BG,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  typeIcon: {
-    width: 50, height: 50, borderRadius: 25,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  modalTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
   },
-  subjectMeta: { flex: 1, gap: 9 },
-  subjectText: { fontSize: 16, fontWeight: '700', color: TEXT_DARK, lineHeight: 22 },
-  tag: {
-    alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4,
-    borderRadius: 7, borderWidth: 1,
+  modalTypeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
-  tagText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
-  metaCard: {
-    backgroundColor: SURFACE, borderRadius: 16,
-    borderWidth: 1, borderColor: DIVIDER, overflow: 'hidden',
-    shadowColor: '#0D1B2A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+    lineHeight: 25,
+    marginBottom: 14,
   },
-  senderRow: { flexDirection: 'row', alignItems: 'center', padding: 15, gap: 12 },
-  avatar: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
+  modalFromRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
   },
-  avatarImage: {
-    width: 44, height: 44, borderRadius: 22,
+  modalAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
-  avatarText: { fontSize: 14, fontWeight: '700', color: WHITE },
-  senderMeta: { flex: 1, gap: 2 },
-  senderName: { fontSize: 13.5, fontWeight: '700', color: TEXT_DARK },
-  dateText: { fontSize: 11, color: TEXT_MUTED },
-  innerDivider: { height: 1, backgroundColor: DIVIDER, marginHorizontal: 15 },
-  toRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 15, paddingVertical: 12, gap: 10,
+  modalAvatarText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
-  toLabel: { fontSize: 11, fontWeight: '600', color: TEXT_MUTED, width: 24 },
-  toChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: GOLD_SOFT, borderRadius: 12,
-    paddingHorizontal: 10, paddingVertical: 4,
-    borderWidth: 1, borderColor: GOLD + '30',
+  modalFromTextWrap: {
+    flex: 1,
   },
-  toName: { fontSize: 12, fontWeight: '600', color: GOLD },
-  bodyCard: {
-    backgroundColor: SURFACE, borderRadius: 16, padding: 20,
-    borderWidth: 1, borderColor: DIVIDER,
-    shadowColor: '#0D1B2A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
+  modalFromName: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: TEXT_MAIN,
   },
-  bodyText: { fontSize: 14, color: TEXT_MED, lineHeight: 23 },
-  actionsCard: {
-    backgroundColor: SURFACE, borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: DIVIDER,
-    shadowColor: '#0D1B2A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
+  modalFromMeta: {
+    fontSize: 11.5,
+    color: TEXT_LIGHT,
+    marginTop: 1,
   },
-  actionsLabel: { fontSize: 11, fontWeight: '700', color: TEXT_MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 12 },
-  actionsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  actionBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 7,
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderRadius: 10, borderWidth: 1,
+  modalMetaText: {
+    fontSize: 11.5,
+    color: TEXT_LIGHT,
   },
-  actionText: { fontSize: 13, fontWeight: '700' },
-  markReadBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: BLUE, borderRadius: 14,
-    paddingVertical: 15,
-    borderWidth: 1, borderColor: BLUE_DK,
-    shadowColor: BLUE, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 3,
+  modalDivider: {
+    height: 1,
+    backgroundColor: BORDER,
+    marginBottom: 16,
   },
-  markReadText: { fontSize: 14.5, fontWeight: '700', color: WHITE },
-  footer: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: SURFACE, borderRadius: 12, padding: 13,
-    borderWidth: 1, borderColor: DIVIDER,
+  modalBodyScroll: {
+    marginBottom: 20,
   },
-  footerText: { fontSize: 10.5, color: TEXT_MUTED, flex: 1, lineHeight: 15 },
+  modalMessage: {
+    fontSize: 14.5,
+    color: TEXT_MUTED,
+    lineHeight: 22,
+  },
+  modalAmountCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  modalAmountText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalSecondaryBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  modalSecondaryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT_MUTED,
+  },
+  modalPrimaryBtn: {
+    flex: 1.4,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: BLUE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  modalPrimaryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: WHITE,
+  },
 });

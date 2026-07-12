@@ -1,4 +1,4 @@
-// screens/NotificationsScreen.jsx - Updated with professional detail modal + back button logic
+// screens/NotificationsScreen.jsx - Email-inbox style UI + peso currency
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
@@ -57,10 +57,13 @@ const BORDER     = '#C8D8E8';
 const GREEN      = '#059669';
 const ORANGE     = '#F97316';
 const RED        = '#EF4444';
+
+// Peso currency symbol used everywhere money is displayed
+const PESO = '₱';
 // ─────────────────────────────────────────────────────────────────────────────────
 
 const FILTER_TABS = [
-  { key: 'all', label: 'All', icon: 'notifications-outline' },
+  { key: 'all', label: 'Inbox', icon: 'mail-outline' },
   { key: 'unread', label: 'Unread', icon: 'mail-unread-outline' },
   { key: 'offers', label: 'Offers', icon: 'briefcase-outline' },
   { key: 'messages', label: 'Messages', icon: 'chatbubble-outline' },
@@ -70,7 +73,7 @@ const FILTER_TABS = [
 // action button description used inside the detail modal.
 const ACTION_META = {
   view_offer:        { label: 'View Offer',       icon: 'briefcase-outline' },
-  open_chat:         { label: 'Open Chat',        icon: 'chatbubble-outline' },
+  open_chat:         { label: 'Reply',            icon: 'arrow-undo-outline' },
   view_job:          { label: 'View Job Post',    icon: 'document-text-outline' },
   view_contract:     { label: 'View Contract',    icon: 'clipboard-outline' },
   view_transaction:  { label: 'View Transaction', icon: 'cash-outline' },
@@ -188,10 +191,22 @@ const getTypeLabel = (type) => {
     .join(' ');
 };
 
+// Formats a numeric amount as Philippine peso, e.g. 1500 -> "₱1,500.00"
+const formatPeso = (amount) => {
+  if (amount === null || amount === undefined || isNaN(amount)) return null;
+  const num = Number(amount);
+  const formatted = num.toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${PESO}${formatted}`;
+};
+
 const formatFullDate = (dateString) => {
   if (!dateString) return '';
   const date = new Date(dateString);
   return date.toLocaleString(undefined, {
+    weekday: 'short',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -209,65 +224,88 @@ const formatTime = (dateString) => {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
+  // Gmail-style compact time: just now / minutes / time-today / weekday / date
+  if (diffMins < 1) return 'now';
+  if (diffMins < 60) return `${diffMins}m`;
+  if (diffHours < 24 && date.getDate() === now.getDate()) {
+    return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+  if (diffDays < 7) {
+    return date.toLocaleDateString(undefined, { weekday: 'short' });
+  }
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+// Builds initials for the sender "avatar" bubble, mimicking an email client
+const getInitials = (notification) => {
+  const first = notification.sender_id?.first_name;
+  const last = notification.sender_id?.last_name;
+  if (first) {
+    return `${first.charAt(0)}${last ? last.charAt(0) : ''}`.toUpperCase();
+  }
+  // Fall back to the notification type/title for system notifications
+  const source = notification.title || notification.type || 'N';
+  return source.charAt(0).toUpperCase();
+};
+
+const getSenderName = (notification) => {
+  if (notification.sender_id?.first_name) {
+    return `${notification.sender_id.first_name} ${notification.sender_id.last_name || ''}`.trim();
+  }
+  return 'Rectifix';
 };
 
 function NotificationItem({ notification, onPress, onMarkRead }) {
-  const iconName = getIconName(notification.type);
   const iconColor = getIconColor(notification.type);
+  const initials = getInitials(notification);
+  const senderName = getSenderName(notification);
+  const amountText = formatPeso(notification.amount);
+  const unread = !notification.is_read;
 
   return (
     <TouchableOpacity
-      style={[styles.notificationItem, !notification.is_read && styles.notificationUnread]}
+      style={[styles.mailRow, unread && styles.mailRowUnread]}
       onPress={() => onPress(notification)}
-      activeOpacity={0.7}
+      activeOpacity={0.6}
     >
-      {!notification.is_read && <View style={styles.unreadDot} />}
-
-      <View style={[styles.iconContainer, { backgroundColor: `${iconColor}15` }]}>
-        <Ionicons name={iconName} size={22} color={iconColor} />
+      {/* Sender avatar bubble, like an email client */}
+      <View style={[styles.avatar, { backgroundColor: `${iconColor}18`, borderColor: `${iconColor}30` }]}>
+        <Text style={[styles.avatarText, { color: iconColor }]}>{initials}</Text>
+        {unread && <View style={styles.avatarUnreadDot} />}
       </View>
 
-      <View style={styles.contentContainer}>
-        <View style={styles.headerRow}>
-          <Text style={[styles.title, !notification.is_read && styles.titleUnread]} numberOfLines={1}>
-            {notification.title}
+      <View style={styles.mailBody}>
+        <View style={styles.mailTopRow}>
+          <Text style={[styles.mailSender, unread && styles.mailSenderUnread]} numberOfLines={1}>
+            {senderName}
           </Text>
-          <Text style={styles.time}>{formatTime(notification.created_at)}</Text>
+          <Text style={[styles.mailTime, unread && styles.mailTimeUnread]}>
+            {formatTime(notification.created_at)}
+          </Text>
         </View>
 
-        <Text style={styles.message} numberOfLines={2}>
-          {notification.message}
+        <Text style={[styles.mailSubject, unread && styles.mailSubjectUnread]} numberOfLines={1}>
+          {notification.title}
         </Text>
 
-        {(notification.actions?.length > 0 || !notification.is_read) && (
-          <View style={styles.actionRow}>
-            {notification.actions?.length > 0 && (
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => onPress(notification)}
-                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-              >
-                <Text style={styles.actionButtonText}>View Details</Text>
-                <Ionicons name="arrow-forward" size={12} color={BLUE} />
-              </TouchableOpacity>
-            )}
+        <View style={styles.mailPreviewRow}>
+          <Text style={styles.mailPreview} numberOfLines={1}>
+            {notification.message}
+          </Text>
+          {amountText && (
+            <Text style={[styles.mailAmount, { color: iconColor }]}>{amountText}</Text>
+          )}
+        </View>
 
-            {!notification.is_read && (
-              <TouchableOpacity
-                style={styles.markReadButton}
-                onPress={() => onMarkRead(notification._id)}
-                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-              >
-                <Ionicons name="checkmark-circle-outline" size={14} color={TEXT_MUTED} />
-                <Text style={styles.markReadText}>Mark as read</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+        {unread && (
+          <TouchableOpacity
+            style={styles.markReadPill}
+            onPress={() => onMarkRead(notification._id)}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+          >
+            <Ionicons name="checkmark-circle-outline" size={12} color={TEXT_MUTED} />
+            <Text style={styles.markReadPillText}>Mark as read</Text>
+          </TouchableOpacity>
         )}
       </View>
     </TouchableOpacity>
@@ -277,10 +315,10 @@ function NotificationItem({ notification, onPress, onMarkRead }) {
 function EmptyState({ filter }) {
   const getMessage = () => {
     switch (filter) {
-      case 'unread': return 'No unread notifications';
-      case 'offers': return 'No offers yet';
+      case 'unread': return 'You\u2019re all caught up';
+      case 'offers': return 'No offers in your inbox';
       case 'messages': return 'No message notifications';
-      default: return 'No notifications yet';
+      default: return 'Your inbox is empty';
     }
   };
 
@@ -288,7 +326,7 @@ function EmptyState({ filter }) {
     switch (filter) {
       case 'offers': return 'briefcase-outline';
       case 'messages': return 'chatbubble-outline';
-      default: return 'notifications-off-outline';
+      default: return 'mail-open-outline';
     }
   };
 
@@ -299,8 +337,8 @@ function EmptyState({ filter }) {
       </View>
       <Text style={styles.emptyTitle}>{getMessage()}</Text>
       <Text style={styles.emptySubtitle}>
-        {filter === 'all' && 'When you receive notifications, they will appear here'}
-        {filter === 'unread' && 'You have read all your notifications'}
+        {filter === 'all' && 'New notifications will land here, just like a real inbox'}
+        {filter === 'unread' && 'You have read every notification'}
         {filter === 'offers' && 'When clients send you offers, they will appear here'}
         {filter === 'messages' && 'When you receive messages, they will appear here'}
       </Text>
@@ -308,9 +346,9 @@ function EmptyState({ filter }) {
   );
 }
 
-// ── Professional Notification Detail Modal ──────────────────────────────────
+// ── Email-style Notification Detail Modal ────────────────────────────────────
 function NotificationDetailModal({ visible, notification, onClose, onPrimaryAction }) {
-  const scale = useRef(new Animated.Value(0.92)).current;
+  const scale = useRef(new Animated.Value(0.94)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -330,7 +368,7 @@ function NotificationDetailModal({ visible, notification, onClose, onPrimaryActi
         }),
       ]).start();
     } else {
-      scale.setValue(0.92);
+      scale.setValue(0.94);
       opacity.setValue(0);
     }
   }, [visible]);
@@ -342,6 +380,9 @@ function NotificationDetailModal({ visible, notification, onClose, onPrimaryActi
   const hasAction = notification.actions && notification.actions.length > 0;
   const actionType = hasAction ? notification.actions[0].action_type : 'default';
   const actionMeta = ACTION_META[actionType] || ACTION_META.default;
+  const initials = getInitials(notification);
+  const senderName = getSenderName(notification);
+  const amountText = formatPeso(notification.amount);
 
   return (
     <Modal
@@ -360,64 +401,64 @@ function NotificationDetailModal({ visible, notification, onClose, onPrimaryActi
             { opacity, transform: [{ scale }] },
           ]}
         >
-          {/* Close button */}
-          <TouchableOpacity
-            style={styles.modalCloseBtn}
-            onPress={onClose}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close" size={18} color={TEXT_MUTED} />
-          </TouchableOpacity>
+          {/* Email-style header bar */}
+          <View style={styles.modalHeaderBar}>
+            <View style={[styles.modalTypeBadge, { backgroundColor: `${iconColor}12`, borderColor: `${iconColor}30` }]}>
+              <Ionicons name={iconName} size={12} color={iconColor} />
+              <Text style={[styles.modalTypeText, { color: iconColor }]}>
+                {getTypeLabel(notification.type)}
+              </Text>
+            </View>
 
-          {/* Icon + type badge */}
-          <View style={[styles.modalIconWrap, { backgroundColor: `${iconColor}15` }]}>
-            <Ionicons name={iconName} size={30} color={iconColor} />
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={onClose}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={18} color={TEXT_MUTED} />
+            </TouchableOpacity>
           </View>
 
-          <View style={[styles.modalTypeBadge, { backgroundColor: `${iconColor}12`, borderColor: `${iconColor}30` }]}>
-            <View style={[styles.modalTypeDot, { backgroundColor: iconColor }]} />
-            <Text style={[styles.modalTypeText, { color: iconColor }]}>
-              {getTypeLabel(notification.type)}
-            </Text>
-          </View>
-
-          {/* Title */}
+          {/* Subject line, like an email subject */}
           <Text style={styles.modalTitle}>{notification.title}</Text>
 
-          {/* Timestamp */}
-          <View style={styles.modalMetaRow}>
-            <Ionicons name="time-outline" size={13} color={TEXT_LIGHT} />
+          {/* From / date row, mimicking an email client header */}
+          <View style={styles.modalFromRow}>
+            <View style={[styles.modalAvatar, { backgroundColor: `${iconColor}18`, borderColor: `${iconColor}30` }]}>
+              <Text style={[styles.modalAvatarText, { color: iconColor }]}>{initials}</Text>
+            </View>
+            <View style={styles.modalFromTextWrap}>
+              <Text style={styles.modalFromName}>{senderName}</Text>
+              <Text style={styles.modalFromMeta}>to me</Text>
+            </View>
             <Text style={styles.modalMetaText}>{formatFullDate(notification.created_at)}</Text>
           </View>
 
           {/* Divider */}
           <View style={styles.modalDivider} />
 
-          {/* Message body */}
+          {/* Message body, like an email body */}
           <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={false}>
             <Text style={styles.modalMessage}>{notification.message}</Text>
 
-            {notification.sender_id?.first_name && (
-              <View style={styles.modalSenderRow}>
-                <View style={styles.modalSenderAvatar}>
-                  <Ionicons name="person" size={14} color={BLUE} />
-                </View>
-                <Text style={styles.modalSenderText}>
-                  From {notification.sender_id.first_name} {notification.sender_id.last_name || ''}
-                </Text>
+            {amountText && (
+              <View style={[styles.modalAmountCard, { borderColor: `${iconColor}30`, backgroundColor: `${iconColor}0C` }]}>
+                <Ionicons name="cash-outline" size={16} color={iconColor} />
+                <Text style={[styles.modalAmountText, { color: iconColor }]}>{amountText}</Text>
               </View>
             )}
           </ScrollView>
 
-          {/* Footer actions */}
+          {/* Footer actions, styled like Reply / Archive buttons */}
           <View style={styles.modalFooter}>
             <TouchableOpacity
               style={styles.modalSecondaryBtn}
               onPress={onClose}
               activeOpacity={0.75}
             >
-              <Text style={styles.modalSecondaryText}>Close</Text>
+              <Ionicons name="archive-outline" size={15} color={TEXT_MUTED} />
+              <Text style={styles.modalSecondaryText}>Archive</Text>
             </TouchableOpacity>
 
             {hasAction && (
@@ -439,7 +480,7 @@ function NotificationDetailModal({ visible, notification, onClose, onPrimaryActi
 
 export default function NotificationsScreen({ onNavigate, route }) {
   const dispatch = useDispatch();
-  
+
   // Redux state
   const notifications = useSelector(selectAllNotifications);
   const unreadNotifications = useSelector(selectUnreadNotifications);
@@ -485,7 +526,7 @@ export default function NotificationsScreen({ onNavigate, route }) {
   const loadNotifications = useCallback(async (pageNum = 1, refresh = false) => {
     try {
       let filterParams = { page: pageNum, limit: 20 };
-      
+
       // Apply filters
       if (activeFilter === 'unread') {
         filterParams.is_read = false;
@@ -496,7 +537,7 @@ export default function NotificationsScreen({ onNavigate, route }) {
       }
 
       const result = await dispatch(getNotifications(filterParams)).unwrap();
-      
+
       if (refresh) {
         setPage(1);
       } else {
@@ -604,7 +645,7 @@ export default function NotificationsScreen({ onNavigate, route }) {
   // Handle mark all as read
   const handleMarkAllAsRead = useCallback(() => {
     if (unreadCount === 0) return;
-    
+
     Alert.alert(
       'Mark All as Read',
       `Mark all ${unreadCount} unread notifications as read?`,
@@ -618,15 +659,15 @@ export default function NotificationsScreen({ onNavigate, route }) {
   // Handle clear all notifications
   const handleClearAll = useCallback(() => {
     if (notifications.length === 0) return;
-    
+
     Alert.alert(
       'Clear All',
       'Are you sure you want to clear all notifications? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Clear All', 
-          style: 'destructive', 
+        {
+          text: 'Clear All',
+          style: 'destructive',
           onPress: () => {
             let filter = {};
             if (activeFilter === 'offers') filter.type = 'offer';
@@ -681,12 +722,14 @@ export default function NotificationsScreen({ onNavigate, route }) {
             >
               <Ionicons name="arrow-back" size={20} color={WHITE} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Notifications</Text>
+            <View style={styles.headerTitleWrap}>
+              <Text style={styles.headerTitle}>Inbox</Text>
+            </View>
             <View style={styles.headerActions} />
           </View>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={BLUE} />
-            <Text style={styles.loadingText}>Loading notifications...</Text>
+            <Text style={styles.loadingText}>Loading your inbox...</Text>
           </View>
         </View>
       </SafeAreaView>
@@ -697,7 +740,7 @@ export default function NotificationsScreen({ onNavigate, route }) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.root}>
 
-        {/* ── Header ── */}
+        {/* ── Header, styled like an email app top bar ── */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backIconWrap}
@@ -708,7 +751,15 @@ export default function NotificationsScreen({ onNavigate, route }) {
             <Ionicons name="arrow-back" size={20} color={WHITE} />
           </TouchableOpacity>
 
-          <Text style={styles.headerTitle}>Notifications</Text>
+          <View style={styles.headerTitleWrap}>
+            <Ionicons name="mail" size={16} color={GOLD} style={{ marginRight: 6 }} />
+            <Text style={styles.headerTitle}>Inbox</Text>
+            {unreadCount > 0 && (
+              <View style={styles.headerCountBadge}>
+                <Text style={styles.headerCountText}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
 
           <View style={styles.headerActions}>
             {unreadCount > 0 && (
@@ -722,7 +773,7 @@ export default function NotificationsScreen({ onNavigate, route }) {
           </View>
         </View>
 
-        {/* ── Filter Tabs ── */}
+        {/* ── Filter Tabs, like Gmail category tabs ── */}
         <View style={styles.filterContainer}>
           <ScrollView
             horizontal
@@ -755,7 +806,7 @@ export default function NotificationsScreen({ onNavigate, route }) {
           </ScrollView>
         </View>
 
-        {/* ── List ── */}
+        {/* ── Mail List ── */}
         <FlatList
           data={filteredNotifications}
           keyExtractor={(item) => item._id || item.id}
@@ -766,6 +817,7 @@ export default function NotificationsScreen({ onNavigate, route }) {
               onMarkRead={handleMarkAsRead}
             />
           )}
+          ItemSeparatorComponent={() => <View style={styles.mailSeparator} />}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -796,7 +848,7 @@ export default function NotificationsScreen({ onNavigate, route }) {
         />
       </View>
 
-      {/* ── Notification Detail Modal ── */}
+      {/* ── Notification Detail Modal (email view) ── */}
       <NotificationDetailModal
         visible={detailVisible}
         notification={selectedNotification}
@@ -830,13 +882,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
+  headerTitleWrap: {
     flex: 1,
-    textAlign: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: WHITE,
     letterSpacing: -0.3,
+  },
+  headerCountBadge: {
+    marginLeft: 8,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  headerCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: NAVY,
   },
   headerActions: {
     flexDirection: 'row',
@@ -901,10 +972,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // ── List ────────────────────────────────────────────────────────────────────
+  // ── Mail List ───────────────────────────────────────────────────────────────
   listContainer: {
-    padding: 16,
     paddingBottom: 40,
+  },
+  mailSeparator: {
+    height: 1,
+    backgroundColor: BORDER,
+    marginLeft: 72,
   },
   markAllButton: {
     flexDirection: 'row',
@@ -913,8 +988,10 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: `${BLUE}08`,
     paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 12,
     borderRadius: 10,
-    marginBottom: 16,
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: `${BLUE}20`,
   },
@@ -924,95 +1001,107 @@ const styles = StyleSheet.create({
     color: BLUE,
   },
 
-  // ── Notification Item ────────────────────────────────────────────────────────
-  notificationItem: {
+  // ── Mail Row (email-list style item) ───────────────────────────────────────
+  mailRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: CARD,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: BORDER,
-    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  notificationUnread: {
+  mailRowUnread: {
     backgroundColor: `${BLUE}05`,
-    borderLeftWidth: 3,
-    borderLeftColor: BLUE,
   },
-  unreadDot: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: BLUE,
-    zIndex: 1,
-  },
-  iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
     marginTop: 1,
     flexShrink: 0,
   },
-  contentContainer: {
-    flex: 1,
-    paddingRight: 16,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  title: {
-    flex: 1,
+  avatarText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: TEXT_MAIN,
-    marginRight: 8,
-  },
-  titleUnread: {
     fontWeight: '700',
   },
-  time: {
+  avatarUnreadDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: BLUE,
+    borderWidth: 2,
+    borderColor: CARD,
+  },
+  mailBody: {
+    flex: 1,
+  },
+  mailTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  mailSender: {
+    flex: 1,
+    fontSize: 13.5,
+    fontWeight: '500',
+    color: TEXT_MUTED,
+    marginRight: 8,
+  },
+  mailSenderUnread: {
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  mailTime: {
     fontSize: 11,
     color: TEXT_LIGHT,
     flexShrink: 0,
   },
-  message: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    lineHeight: 19,
-    marginBottom: 10,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  actionButtonText: {
-    fontSize: 12,
+  mailTimeUnread: {
     color: BLUE,
     fontWeight: '600',
   },
-  markReadButton: {
+  mailSubject: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: TEXT_MAIN,
+    marginBottom: 2,
+  },
+  mailSubjectUnread: {
+    fontWeight: '700',
+  },
+  mailPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mailPreview: {
+    flex: 1,
+    fontSize: 12.5,
+    color: TEXT_LIGHT,
+    lineHeight: 18,
+  },
+  mailAmount: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  markReadPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: BG,
   },
-  markReadText: {
+  markReadPillText: {
     fontSize: 11,
     color: TEXT_MUTED,
   },
@@ -1064,7 +1153,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // ── Detail Modal ─────────────────────────────────────────────────────────────
+  // ── Detail Modal (email view) ─────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(7,26,62,0.55)',
@@ -1075,11 +1164,11 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 420,
-    maxHeight: '80%',
+    maxHeight: '82%',
     backgroundColor: CARD,
-    borderRadius: 24,
-    paddingTop: 24,
-    paddingHorizontal: 24,
+    borderRadius: 20,
+    paddingTop: 16,
+    paddingHorizontal: 20,
     paddingBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
@@ -1087,41 +1176,28 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 12,
   },
+  modalHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
   modalCloseBtn: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: BG,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2,
-  },
-  modalIconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
   },
   modalTypeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 12,
-  },
-  modalTypeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
   modalTypeText: {
     fontSize: 11,
@@ -1130,20 +1206,45 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   modalTitle: {
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: '700',
     color: TEXT_MAIN,
-    lineHeight: 26,
-    marginBottom: 8,
+    lineHeight: 25,
+    marginBottom: 14,
   },
-  modalMetaRow: {
+  modalFromRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 16,
+    marginBottom: 14,
+  },
+  modalAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  modalAvatarText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modalFromTextWrap: {
+    flex: 1,
+  },
+  modalFromName: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: TEXT_MAIN,
+  },
+  modalFromMeta: {
+    fontSize: 11.5,
+    color: TEXT_LIGHT,
+    marginTop: 1,
   },
   modalMetaText: {
-    fontSize: 12,
+    fontSize: 11.5,
     color: TEXT_LIGHT,
   },
   modalDivider: {
@@ -1159,27 +1260,18 @@ const styles = StyleSheet.create({
     color: TEXT_MUTED,
     lineHeight: 22,
   },
-  modalSenderRow: {
+  modalAmountCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginTop: 16,
-    padding: 10,
-    backgroundColor: BG,
-    borderRadius: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  modalSenderAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: `${BLUE}15`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalSenderText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: TEXT_MAIN,
+  modalAmountText: {
+    fontSize: 16,
+    fontWeight: '700',
   },
   modalFooter: {
     flexDirection: 'row',
@@ -1191,8 +1283,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: BORDER,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
   },
   modalSecondaryText: {
     fontSize: 14,

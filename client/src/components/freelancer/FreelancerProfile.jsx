@@ -1,1155 +1,1261 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
-  StatusBar,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
-  Modal,
-  BackHandler,        // ← handles Android hardware back button
+  Image,
+  Alert,
+  StatusBar,
+  RefreshControl,
+  BackHandler,
+  ActivityIndicator,
+  Animated,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useDispatch, useSelector } from 'react-redux';
-import { 
-  registerFreelancer, 
-  verifyEmail,
-  resendVerification,
-  clearError 
-} from '../../Redux/slices/authSlice';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle } from 'react-native-svg';
+import { useSelector, useDispatch } from 'react-redux';
+import { Directory, File, Paths } from 'expo-file-system';
+import { getProfile, logout } from '../../Redux/slices/authSlice';
 
-// ── Vantara Design tokens ──────────────────────────────────────────────────
-const NAVY       = '#071A3E';
-const NAVY2      = '#0D2151';
-const BLUE       = '#0055A5';
-const BLUE_MD    = '#0073CF';
-const BLUE_LT    = '#1E90FF';
-const GOLD       = '#C89520';
-const GOLD_LT    = '#E8B84B';
-const GOLD_DK    = '#8A6410';
-const SILVER     = '#8899B0';
-const SILVER2    = '#B8C8D8';
-const WHITE      = '#FFFFFF';
-const BG         = '#EEF4FA';
-const CARD       = '#FFFFFF';
-const TEXT_MAIN  = '#071A3E';
-const TEXT_MUTED = '#3A5070';
-const TEXT_LIGHT = '#7A90A8';
-const BORDER     = '#C8D8E8';
-const GREEN      = '#059669';
-const GREEN_SOFT = '#D1FAE5';
-const GREEN_MID  = '#86EFAC';
-const GREEN_DARK = '#059669';
-const ERROR      = '#EF4444';
-const ERROR_BG   = 'rgba(239,68,68,0.08)';
-const ERROR_BORDER = 'rgba(239,68,68,0.3)';
+// ── Vantara Design Tokens (shared with ClientProfile) ─────────────────────────
+const NAVY        = '#071A3E';
+const NAVY_DEEP   = '#050F26';
+const NAVY_SOFT   = '#0B2657';
+const BLUE        = '#0055A5';
+const BLUE_SOFT   = 'rgba(0,85,165,0.10)';
+const GOLD        = '#C89520';
+const GOLD_LT     = '#E8B84B';
+const GOLD_DK     = '#8A6410';
+const GOLD_SOFT   = 'rgba(200,149,32,0.14)';
+const WHITE       = '#FFFFFF';
+const BG          = '#EEF4FA';
+const CARD        = '#FFFFFF';
+const TEXT_MAIN   = '#071A3E';
+const TEXT_MUTED  = '#3A5070';
+const TEXT_LIGHT  = '#7A90A8';
+const BORDER      = '#DCE6F2';
+const RED         = '#DC2626';
+const RED_SOFT    = '#FEF2F2';
+const RED_BORDER  = '#FECACA';
+const GREEN       = '#16A34A';
+const GREEN_SOFT  = '#E5F5F0';
+
+const SHADOW_CARD  = { shadowColor: NAVY_SOFT, shadowOffset: { width: 0, height: 4 },  shadowOpacity: 0.08, shadowRadius: 12, elevation: 3 };
+const SHADOW_FLOAT  = { shadowColor: NAVY_SOFT, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.16, shadowRadius: 26, elevation: 10 };
+const SHADOW_GOLD   = { shadowColor: GOLD_DK,  shadowOffset: { width: 0, height: 6 },  shadowOpacity: 0.32, shadowRadius: 14, elevation: 6 };
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function FreelancerRegistration({ onNavigate }) {
-  const dispatch = useDispatch();
-  const { isLoading, error, requiresVerification, verificationEmail } = useSelector((state) => state.auth);
-  
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [showTermsModal, setShowTermsModal] = useState(false);
-  const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [verificationCode, setVerificationCode] = useState(['', '', '', '', '', '']);
-  const [focusedCodeIndex, setFocusedCodeIndex] = useState(null); // UI-only: highlights active OTP box
-  const [countdown, setCountdown] = useState(0);
-  const [canResend, setCanResend] = useState(true);
-  const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    username: '',
-    email_address: '',
-    phone_number: '',
-    password: '',
-    confirm_password: '',
-    country: '',
-    city: '',
-    address: '',
-    skills: '',
-    experience_level: '',
-    years_of_experience: '',
-    portfolio_link: '',
-    hourly_rate: '',
-    fixed_rate: '',
-    bio_about_me: '',
-    languages: '',
-    certifications: '',
-    terms_accepted: false,
-  });
-  
-  const [errors, setErrors] = useState({});
-  const [serverError, setServerError] = useState(null);
-  
-  const scrollViewRef = useRef();
-  const inputRefs = useRef([]);
+const CV_DIRECTORY = new Directory(Paths.document, 'cvs');
 
-  // ── Hardware Back Button Handler (Android) ────────────────────────
-  useEffect(() => {
-    const backAction = () => {
-      if (showVerificationModal) {
-        Alert.alert(
-          'Cancel Verification?',
-          'You will need to verify your email to access your account.',
-          [
-            { text: 'Stay', style: 'cancel' },
-            {
-              text: 'Cancel',
-              style: 'destructive',
-              onPress: () => {
-                setShowVerificationModal(false);
-                resetForm();
-              },
-            },
-          ]
-        );
-        return true; // block default OS back
-      }
+const MENU_ITEMS = [
+  { key: 'editProfile',   label: 'Edit Profile',      sub: 'Update your info and photo',       icon: 'person-outline',            nav: 'EditProfile' },
+  { key: 'notifications', label: 'Notifications',     sub: 'Manage alerts and updates',        icon: 'notifications-outline',     nav: 'Notifications' },
+  { key: 'privacy',       label: 'Privacy & Security',sub: 'Manage your data and security',    icon: 'shield-checkmark-outline',  nav: 'PrivacySecurity' },
+  { key: 'help',          label: 'Help & Support',    sub: 'FAQs and contact us',              icon: 'help-circle-outline',       nav: 'HelpSupport' },
+];
 
-      if (showTermsModal) {
-        setShowTermsModal(false);
-        return true; // block default OS back
-      }
+const IMPROVE_ITEMS = [
+  {
+    key: 'qualifications',
+    title: 'Qualifications',
+    desc: 'Highlight your skills and experience.',
+    icon: 'star-outline',
+    reward: '+10% match',
+    nav: 'EditProfile',
+  },
+  {
+    key: 'preferences',
+    title: 'Job Preferences',
+    desc: 'Set minimum pay, schedule, and location.',
+    icon: 'options-outline',
+    reward: '+7% match',
+    nav: 'EditProfile',
+  },
+  {
+    key: 'filters',
+    title: 'Hide Jobs With These Details',
+    desc: 'Manage what gets filtered from your search.',
+    icon: 'eye-off-outline',
+    reward: '+3% match',
+    nav: 'EditProfile',
+  },
+  {
+    key: 'ready',
+    title: 'Ready To Work',
+    desc: 'Signal employers you\u2019re available immediately.',
+    icon: 'checkmark-circle-outline',
+    reward: '+5% match',
+    nav: 'EditProfile',
+  },
+];
 
-      // Go back to role selection screen
-      onNavigate('RoleSelection');
-      return true; // block default OS back
-    };
-
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-    return () => backHandler.remove(); // cleanup on unmount
-  }, [showVerificationModal, showTermsModal]);
-
-  // ── Countdown timer for resend ───────────────────────────────────────────
-  useEffect(() => {
-    let timer;
-    if (countdown > 0) {
-      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-    } else if (countdown === 0) {
-      setCanResend(true);
-    }
-    return () => clearTimeout(timer);
-  }, [countdown]);
-
-  // ── Auto-show verification modal when registration requires verification ──
-  useEffect(() => {
-    if (requiresVerification && verificationEmail) {
-      setShowVerificationModal(true);
-      startCountdown();
-    }
-  }, [requiresVerification, verificationEmail]);
-
-  const startCountdown = () => {
-    setCountdown(60);
-    setCanResend(false);
-  };
-
-  const validateForm = () => {
-    const newErrors = {};
-    
-    if (!formData.first_name?.trim()) newErrors.first_name = 'First name is required';
-    if (!formData.last_name?.trim())  newErrors.last_name  = 'Last name is required';
-    if (!formData.username?.trim()) {
-      newErrors.username = 'Username is required';
-    } else if (formData.username.length < 3) {
-      newErrors.username = 'Username must be at least 3 characters';
-    } else if (!/^[a-z0-9_]+$/.test(formData.username)) {
-      newErrors.username = 'Username can only contain lowercase letters, numbers, and underscores';
-    }
-    if (!formData.email_address?.trim()) {
-      newErrors.email_address = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email_address)) {
-      newErrors.email_address = 'Email is invalid';
-    }
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
-    if (!formData.confirm_password) {
-      newErrors.confirm_password = 'Please confirm your password';
-    } else if (formData.password !== formData.confirm_password) {
-      newErrors.confirm_password = 'Passwords do not match';
-    }
-    if (!formData.terms_accepted) newErrors.terms_accepted = 'You must accept the terms and conditions';
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleRegister = async () => {
-    setServerError(null);
-    
-    if (!validateForm()) {
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-      Alert.alert('Check your details', 'Please fix the highlighted fields before continuing.', [{ text: 'OK' }]);
-      return;
-    }
-    
-    const userData = {
-      first_name: formData.first_name,
-      last_name: formData.last_name,
-      username: formData.username,
-      email_address: formData.email_address,
-      password: formData.password,
-      confirm_password: formData.confirm_password,
-      phone_number: formData.phone_number || null,
-      country: formData.country || null,
-      city: formData.city || null,
-      address: formData.address || null,
-      skills: formData.skills ? formData.skills.split(',').map(s => s.trim()).filter(s => s) : [],
-      experience_level: formData.experience_level || null,
-      years_of_experience: formData.years_of_experience ? parseInt(formData.years_of_experience) : null,
-      portfolio_link: formData.portfolio_link || null,
-      hourly_rate: formData.hourly_rate ? parseFloat(formData.hourly_rate) : null,
-      fixed_rate: formData.fixed_rate ? parseFloat(formData.fixed_rate) : null,
-      bio_about_me: formData.bio_about_me || null,
-      languages: formData.languages ? formData.languages.split(',').map(l => l.trim()).filter(l => l) : [],
-      certifications: formData.certifications ? formData.certifications.split(',').map(c => c.trim()).filter(c => c) : [],
-      terms_accepted: true,
-    };
-    
-    const result = await dispatch(registerFreelancer(userData));
-    
-    if (registerFreelancer.fulfilled.match(result)) {
-      if (result.payload?.requires_verification) {
-        Alert.alert(
-          'Verification Required',
-          'Please check your email for the verification code.',
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert(
-          'Account Created!',
-          result.payload.message || 'Your freelancer account is ready.',
-          [
-            { text: 'Stay Here', style: 'cancel' },
-            { text: 'Sign In', onPress: () => { resetForm(); onNavigate('Login'); } },
-          ]
-        );
-      }
-    } else if (registerFreelancer.rejected.match(result)) {
-      const errorMessage = result.payload?.message || 'Something went wrong. Please try again.';
-      setServerError(errorMessage);
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-      
-      if (errorMessage.toLowerCase().includes('email already exists')) {
-        setErrors(prev => ({ ...prev, email_address: 'This email is already registered' }));
-      } else if (errorMessage.toLowerCase().includes('username already taken')) {
-        setErrors(prev => ({ ...prev, username: 'Username is already taken' }));
-      } else if (errorMessage.toLowerCase().includes('confirm password') || errorMessage.toLowerCase().includes('passwords do not match')) {
-        setErrors(prev => ({ ...prev, confirm_password: 'Passwords do not match' }));
-      }
-      
-      Alert.alert('Registration Failed', errorMessage, [{ text: 'OK' }]);
-    }
-  };
-
-  // ── Verification Handlers ─────────────────────────────────────────────────
-  const handleVerifyEmail = async () => {
-    const code = verificationCode.join('');
-    if (code.length < 6) {
-      Alert.alert('Incomplete Code', 'Please enter all 6 digits of the verification code.');
-      return;
-    }
-
-    const result = await dispatch(verifyEmail({ email: verificationEmail, code }));
-
-    if (verifyEmail.fulfilled.match(result)) {
-      setShowVerificationModal(false);
-      setVerificationCode(['', '', '', '', '', '']);
-      Alert.alert(
-        'Email Verified! 🎉',
-        'Your account has been verified. You can now sign in.',
-        [{ text: 'Sign In', onPress: () => { resetForm(); onNavigate('Login'); } }]
-      );
-    } else if (verifyEmail.rejected.match(result)) {
-      const msg = result.payload?.message || 'Invalid verification code. Please try again.';
-      Alert.alert('Verification Failed', msg);
-    }
-  };
-
-  const handleResendCode = async () => {
-    if (!canResend) return;
-    const result = await dispatch(resendVerification(verificationEmail));
-    if (resendVerification.fulfilled.match(result)) {
-      startCountdown();
-      Alert.alert('Code Sent', 'A new verification code has been sent to your email.');
-    } else if (resendVerification.rejected.match(result)) {
-      const msg = result.payload?.message || 'Failed to resend code. Please try again.';
-      Alert.alert('Error', msg);
-    }
-  };
-
-  const handleVerificationCodeChange = (text, index) => {
-    const newCode = [...verificationCode];
-    newCode[index] = text;
-    setVerificationCode(newCode);
-    if (text && index < 5) inputRefs.current[index + 1]?.focus();
-  };
-
-  const handleVerificationKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace' && !verificationCode[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      first_name: '', last_name: '', username: '', email_address: '',
-      phone_number: '', password: '', confirm_password: '', country: '',
-      city: '', address: '', skills: '', experience_level: '',
-      years_of_experience: '', portfolio_link: '', hourly_rate: '',
-      fixed_rate: '', bio_about_me: '', languages: '', certifications: '',
-      terms_accepted: false,
-    });
-    setErrors({});
-    setServerError(null);
-    setVerificationCode(['', '', '', '', '', '']);
-    setShowVerificationModal(false);
-  };
-
-  const handleAcceptTerms = () => {
-    setFormData(prev => ({ ...prev, terms_accepted: true }));
-    setShowTermsModal(false);
-  };
-
-  React.useEffect(() => () => { dispatch(clearError()); }, []);
-
-  const updateField = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }));
-    if (serverError) setServerError(null);
-  };
+// ── Bottom Tab Bar ────────────────────────────────────────────────────────────
+function BottomTabBar({ activeTab, onTabPress, pendingOffers }) {
+  const tabs = [
+    { key: 'FreelancerDashboard', label: 'Home',         icon: 'home-outline',            activeIcon: 'home' },
+    { key: 'Messages',            label: 'Messages',     icon: 'chatbubble-outline',       activeIcon: 'chatbubble' },
+    { key: 'MyJobs',              label: 'My Jobs',      icon: 'briefcase-outline',        activeIcon: 'briefcase' },
+    { key: 'MyApplications',      label: 'Applications', icon: 'checkmark-circle-outline', activeIcon: 'checkmark-circle' },
+    { key: 'Profile',             label: 'Profile',      icon: 'person-outline',           activeIcon: 'person' },
+  ];
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor={BG} />
+    <SafeAreaView edges={['bottom']} style={styles.tabSafe}>
+      <View style={styles.tabBar}>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.key;
+          const isMyJobs = tab.key === 'MyJobs';
+          const hasBadge = tab.key === 'Messages' && pendingOffers > 0;
 
-      {/* ── Verification Modal ── */}
-      <Modal
-        visible={showVerificationModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          // Intentionally empty — BackHandler above handles this to avoid double-trigger
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.verificationModalContainer}>
-            <View style={styles.verificationHeader}>
-              <View style={styles.verificationIconContainer}>
-                <Ionicons name="mail-outline" size={36} color={BLUE} />
-              </View>
-              <Text style={styles.verificationTitle}>Verify Your Email</Text>
-              <Text style={styles.verificationSubtitle}>
-                We've sent a 6-digit verification code to{'\n'}
-                <Text style={styles.verificationEmail}>{verificationEmail}</Text>
-              </Text>
-            </View>
-
-            <View style={styles.verificationCodeContainer}>
-              {verificationCode.map((digit, index) => (
-                <TextInput
-                  key={index}
-                  ref={ref => (inputRefs.current[index] = ref)}
-                  style={[
-                    styles.verificationInput,
-                    digit ? styles.verificationInputFilled : null,
-                    focusedCodeIndex === index ? styles.verificationInputFocused : null,
-                  ]}
-                  maxLength={1}
-                  keyboardType="number-pad"
-                  value={digit}
-                  onChangeText={(text) => handleVerificationCodeChange(text, index)}
-                  onKeyPress={(e) => handleVerificationKeyPress(e, index)}
-                  onFocus={() => setFocusedCodeIndex(index)}
-                  onBlur={() => setFocusedCodeIndex((prev) => (prev === index ? null : prev))}
-                  autoFocus={index === 0}
-                  selectTextOnFocus
-                  textContentType="oneTimeCode"
-                />
-              ))}
-            </View>
-
+          return (
             <TouchableOpacity
-              style={[styles.verifyButton, isLoading && styles.submitBtnDisabled]}
-              onPress={handleVerifyEmail}
-              disabled={isLoading}
-              activeOpacity={0.85}
+              key={tab.key}
+              style={[styles.tabItem, isMyJobs && styles.tabItemCenter]}
+              onPress={() => onTabPress(tab.key)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={tab.label}
+              accessibilityState={{ selected: isActive }}
             >
-              {isLoading
-                ? <ActivityIndicator color={WHITE} />
-                : <Text style={styles.verifyButtonText}>Verify Email</Text>
-              }
-            </TouchableOpacity>
-
-            <View style={styles.resendContainer}>
-              <Text style={styles.resendText}>Didn't receive the code? </Text>
-              <TouchableOpacity onPress={handleResendCode} disabled={!canResend || isLoading} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
-                <Text style={[styles.resendLink, !canResend && styles.resendLinkDisabled]}>
-                  {canResend ? 'Resend Code' : `Resend in ${countdown}s`}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={styles.verificationClose}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={() => {
-                Alert.alert(
-                  'Cancel Verification?',
-                  'You will need to verify your email to access your account.',
-                  [
-                    { text: 'Stay', style: 'cancel' },
-                    {
-                      text: 'Cancel',
-                      style: 'destructive',
-                      onPress: () => { setShowVerificationModal(false); resetForm(); }
-                    }
-                  ]
-                );
-              }}
-            >
-              <Text style={styles.verificationCloseText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Terms Modal ── */}
-      <Modal
-        visible={showTermsModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowTermsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Terms and Conditions</Text>
-              <TouchableOpacity onPress={() => setShowTermsModal(false)} style={styles.modalClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close" size={22} color={TEXT_MUTED} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-              <Text style={styles.termsText}>
-                <Text style={styles.termsHeading}>1. Acceptance of Terms{'\n\n'}</Text>
-                By registering as a Freelancer on Taskra, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our platform.
-
-                {'\n\n'}<Text style={styles.termsHeading}>2. Freelancer Responsibilities{'\n\n'}</Text>
-                • You agree to provide accurate and complete information when creating your account.{'\n'}
-                • You are responsible for maintaining the confidentiality of your account credentials.{'\n'}
-                • You agree to deliver quality work within agreed timelines.{'\n'}
-                • You will not submit false or misleading proposals.
-
-                {'\n\n'}<Text style={styles.termsHeading}>3. Payment Terms{'\n\n'}</Text>
-                • Taskra facilitates secure payments between clients and freelancers.{'\n'}
-                • A service fee may be deducted from each completed transaction.{'\n'}
-                • You must submit accurate invoices for work completed.{'\n'}
-                • Disputes will be reviewed by our team and resolved fairly.
-
-                {'\n\n'}<Text style={styles.termsHeading}>4. Work Guidelines{'\n\n'}</Text>
-                • All work must be original and not plagiarized.{'\n'}
-                • Deliverables must meet the agreed specifications.{'\n'}
-                • Communicate clearly and professionally with clients.{'\n'}
-                • Respect intellectual property rights and confidentiality.
-
-                {'\n\n'}<Text style={styles.termsHeading}>5. Code of Conduct{'\n\n'}</Text>
-                • Treat clients with respect and professionalism.{'\n'}
-                • Provide accurate time estimates and updates.{'\n'}
-                • Do not share client confidential information.{'\n'}
-                • Report any violations or suspicious activities.
-
-                {'\n\n'}<Text style={styles.termsHeading}>6. Account Termination{'\n\n'}</Text>
-                Taskra reserves the right to suspend or terminate accounts that violate these terms, deliver poor quality work, or harm the platform's integrity.
-
-                {'\n\n'}<Text style={styles.termsHeading}>7. Privacy Policy{'\n\n'}</Text>
-                Your personal information is protected according to our Privacy Policy. Your profile information will be visible to potential clients.
-
-                {'\n\n'}<Text style={styles.termsHeading}>8. Limitation of Liability{'\n\n'}</Text>
-                Taskra acts as an intermediary and is not responsible for disputes between parties. We provide dispute resolution services but do not guarantee outcomes.
-
-                {'\n\n'}<Text style={styles.termsHeading}>9. Modifications{'\n\n'}</Text>
-                We may update these terms from time to time. Continued use of the platform constitutes acceptance of modified terms.
-
-                {'\n\n'}<Text style={styles.termsHeading}>10. Contact Information{'\n\n'}</Text>
-                For questions about these terms, contact us at: support@taskra.com
-
-                {'\n\n'}<Text style={styles.termsEffective}>Effective Date: January 1, 2024</Text>
-              </Text>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.modalButtonCancel} onPress={() => setShowTermsModal(false)} activeOpacity={0.8}>
-                <Text style={styles.modalButtonCancelText}>Close</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalButtonAccept} onPress={handleAcceptTerms} activeOpacity={0.85}>
-                <Text style={styles.modalButtonAcceptText}>Accept Terms</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/*
-        ── KeyboardAvoidingView ──────────────────────────────────────
-        On Android, behavior="height" collapses the layout when the keyboard
-        opens, causing a re-render that can accidentally fire navigation.
-        Setting behavior={undefined} on Android lets the ScrollView handle
-        it naturally. keyboardShouldPersistTaps="handled" prevents accidental
-        taps outside inputs from dismissing focus and triggering back.
-      */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
-      >
-        <ScrollView 
-          ref={scrollViewRef}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-        >
-          <View style={styles.container}>
-            {/* Back Button */}
-            <TouchableOpacity 
-              style={styles.backButton} 
-              onPress={() => onNavigate('RoleSelection')}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              activeOpacity={0.75}
-            >
-              <View style={styles.backIconWrap}>
-                <Ionicons name="arrow-back" size={18} color={BLUE} />
-              </View>
-            </TouchableOpacity>
-
-            {/* Header */}
-            <View style={styles.header}>
-              <View style={styles.roleBadge}>
-                <Ionicons name="briefcase-outline" size={16} color={BLUE} />
-                <Text style={styles.roleBadgeText}>Freelancer Registration</Text>
-              </View>
-              <Text style={styles.title}>Start Your{'\n'}Freelance Journey</Text>
-              <Text style={styles.subtitle}>
-                Showcase your skills and find great opportunities
-              </Text>
-            </View>
-
-            {/* Server Error Display */}
-            {serverError && (
-              <View style={styles.serverErrorContainer}>
-                <View style={styles.serverErrorIcon}>
-                  <Ionicons name="alert-circle" size={18} color={ERROR} />
-                </View>
-                <Text style={styles.serverErrorText}>{serverError}</Text>
-              </View>
-            )}
-
-            <View style={styles.form}>
-              {/* Section: Personal Info */}
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Personal Information</Text>
-
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, styles.rowItem]}>
-                    <Text style={styles.label}>First Name <Text style={styles.required}>*</Text></Text>
-                    <TextInput
-                      style={[styles.input, errors.first_name && styles.inputError]}
-                      placeholder="First name"
-                      placeholderTextColor={TEXT_LIGHT}
-                      value={formData.first_name}
-                      onChangeText={(text) => updateField('first_name', text)}
-                    />
-                    {errors.first_name && <Text style={styles.fieldErrorText}>{errors.first_name}</Text>}
-                  </View>
-                  
-                  <View style={[styles.inputGroup, styles.rowItem]}>
-                    <Text style={styles.label}>Last Name <Text style={styles.required}>*</Text></Text>
-                    <TextInput
-                      style={[styles.input, errors.last_name && styles.inputError]}
-                      placeholder="Last name"
-                      placeholderTextColor={TEXT_LIGHT}
-                      value={formData.last_name}
-                      onChangeText={(text) => updateField('last_name', text)}
-                    />
-                    {errors.last_name && <Text style={styles.fieldErrorText}>{errors.last_name}</Text>}
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Username <Text style={styles.required}>*</Text></Text>
-                  <TextInput
-                    style={[styles.input, errors.username && styles.inputError]}
-                    placeholder="Choose a username"
-                    placeholderTextColor={TEXT_LIGHT}
-                    autoCapitalize="none"
-                    value={formData.username}
-                    onChangeText={(text) => updateField('username', text.toLowerCase().replace(/\s/g, ''))}
+              {isMyJobs ? (
+                <LinearGradient colors={[GOLD_LT, GOLD, GOLD_DK]} style={styles.centerButton}>
+                  <Ionicons
+                    name={isActive ? tab.activeIcon : tab.icon}
+                    size={23}
+                    color={WHITE}
                   />
-                  {errors.username && <Text style={styles.fieldErrorText}>{errors.username}</Text>}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Email Address <Text style={styles.required}>*</Text></Text>
-                  <TextInput
-                    style={[styles.input, errors.email_address && styles.inputError]}
-                    placeholder="you@example.com"
-                    placeholderTextColor={TEXT_LIGHT}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    value={formData.email_address}
-                    onChangeText={(text) => updateField('email_address', text)}
-                  />
-                  {errors.email_address && <Text style={styles.fieldErrorText}>{errors.email_address}</Text>}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Phone Number</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="+63 (optional)"
-                    placeholderTextColor={TEXT_LIGHT}
-                    keyboardType="phone-pad"
-                    value={formData.phone_number}
-                    onChangeText={(text) => updateField('phone_number', text)}
-                  />
-                </View>
-              </View>
-
-              {/* Section: Location */}
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Location</Text>
-
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, styles.rowItem]}>
-                    <Text style={styles.label}>Country</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Country"
-                      placeholderTextColor={TEXT_LIGHT}
-                      value={formData.country}
-                      onChangeText={(text) => updateField('country', text)}
+                </LinearGradient>
+              ) : (
+                <>
+                  <View style={styles.tabIconWrap}>
+                    <Ionicons
+                      name={isActive ? tab.activeIcon : tab.icon}
+                      size={21}
+                      color={isActive ? BLUE : TEXT_LIGHT}
                     />
+                    {hasBadge && <View style={styles.tabBadgeDot} />}
                   </View>
-                  
-                  <View style={[styles.inputGroup, styles.rowItem]}>
-                    <Text style={styles.label}>City</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="City"
-                      placeholderTextColor={TEXT_LIGHT}
-                      value={formData.city}
-                      onChangeText={(text) => updateField('city', text)}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Address</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    placeholder="Your street address (optional)"
-                    placeholderTextColor={TEXT_LIGHT}
-                    multiline
-                    numberOfLines={3}
-                    textAlignVertical="top"
-                    value={formData.address}
-                    onChangeText={(text) => updateField('address', text)}
-                  />
-                </View>
-              </View>
-
-              {/* Section: Professional Info */}
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Professional Information</Text>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Skills</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="React Native, Node.js, UI/UX Design"
-                    placeholderTextColor={TEXT_LIGHT}
-                    value={formData.skills}
-                    onChangeText={(text) => updateField('skills', text)}
-                  />
-                  <Text style={styles.hintText}>Separate multiple skills with commas</Text>
-                </View>
-
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, styles.rowItem]}>
-                    <Text style={styles.label}>Experience Level</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Entry, Junior, Mid, Senior"
-                      placeholderTextColor={TEXT_LIGHT}
-                      value={formData.experience_level}
-                      onChangeText={(text) => updateField('experience_level', text)}
-                    />
-                  </View>
-                  
-                  <View style={[styles.inputGroup, styles.rowItem]}>
-                    <Text style={styles.label}>Years of Experience</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Years"
-                      placeholderTextColor={TEXT_LIGHT}
-                      keyboardType="numeric"
-                      value={formData.years_of_experience}
-                      onChangeText={(text) => updateField('years_of_experience', text)}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.row}>
-                  <View style={[styles.inputGroup, styles.rowItem]}>
-                    <Text style={styles.label}>Hourly Rate (PHP)</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Hourly rate"
-                      placeholderTextColor={TEXT_LIGHT}
-                      keyboardType="numeric"
-                      value={formData.hourly_rate}
-                      onChangeText={(text) => updateField('hourly_rate', text)}
-                    />
-                  </View>
-                  
-                  <View style={[styles.inputGroup, styles.rowItem]}>
-                    <Text style={styles.label}>Fixed Rate (PHP)</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Fixed rate"
-                      placeholderTextColor={TEXT_LIGHT}
-                      keyboardType="numeric"
-                      value={formData.fixed_rate}
-                      onChangeText={(text) => updateField('fixed_rate', text)}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Portfolio URL</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="https://your-portfolio.com"
-                    placeholderTextColor={TEXT_LIGHT}
-                    autoCapitalize="none"
-                    value={formData.portfolio_link}
-                    onChangeText={(text) => updateField('portfolio_link', text)}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Bio / About Me</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    placeholder="Tell us about yourself, your expertise, and what makes you unique..."
-                    placeholderTextColor={TEXT_LIGHT}
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                    value={formData.bio_about_me}
-                    onChangeText={(text) => updateField('bio_about_me', text)}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Languages</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="English, Filipino, Spanish"
-                    placeholderTextColor={TEXT_LIGHT}
-                    value={formData.languages}
-                    onChangeText={(text) => updateField('languages', text)}
-                  />
-                  <Text style={styles.hintText}>Separate multiple languages with commas</Text>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Certifications</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="AWS Certified, Google UX Certificate"
-                    placeholderTextColor={TEXT_LIGHT}
-                    value={formData.certifications}
-                    onChangeText={(text) => updateField('certifications', text)}
-                  />
-                  <Text style={styles.hintText}>Separate multiple certifications with commas</Text>
-                </View>
-              </View>
-
-              {/* Section: Security */}
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Security</Text>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Password <Text style={styles.required}>*</Text></Text>
-                  <View style={styles.passwordWrap}>
-                    <TextInput
-                      style={[styles.input, styles.passwordInput, errors.password && styles.inputError]}
-                      placeholder="Min. 6 characters"
-                      placeholderTextColor={TEXT_LIGHT}
-                      secureTextEntry={!showPassword}
-                      value={formData.password}
-                      onChangeText={(text) => updateField('password', text)}
-                    />
-                    <TouchableOpacity
-                      style={styles.eyeBtn}
-                      onPress={() => setShowPassword(!showPassword)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={TEXT_LIGHT} />
-                    </TouchableOpacity>
-                  </View>
-                  {errors.password && <Text style={styles.fieldErrorText}>{errors.password}</Text>}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Confirm Password <Text style={styles.required}>*</Text></Text>
-                  <View style={styles.passwordWrap}>
-                    <TextInput
-                      style={[styles.input, styles.passwordInput, errors.confirm_password && styles.inputError]}
-                      placeholder="Repeat password"
-                      placeholderTextColor={TEXT_LIGHT}
-                      secureTextEntry={!showConfirmPassword}
-                      value={formData.confirm_password}
-                      onChangeText={(text) => updateField('confirm_password', text)}
-                    />
-                    <TouchableOpacity
-                      style={styles.eyeBtn}
-                      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={TEXT_LIGHT} />
-                    </TouchableOpacity>
-                  </View>
-                  {errors.confirm_password && <Text style={styles.fieldErrorText}>{errors.confirm_password}</Text>}
-                </View>
-              </View>
-
-              {/* Terms */}
-              <TouchableOpacity
-                style={[styles.checkboxRow, errors.terms_accepted && styles.checkboxRowError]}
-                onPress={() => updateField('terms_accepted', !formData.terms_accepted)}
-                activeOpacity={0.75}
-              >
-                <View style={[styles.checkbox, formData.terms_accepted && styles.checkboxChecked]}>
-                  {formData.terms_accepted && <Ionicons name="checkmark" size={14} color={WHITE} />}
-                </View>
-                <Text style={styles.checkboxLabel}>
-                  I accept the{' '}
-                  <Text style={styles.checkboxLink} onPress={() => setShowTermsModal(true)}>
-                    Terms and Conditions
+                  <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+                    {tab.label}
                   </Text>
-                  <Text style={styles.required}> *</Text>
-                </Text>
-              </TouchableOpacity>
-              {errors.terms_accepted && (
-                <View style={styles.fieldErrorRow}>
-                  <Ionicons name="alert-circle-outline" size={12} color={ERROR} />
-                  <Text style={styles.fieldErrorText}>{errors.terms_accepted}</Text>
-                </View>
+                  {isActive && <View style={styles.tabIndicator} />}
+                </>
               )}
-
-              {/* Submit Button */}
-              <TouchableOpacity
-                style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]}
-                onPress={handleRegister}
-                disabled={isLoading}
-                activeOpacity={0.85}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={WHITE} />
-                ) : (
-                  <>
-                    <Ionicons name="person-add-outline" size={18} color={WHITE} style={{ marginRight: 8 }} />
-                    <Text style={styles.submitBtnText}>Create Freelancer Account</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Info strip */}
-              <View style={styles.infoStrip}>
-                <Ionicons name="shield-checkmark-outline" size={14} color={BLUE} />
-                <Text style={styles.infoText}>Free to join · No hidden fees · Secure payments</Text>
-              </View>
-
-              {/* Sign in link */}
-              <View style={styles.loginPrompt}>
-                <Text style={styles.loginPromptText}>Already have an account?</Text>
-                <TouchableOpacity onPress={() => onNavigate('Login')} hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}>
-                  <Text style={styles.loginPromptLink}> Sign In</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </SafeAreaView>
   );
 }
 
+// ── Circular progress ring (SVG-based) ─────────────────────────────────────────
+function ProgressRing({ percent, size = 80, strokeWidth = 7, color = GOLD, children }) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.min(Math.max(percent, 0), 100);
+  const offset = circumference - (clamped / 100) * circumference;
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size} style={{ position: 'absolute', transform: [{ rotateZ: '-90deg' }] }}>
+        <Circle cx={size / 2} cy={size / 2} r={radius} stroke="rgba(255,255,255,0.16)" strokeWidth={strokeWidth} fill="none" />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </Svg>
+      {children}
+    </View>
+  );
+}
+
+// ── InfoTile ──────────────────────────────────────────────────────────────────
+function InfoTile({ icon, label, value }) {
+  return (
+    <Pressable style={({ pressed }) => [it.tile, pressed && it.tilePressed]}>
+      <View style={it.iconWrap}>
+        <Ionicons name={icon} size={16} color={BLUE} />
+      </View>
+      <Text style={it.label}>{label}</Text>
+      <Text style={it.value} numberOfLines={2}>{value || 'Not specified'}</Text>
+    </Pressable>
+  );
+}
+
+const it = StyleSheet.create({
+  tile: {
+    width: '48%',
+    backgroundColor: BG,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    padding: 14,
+  },
+  tilePressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
+  iconWrap: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: BLUE_SOFT,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 10,
+  },
+  label: { fontSize: 10, color: TEXT_LIGHT, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4, textTransform: 'uppercase' },
+  value: { fontSize: 13.5, color: TEXT_MAIN, fontWeight: '600', lineHeight: 19 },
+});
+
+// ── ChipList ──────────────────────────────────────────────────────────────────
+function ChipList({ items, icon = 'checkmark-circle', emptyIcon = 'add-circle-outline', emptyText = 'None added yet', onEdit }) {
+  const list = Array.isArray(items) ? items.filter(Boolean) : [];
+
+  if (list.length === 0) {
+    return (
+      <TouchableOpacity
+        style={styles.emptyChipRow}
+        onPress={onEdit}
+        activeOpacity={onEdit ? 0.7 : 1}
+        disabled={!onEdit}
+      >
+        <Ionicons name={emptyIcon} size={16} color={TEXT_LIGHT} />
+        <Text style={styles.emptyChipText}>{emptyText}</Text>
+      </TouchableOpacity>
+    );
+  }
+  return (
+    <View style={styles.chipListWrap}>
+      {list.map((item, i) => (
+        <View key={`${item}-${i}`} style={styles.chipReadOnly}>
+          <Ionicons name={icon} size={12} color={BLUE} style={{ marginRight: 6 }} />
+          <Text style={styles.chipReadOnlyText}>{item}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ── CVItem ────────────────────────────────────────────────────────────────────
+function CVItem({ name, date, onPress }) {
+  return (
+    <TouchableOpacity style={styles.cvItem} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.cvLeft}>
+        <View style={styles.cvIconWrap}>
+          <Ionicons name="document-text-outline" size={19} color={BLUE} />
+        </View>
+        <View style={styles.cvContent}>
+          <Text style={styles.cvName} numberOfLines={1}>{name}</Text>
+          <Text style={styles.cvDate}>Added {date}</Text>
+        </View>
+      </View>
+      <View style={styles.cvActionWrap}>
+        <Ionicons name="open-outline" size={16} color={BLUE} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ── SectionHeader ─────────────────────────────────────────────────────────────
+function SectionHeader({ icon, title, onEdit }) {
+  return (
+    <View style={styles.sectionHeaderRow}>
+      <View style={styles.sectionHeaderLeft}>
+        <View style={styles.sectionIconWrap}>
+          <Ionicons name={icon} size={14} color={BLUE} />
+        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      {onEdit && (
+        <TouchableOpacity style={styles.editRowBtn} onPress={onEdit} activeOpacity={0.7}>
+          <Ionicons name="create-outline" size={13} color={BLUE} />
+          <Text style={styles.editRowBtnText}>Edit</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+// ── Skeleton (loading placeholder) ────────────────────────────────────────────
+function ProfileSkeleton() {
+  return (
+    <View style={styles.skeletonWrap}>
+      <View style={[styles.skeletonBlock, { width: 84, height: 84, borderRadius: 42, alignSelf: 'center', marginBottom: 16 }]} />
+      <View style={[styles.skeletonBlock, { width: 160, height: 18, alignSelf: 'center', marginBottom: 8 }]} />
+      <View style={[styles.skeletonBlock, { width: 100, height: 12, alignSelf: 'center', marginBottom: 20 }]} />
+      <View style={[styles.skeletonBlock, { width: '100%', height: 44, borderRadius: 10, marginBottom: 10 }]} />
+      <View style={[styles.skeletonBlock, { width: '100%', height: 44, borderRadius: 10 }]} />
+    </View>
+  );
+}
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
+export default function Profile({ onNavigate, route }) {
+  const { user, status } = useSelector((state) => state.auth);
+  const dispatch = useDispatch();
+  const [savedCV, setSavedCV] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(!user);
+  const [cvLoading, setCvLoading] = useState(true);
+  const [aboutExpanded, setAboutExpanded] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Track navigation history to handle back button properly
+  const [navigationHistory, setNavigationHistory] = useState([]);
+
+  const slideAnim   = useRef(new Animated.Value(0)).current;
+  const overlayAnim = useRef(new Animated.Value(0)).current;
+  const heroAnim    = useRef(new Animated.Value(0)).current;
+  const pulseAnim   = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(heroAnim, { toValue: 1, duration: 550, useNativeDriver: true }).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1400, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 1400, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [heroAnim, pulseAnim]);
+
+  const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`.toUpperCase();
+
+  // Initial data load — fixes missing profile fetch on mount
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      await Promise.all([fetchProfile(), loadLocalCV()]);
+      if (isMounted) setInitialLoading(false);
+    })();
+    return () => { isMounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Handle hardware back button press ──
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // If drawer is open, close it first
+      if (drawerOpen) {
+        closeDrawer();
+        return true;
+      }
+
+      // Check if we have a return state from the route (where user came from)
+      if (route?.returnState?.activeTab) {
+        onNavigate(route.returnState.activeTab);
+        return true;
+      }
+
+      // Check if we have navigation history
+      if (navigationHistory.length > 0) {
+        const lastTab = navigationHistory[navigationHistory.length - 1];
+        setNavigationHistory(prev => prev.slice(0, -1));
+        onNavigate(lastTab);
+        return true;
+      }
+
+      // Default: navigate to the dashboard/home tab
+      onNavigate('FreelancerDashboard');
+      return true;
+    });
+
+    return () => backHandler.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route, onNavigate, navigationHistory, drawerOpen]);
+
+  const fetchProfile = useCallback(async () => {
+    try {
+      await dispatch(getProfile()).unwrap();
+    } catch {
+      Alert.alert('Couldn\u2019t load profile', 'Check your connection and try again.');
+    }
+  }, [dispatch]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchProfile(), loadLocalCV()]);
+    setRefreshing(false);
+  }, [fetchProfile]);
+
+  const loadLocalCV = async () => {
+    setCvLoading(true);
+    try {
+      const exists = CV_DIRECTORY.exists;
+      if (!exists) {
+        setSavedCV(null);
+        return;
+      }
+      const files = CV_DIRECTORY.list() ?? [];
+      const cvFiles = files.filter(
+        (f) => f?.name && /\.(pdf|docx?|rtf)$/i.test(f.name)
+      );
+      if (cvFiles.length === 0) {
+        setSavedCV(null);
+        return;
+      }
+      // Prefer the most recently modified file, falling back gracefully
+      const withStats = cvFiles.map((f) => {
+        let modified = null;
+        try { modified = f.modificationTime ?? null; } catch { /* noop */ }
+        return { uri: f.uri, name: f.name, size: f.size, modified };
+      });
+      withStats.sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0));
+      setSavedCV(withStats[0]);
+    } catch (e) {
+      console.error('Error loading local CV:', e);
+      setSavedCV(null);
+    } finally {
+      setCvLoading(false);
+    }
+  };
+
+  const formatDate = (timestamp) => {
+    const d = timestamp ? new Date(timestamp) : new Date();
+    if (Number.isNaN(d.getTime())) return 'Unknown date';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const viewCV = async () => {
+    if (!savedCV?.uri) return;
+    try {
+      const file = new File(savedCV.uri);
+      if (file.exists) {
+        await file.open();
+      } else {
+        Alert.alert('File not found', 'This resume may have been moved or deleted.');
+        setSavedCV(null);
+      }
+    } catch {
+      Alert.alert('Couldn\u2019t open file', 'Please try again.');
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Log out',
+      'Are you sure you want to log out of your account?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await dispatch(logout()).unwrap();
+              onNavigate('Login');
+            } catch {
+              Alert.alert('Couldn\u2019t log out', 'Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleTabBarPress = (key) => {
+    // Save current tab to history before navigating
+    if (key !== 'Profile') {
+      setNavigationHistory(prev => [...prev, 'Profile']);
+    }
+
+    const returnState = { activeTab: 'Profile' };
+    if (key !== 'Profile') {
+      onNavigate(key, { returnState, fromTab: 'Profile' });
+    }
+  };
+
+  const toEdit = () => onNavigate('EditProfile');
+
+  // ── Drawer ─────────────────────────────────────────────────────────────────
+  const openDrawer = () => {
+    setDrawerOpen(true);
+    Animated.parallel([
+      Animated.timing(slideAnim,   { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.timing(overlayAnim, { toValue: 1, duration: 260, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const closeDrawer = () => {
+    Animated.parallel([
+      Animated.timing(slideAnim,   { toValue: 0, duration: 220, useNativeDriver: true }),
+      Animated.timing(overlayAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+    ]).start(() => setDrawerOpen(false));
+  };
+
+  const handleMenuNav = (nav) => {
+    closeDrawer();
+    setTimeout(() => onNavigate(nav), 240);
+  };
+
+  const handleSignOut = () => {
+    closeDrawer();
+    setTimeout(handleLogout, 240);
+  };
+
+  // ── Derived values ──────────────────────────────────────────────────────────
+  const rateText = user?.hourly_rate
+    ? `\u20b1${user.hourly_rate} / hour`
+    : user?.fixed_rate
+    ? `\u20b1${user.fixed_rate} (fixed rate)`
+    : null;
+
+  const experienceText = user?.years_of_experience
+    ? `${user.years_of_experience} year${Number(user.years_of_experience) === 1 ? '' : 's'}`
+    : null;
+
+  const isAvailable = user?.is_available ?? true;
+  const isVerified = Boolean(user?.is_verified);
+  const rating = user?.average_rating ? Number(user.average_rating).toFixed(1) : null;
+  const completedJobs = user?.completed_jobs_count ?? 0;
+
+  const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'Your Name';
+  const heroHeadline = experienceText ? `${experienceText} of experience` : null;
+  const location = [user?.city, user?.country].filter(Boolean).join(', ') || null;
+
+  // ── Profile completion (derived, presentational only) ──────────────────────
+  const completionFields = [
+    { key: 'photo',    label: 'Photo',     icon: 'camera-outline',        done: !!user?.profile_picture },
+    { key: 'about',    label: 'About',     icon: 'document-text-outline', done: !!user?.bio_about },
+    { key: 'resume',   label: 'Resume',    icon: 'document-outline',      done: !!savedCV },
+    { key: 'skills',   label: 'Skills',    icon: 'star-outline',          done: Array.isArray(user?.skills) && user.skills.length > 0 },
+    { key: 'rate',     label: 'Rate',      icon: 'cash-outline',          done: !!rateText },
+    { key: 'languages',label: 'Languages', icon: 'language-outline',      done: Array.isArray(user?.languages) && user.languages.length > 0 },
+  ];
+  const completedCount = completionFields.filter((f) => f.done).length;
+  const completionPercent = Math.round((completedCount / completionFields.length) * 100);
+
+  const drawerTranslateX = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [320, 0],
+  });
+
+  const heroOpacity = heroAnim;
+  const heroTranslateY = heroAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] });
+  const pulseOpacity = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.85] });
+  const pulseScale = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY_DEEP} />
+      <LinearGradient colors={[BG, '#E3EDF8', BG]} style={StyleSheet.absoluteFill} />
+
+      <SafeAreaView style={styles.safe} edges={['top']}>
+
+        {/* Top bar */}
+        <LinearGradient colors={[NAVY_DEEP, NAVY, NAVY_SOFT]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.topbar}>
+          <View>
+            <Text style={styles.topbarEyebrow}>MY PROFILE</Text>
+            <Text style={styles.topbarTitle}>{fullName.split(' ')[0]}'s Workspace</Text>
+          </View>
+          <TouchableOpacity style={styles.menuBtn} onPress={openDrawer} activeOpacity={0.7}>
+            <Ionicons name="menu" size={20} color={WHITE} />
+          </TouchableOpacity>
+        </LinearGradient>
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scroll}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} colors={[BLUE, GOLD]} />}
+        >
+          {initialLoading ? (
+            <View style={styles.loadingCard}>
+              <ProfileSkeleton />
+            </View>
+          ) : (
+            <>
+              {/* ── Hero ── */}
+              <Animated.View style={{ opacity: heroOpacity, transform: [{ translateY: heroTranslateY }] }}>
+                <LinearGradient
+                  colors={[NAVY_DEEP, NAVY, NAVY_SOFT]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={styles.hero}
+                >
+                  {/* abstract decorative blobs */}
+                  <View style={[styles.heroBlob, styles.heroBlobGold]} />
+                  <View style={[styles.heroBlob, styles.heroBlobBlue]} />
+
+                  <View style={styles.heroTop}>
+                    <View style={styles.avatarWrap}>
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[styles.avatarGlow, { opacity: pulseOpacity, transform: [{ scale: pulseScale }] }]}
+                      />
+                      <TouchableOpacity onPress={toEdit} activeOpacity={0.85}>
+                        <View style={styles.avatarRing}>
+                          {user?.profile_picture ? (
+                            <Image source={{ uri: user.profile_picture }} style={styles.avatarImg} />
+                          ) : (
+                            <View style={styles.avatarPlaceholder}>
+                              <Text style={styles.avatarInitials}>{initials || '?'}</Text>
+                            </View>
+                          )}
+                        </View>
+                        {isVerified && (
+                          <View style={styles.verifiedBadge}>
+                            <Ionicons name="shield-checkmark" size={11} color={WHITE} />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+
+                    <ProgressRing percent={completionPercent} size={64} strokeWidth={5.5} color={GOLD_LT}>
+                      <Text style={styles.ringPercentSm}>{completionPercent}%</Text>
+                    </ProgressRing>
+                  </View>
+
+                  <Text style={styles.heroName} numberOfLines={2}>{fullName}</Text>
+                  {user?.username ? <Text style={styles.heroUsername}>@{user.username}</Text> : null}
+                  {heroHeadline ? <Text style={styles.heroHeadline} numberOfLines={1}>{heroHeadline}</Text> : null}
+
+                  <View style={styles.badgeRow}>
+                    {isVerified && (
+                      <View style={styles.badgePill}>
+                        <Ionicons name="shield-checkmark" size={11} color={GOLD_LT} />
+                        <Text style={styles.badgePillText}>Verified</Text>
+                      </View>
+                    )}
+                    <View style={styles.badgePill}>
+                      <Ionicons name={isAvailable ? 'checkmark-circle' : 'pause-circle'} size={11} color={isAvailable ? '#4ADE80' : WHITE} />
+                      <Text style={styles.badgePillText}>{isAvailable ? 'Available for work' : 'Not available'}</Text>
+                    </View>
+                    {rating ? (
+                      <View style={styles.badgePill}>
+                        <Ionicons name="star" size={11} color={GOLD_LT} />
+                        <Text style={styles.badgePillText}>{rating} Rating</Text>
+                      </View>
+                    ) : null}
+                    <View style={styles.badgePill}>
+                      <Ionicons name="checkmark-done-circle-outline" size={11} color={WHITE} />
+                      <Text style={styles.badgePillText}>{completedJobs} Jobs Done</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.heroGlass}>
+                    <View style={styles.contactRow}>
+                      <Ionicons name="mail-outline" size={14} color={GOLD_LT} />
+                      <Text style={styles.contactText} numberOfLines={1}>{user?.email_address ?? 'Not set'}</Text>
+                    </View>
+                    {user?.phone_number ? (
+                      <View style={styles.contactRow}>
+                        <Ionicons name="call-outline" size={14} color={GOLD_LT} />
+                        <Text style={styles.contactText} numberOfLines={1}>{user.phone_number}</Text>
+                      </View>
+                    ) : null}
+                    {location ? (
+                      <View style={styles.contactRow}>
+                        <Ionicons name="location-outline" size={14} color={GOLD_LT} />
+                        <Text style={styles.contactText} numberOfLines={1}>{location}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </LinearGradient>
+              </Animated.View>
+
+              {/* ── Profile Strength ── */}
+              <View style={styles.strengthCard}>
+                <View style={styles.strengthLeft}>
+                  <ProgressRing percent={completionPercent} size={92} strokeWidth={9} color={GOLD}>
+                    <Text style={styles.ringPercentLg}>{completionPercent}%</Text>
+                    <Text style={styles.ringPercentTiny}>strength</Text>
+                  </ProgressRing>
+                </View>
+                <View style={styles.strengthRight}>
+                  <Text style={styles.strengthTitle}>Profile Strength</Text>
+                  <Text style={styles.strengthSub}>Complete profiles get up to 3x more job invites.</Text>
+                  <View style={styles.checklist}>
+                    {completionFields.map((f) => (
+                      <View key={f.key} style={styles.checklistRow}>
+                        <View style={[styles.checkDot, f.done ? styles.checkDotDone : styles.checkDotPending]}>
+                          <Ionicons name={f.done ? 'checkmark' : 'ellipse'} size={f.done ? 10 : 6} color={f.done ? WHITE : TEXT_LIGHT} />
+                        </View>
+                        <Text style={[styles.checklistText, f.done && styles.checklistTextDone]}>{f.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+
+              {/* ── Availability banner ── */}
+              <TouchableOpacity style={styles.visibilityCardWrap} onPress={toEdit} activeOpacity={0.85}>
+                <LinearGradient colors={[NAVY, BLUE]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.visibilityCard}>
+                  <View style={styles.visibilityIconWrap}>
+                    <Ionicons name={isAvailable ? 'flash' : 'pause'} size={20} color={WHITE} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.visibilityTitleRow}>
+                      <Text style={styles.visibilityTitle}>Availability Status</Text>
+                      <View style={styles.visibilityStatusChip}>
+                        <View style={[styles.visibilityDot, !isAvailable && { backgroundColor: TEXT_LIGHT }]} />
+                        <Text style={styles.visibilityStatusText}>{isAvailable ? 'Available' : 'Paused'}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.visibilityDesc}>Clients can see this when browsing your profile</Text>
+                  </View>
+                  <View style={styles.visibilityManageBtn}>
+                    <Text style={styles.visibilityManageText}>Manage</Text>
+                    <Ionicons name="chevron-forward" size={13} color={WHITE} />
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* ── Resume ── */}
+              <View style={styles.section}>
+                <SectionHeader icon="document-text-outline" title="Resume" />
+                {cvLoading ? (
+                  <View style={styles.emptyRow}>
+                    <ActivityIndicator size="small" color={BLUE} />
+                    <Text style={[styles.emptyText, { marginLeft: 8 }]}>Checking for resume\u2026</Text>
+                  </View>
+                ) : savedCV ? (
+                  <CVItem
+                    name={savedCV.name.replace(/^cv_\d+_/, '')}
+                    date={formatDate(savedCV.modified)}
+                    onPress={viewCV}
+                  />
+                ) : (
+                  <TouchableOpacity style={styles.emptyRow} onPress={toEdit} activeOpacity={0.7}>
+                    <View style={styles.emptyRowLeft}>
+                      <Ionicons name="cloud-upload-outline" size={16} color={TEXT_LIGHT} />
+                      <Text style={styles.emptyText}>No resume uploaded yet</Text>
+                    </View>
+                    <View style={styles.linkRow}>
+                      <Text style={styles.linkText}>Add Resume</Text>
+                      <Ionicons name="chevron-forward" size={14} color={BLUE} />
+                    </View>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* ── About ── */}
+              <View style={styles.section}>
+                <SectionHeader icon="person-outline" title="About" onEdit={toEdit} />
+                {user?.bio_about ? (
+                  <View style={styles.aboutCard}>
+                    <Text style={styles.aboutQuote}>\u201c</Text>
+                    <Text style={styles.aboutText} numberOfLines={aboutExpanded ? undefined : 4}>
+                      {user.bio_about}
+                    </Text>
+                    {user.bio_about.length > 160 && (
+                      <TouchableOpacity onPress={() => setAboutExpanded((v) => !v)} activeOpacity={0.7}>
+                        <Text style={styles.aboutToggle}>{aboutExpanded ? 'Show less' : 'Read more'}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.emptyRow} onPress={toEdit} activeOpacity={0.7}>
+                    <View style={styles.emptyRowLeft}>
+                      <Ionicons name="create-outline" size={16} color={TEXT_LIGHT} />
+                      <Text style={styles.emptyText}>Tell clients about yourself</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={14} color={BLUE} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* ── Professional Details ── */}
+              <View style={styles.section}>
+                <SectionHeader icon="briefcase-outline" title="Professional Details" onEdit={toEdit} />
+                <View style={styles.tileGrid}>
+                  <InfoTile icon="time-outline" label="Experience" value={experienceText} />
+                  <InfoTile icon="cash-outline"  label="Rate"       value={rateText} />
+                </View>
+              </View>
+
+              {/* ── Skills ── */}
+              <View style={styles.section}>
+                <SectionHeader icon="star-outline" title="Skills" onEdit={toEdit} />
+                <View style={{ paddingTop: 4 }}>
+                  <ChipList
+                    items={user?.skills}
+                    icon="pricetag"
+                    emptyIcon="add-circle-outline"
+                    emptyText="Add skills to get matched with jobs"
+                    onEdit={toEdit}
+                  />
+                </View>
+              </View>
+
+              {/* ── Languages & Certifications ── */}
+              <View style={styles.section}>
+                <SectionHeader icon="ribbon-outline" title="Languages & Certifications" onEdit={toEdit} />
+                <Text style={styles.subLabel}>Languages</Text>
+                <ChipList items={user?.languages} icon="language" emptyText="No languages added" onEdit={toEdit} />
+                <Text style={[styles.subLabel, { marginTop: 4 }]}>Certifications</Text>
+                <ChipList
+                  items={user?.certifications}
+                  icon="ribbon"
+                  emptyText="No certifications added"
+                  onEdit={toEdit}
+                />
+              </View>
+
+              {/* ── Improve Job Matches ── */}
+              <View style={styles.improveSection}>
+                <Text style={styles.improveHeading}>Improve Your Job Matches</Text>
+                <Text style={styles.improveSub}>Add more details to get better job recommendations.</Text>
+              </View>
+
+              <View style={{ paddingHorizontal: 16, gap: 12, marginBottom: 8 }}>
+                {IMPROVE_ITEMS.map((item) => (
+                  <Pressable
+                    key={item.key}
+                    onPress={() => onNavigate(item.nav)}
+                    style={({ pressed }) => [styles.recommendCard, pressed && styles.recommendCardPressed]}
+                  >
+                    <LinearGradient colors={[GOLD_SOFT, 'rgba(0,85,165,0.05)']} style={styles.recommendIconWrap}>
+                      <Ionicons name={item.icon} size={22} color={GOLD_DK} />
+                    </LinearGradient>
+                    <View style={styles.recommendInfo}>
+                      <Text style={styles.recommendTitle}>{item.title}</Text>
+                      <Text style={styles.recommendDesc} numberOfLines={2}>{item.desc}</Text>
+                      <View style={styles.recommendRewardChip}>
+                        <Ionicons name="trending-up" size={11} color={GOLD_DK} />
+                        <Text style={styles.recommendRewardText}>{item.reward}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={TEXT_LIGHT} />
+                  </Pressable>
+                ))}
+              </View>
+
+             
+
+              {/* Extra bottom padding to account for the fixed tab bar */}
+              <View style={{ height: 24 }} />
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+
+      {/* Overlay */}
+      {drawerOpen && (
+        <Animated.View style={[styles.overlay, { opacity: overlayAnim }]} pointerEvents="auto">
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeDrawer} />
+        </Animated.View>
+      )}
+
+      {/* Right Drawer — solid background, no blur/transparency */}
+      {drawerOpen && (
+        <Animated.View style={[styles.drawer, { transform: [{ translateX: drawerTranslateX }] }]}>
+          <SafeAreaView style={styles.drawerInner} edges={['top', 'bottom']}>
+            <LinearGradient colors={[NAVY_DEEP, NAVY, NAVY_SOFT]} style={styles.drawerHeader}>
+              <TouchableOpacity style={styles.drawerCloseBtn} onPress={closeDrawer} activeOpacity={0.7}>
+                <Ionicons name="close" size={18} color={WHITE} />
+              </TouchableOpacity>
+
+              <View style={styles.drawerAvatarWrap}>
+                {user?.profile_picture ? (
+                  <Image source={{ uri: user.profile_picture }} style={styles.drawerAvatar} />
+                ) : (
+                  <View style={styles.drawerAvatarPlaceholder}>
+                    <Text style={styles.drawerAvatarInitials}>{initials || '?'}</Text>
+                  </View>
+                )}
+                {isVerified && (
+                  <View style={styles.drawerVerified}>
+                    <Ionicons name="checkmark" size={10} color={WHITE} />
+                  </View>
+                )}
+              </View>
+
+              <Text style={styles.drawerName} numberOfLines={1}>{fullName}</Text>
+              {heroHeadline ? <Text style={styles.drawerRole} numberOfLines={1}>{heroHeadline}</Text> : null}
+              {user?.email_address ? <Text style={styles.drawerEmail} numberOfLines={1}>{user.email_address}</Text> : null}
+
+              <View style={styles.drawerFooterBadges}>
+                {isVerified && (
+                  <View style={styles.drawerMembershipBadge}>
+                    <Ionicons name="shield-checkmark" size={11} color={GOLD_LT} />
+                    <Text style={styles.drawerMembershipText}>Verified Freelancer</Text>
+                  </View>
+                )}
+                <View style={styles.drawerCompletionBadge}>
+                  <Text style={styles.drawerCompletionText}>{completionPercent}% complete</Text>
+                </View>
+              </View>
+            </LinearGradient>
+
+            <ScrollView style={styles.drawerBody} showsVerticalScrollIndicator={false}>
+              {MENU_ITEMS.map((item, i) => (
+                <React.Fragment key={item.key}>
+                  <Pressable
+                    onPress={() => handleMenuNav(item.nav)}
+                    style={({ pressed }) => [styles.drawerItem, pressed && styles.drawerItemPressed]}
+                  >
+                    <View style={styles.drawerItemIcon}>
+                      <Ionicons name={item.icon} size={18} color={BLUE} />
+                    </View>
+                    <View style={styles.drawerItemText}>
+                      <Text style={styles.drawerItemLabel}>{item.label}</Text>
+                      <Text style={styles.drawerItemSub}>{item.sub}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={14} color={TEXT_LIGHT} />
+                  </Pressable>
+                  {i < MENU_ITEMS.length - 1 && <View style={styles.drawerDivider} />}
+                </React.Fragment>
+              ))}
+            </ScrollView>
+
+            <View style={styles.drawerFooter}>
+              <Pressable onPress={handleSignOut} style={({ pressed }) => [styles.signOutWrap, pressed && styles.signOutWrapPressed]}>
+                <LinearGradient colors={['#FEE2E2', RED_SOFT]} style={styles.signOutBtn}>
+                  <View style={styles.signOutIconWrap}>
+                    <Ionicons name="log-out-outline" size={18} color={RED} />
+                  </View>
+                  <Text style={styles.signOutText}>Sign Out</Text>
+                </LinearGradient>
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        </Animated.View>
+      )}
+
+      <BottomTabBar activeTab="Profile" onTabPress={handleTabBarPress} pendingOffers={0} />
+    </View>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: BG },
-  flex: { flex: 1 },
-  scroll: { padding: 24, paddingBottom: 48 },
-  container: { flex: 1 },
+  root: { flex: 1, backgroundColor: BG },
+  safe: { flex: 1, backgroundColor: 'transparent' },
 
-  // Back
-  backButton: { marginBottom: 24, alignSelf: 'flex-start' },
-  backIconWrap: {
-    width: 38, height: 38,
-    backgroundColor: CARD,
-    borderRadius: 11,
-    borderWidth: 1, borderColor: BORDER,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  // Top bar
+  topbar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 18, paddingVertical: 16,
+    borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
+    ...SHADOW_FLOAT,
   },
-
-  // Header
-  header: { alignItems: 'center', marginBottom: 28 },
-  roleBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: `${BLUE}10`,
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1, borderColor: `${BLUE}20`,
-    marginBottom: 16,
-  },
-  roleBadgeText: { fontSize: 13, color: BLUE, fontWeight: '600' },
-  title: { fontSize: 28, fontWeight: '800', color: TEXT_MAIN, textAlign: 'center', letterSpacing: -0.5, lineHeight: 34, marginBottom: 8 },
-  subtitle: { fontSize: 14, color: TEXT_MUTED, textAlign: 'center' },
-
-  // Server error
-  serverErrorContainer: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: ERROR_BG,
-    borderRadius: 12, padding: 14,
-    marginBottom: 20, gap: 10,
-    borderWidth: 1, borderColor: ERROR_BORDER,
-  },
-  serverErrorIcon: {
-    width: 32, height: 32,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 8,
+  topbarEyebrow: { fontSize: 10, fontWeight: '700', color: GOLD_LT, letterSpacing: 1.2, marginBottom: 2 },
+  topbarTitle:   { fontSize: 17, fontWeight: '800', color: WHITE, letterSpacing: -0.2 },
+  menuBtn: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center', justifyContent: 'center',
   },
-  serverErrorText: { fontSize: 13, color: ERROR, flex: 1, lineHeight: 18, paddingTop: 7 },
 
-  // Form layout
-  form: { gap: 0 },
-  section: {
-    backgroundColor: CARD,
-    borderRadius: 18,
-    borderWidth: 1.5, borderColor: BORDER,
-    padding: 18,
-    marginBottom: 14,
-    gap: 14,
-    shadowColor: NAVY, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05, shadowRadius: 10, elevation: 1,
-  },
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700', color: BLUE,
-    textTransform: 'uppercase', letterSpacing: 0.8,
-    marginBottom: 2,
-  },
-  row: { flexDirection: 'row', gap: 12 },
-  rowItem: { flex: 1 },
+  scroll: { paddingBottom: 80, paddingTop: 4 },
 
-  // Inputs
-  inputGroup: { gap: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: TEXT_MAIN },
-  required: { color: ERROR },
-  input: {
-    backgroundColor: BG,
-    borderWidth: 1.5, borderColor: BORDER,
-    borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 13,
-    fontSize: 15, color: TEXT_MAIN,
+  loadingCard: {
+    backgroundColor: CARD, marginHorizontal: 14, marginTop: 14,
+    borderRadius: 28, padding: 22,
+    ...SHADOW_FLOAT,
   },
-  textArea: { minHeight: 90, paddingTop: 13 },
-  inputError: { borderColor: ERROR, backgroundColor: ERROR_BG },
-  hintText: { fontSize: 11, color: TEXT_LIGHT, marginTop: 4 },
 
-  // Field error
-  fieldErrorRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
-  fieldErrorText: { fontSize: 11, color: ERROR },
-
-  // Password
-  passwordWrap: { position: 'relative', justifyContent: 'center' },
-  passwordInput: { paddingRight: 46 },
-  eyeBtn: { position: 'absolute', right: 14, height: '100%', justifyContent: 'center' },
-
-  // Checkbox
-  checkboxRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: CARD,
-    borderRadius: 14, borderWidth: 1.5, borderColor: BORDER,
-    padding: 14, marginBottom: 6,
-  },
-  checkboxRowError: { borderColor: ERROR_BORDER, backgroundColor: ERROR_BG },
-  checkbox: {
-    width: 22, height: 22, borderRadius: 7,
-    borderWidth: 2, borderColor: `${BLUE}40`,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: BG,
-  },
-  checkboxChecked: { backgroundColor: BLUE, borderColor: BLUE },
-  checkboxLabel: { fontSize: 14, color: TEXT_MUTED, flex: 1, lineHeight: 19 },
-  checkboxLink: { color: BLUE, fontWeight: '700' },
-
-  // ── Verification Modal Styles ──
-  verificationHeader: { alignItems: 'center', marginBottom: 4 },
-  verificationModalContainer: {
-    backgroundColor: CARD,
-    borderRadius: 24,
-    width: '90%',
-    maxWidth: 380,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
-    elevation: 10,
-  },
-  verificationIconContainer: {
-    width: 68, height: 68,
-    borderRadius: 34,
-    backgroundColor: `${BLUE}15`,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 16,
-  },
-  verificationTitle: { fontSize: 21, fontWeight: '700', color: TEXT_MAIN, marginBottom: 8, textAlign: 'center' },
-  verificationSubtitle: {
-    fontSize: 14, color: TEXT_MUTED, textAlign: 'center',
-    marginBottom: 26, lineHeight: 20,
-  },
-  verificationEmail: { color: BLUE, fontWeight: '600' },
-  verificationCodeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 28,
-  },
-  verificationInput: {
-    width: 46, height: 56,
-    backgroundColor: BG,
-    borderWidth: 2, borderColor: BORDER,
-    borderRadius: 12,
-    textAlign: 'center',
-    fontSize: 22, fontWeight: '700', color: TEXT_MAIN,
-    paddingVertical: 0,
-    includeFontPadding: false,
-  },
-  verificationInputFilled: {
-    borderColor: `${BLUE}70`,
-    backgroundColor: WHITE,
-  },
-  verificationInputFocused: {
-    borderColor: BLUE,
-    backgroundColor: WHITE,
-    shadowColor: BLUE,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  verifyButton: {
-    backgroundColor: BLUE,
-    borderRadius: 14, paddingVertical: 15,
-    width: '100%', alignItems: 'center', justifyContent: 'center',
-    minHeight: 50,
-    marginBottom: 16,
-    shadowColor: BLUE, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 3,
-  },
-  verifyButtonText: { fontSize: 16, fontWeight: '700', color: WHITE },
-  resendContainer: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 18,
-    flexWrap: 'wrap',
-  },
-  resendText: { fontSize: 13, color: TEXT_MUTED },
-  resendLink: { fontSize: 13, color: BLUE, fontWeight: '700' },
-  resendLinkDisabled: { color: TEXT_LIGHT, fontWeight: '600' },
-  verificationClose: { paddingVertical: 6 },
-  verificationCloseText: { fontSize: 14, color: TEXT_MUTED, fontWeight: '600' },
-
-  // ── Terms Modal Styles ──
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(7,26,62,0.55)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  modalContainer: {
-    backgroundColor: CARD, borderRadius: 20,
-    width: '90%', maxHeight: '85%',
+  // Hero
+  hero: {
+    marginHorizontal: 14, marginTop: 14,
+    borderRadius: 28,
+    paddingHorizontal: 20, paddingTop: 22, paddingBottom: 20,
     overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 8, elevation: 5,
+    ...SHADOW_FLOAT,
   },
-  modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 20, borderBottomWidth: 1, borderBottomColor: BORDER, backgroundColor: CARD,
-  },
-  modalTitle: { fontSize: 19, fontWeight: '700', color: TEXT_MAIN },
-  modalClose: { padding: 4 },
-  modalContent: { padding: 20, maxHeight: '70%' },
-  termsText: { fontSize: 14, lineHeight: 22, color: TEXT_MUTED },
-  termsHeading: { fontSize: 16, fontWeight: '700', color: TEXT_MAIN },
-  termsEffective: { fontSize: 12, color: BLUE, fontWeight: '600', marginTop: 8 },
-  modalFooter: {
-    flexDirection: 'row', padding: 20,
-    borderTopWidth: 1, borderTopColor: BORDER, gap: 12,
-  },
-  modalButtonCancel: {
-    flex: 1, paddingVertical: 13, borderRadius: 12,
-    borderWidth: 1.5, borderColor: BORDER, alignItems: 'center', justifyContent: 'center',
-  },
-  modalButtonCancelText: { fontSize: 14, fontWeight: '600', color: TEXT_MUTED },
-  modalButtonAccept: {
-    flex: 1, paddingVertical: 13, borderRadius: 12,
-    backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center',
-    shadowColor: BLUE, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25, shadowRadius: 6, elevation: 2,
-  },
-  modalButtonAcceptText: { fontSize: 14, fontWeight: '700', color: WHITE },
+  heroBlob: { position: 'absolute', width: 180, height: 180, borderRadius: 90, opacity: 0.5 },
+  heroBlobGold: { backgroundColor: 'rgba(200,149,32,0.22)', top: -70, right: -50 },
+  heroBlobBlue: { backgroundColor: 'rgba(0,85,165,0.25)', bottom: -80, left: -60 },
 
-  // Submit button
-  submitBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+  heroTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 },
+  avatarWrap: { alignItems: 'center', justifyContent: 'center' },
+  avatarGlow: {
+    position: 'absolute', width: 84, height: 84, borderRadius: 42,
+    backgroundColor: 'rgba(232,184,75,0.5)',
+  },
+  avatarRing: {
+    width: 76, height: 76, borderRadius: 38,
+    padding: 3,
+    backgroundColor: GOLD_LT,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarImg: { width: 70, height: 70, borderRadius: 35 },
+  avatarPlaceholder: { width: 70, height: 70, borderRadius: 35, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center' },
+  avatarInitials: { fontSize: 24, fontWeight: '800', color: WHITE },
+  verifiedBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 22, height: 22, borderRadius: 11,
     backgroundColor: BLUE,
-    borderRadius: 14, paddingVertical: 16,
-    minHeight: 54,
-    marginTop: 8, marginBottom: 14,
-    shadowColor: BLUE, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 4,
+    borderWidth: 2, borderColor: NAVY,
+    alignItems: 'center', justifyContent: 'center',
   },
-  submitBtnDisabled: { opacity: 0.6 },
-  submitBtnText: { fontSize: 16, fontWeight: '700', color: WHITE, letterSpacing: 0.2 },
+  ringPercentSm: { fontSize: 13, fontWeight: '800', color: WHITE },
 
-  // Info strip
-  infoStrip: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, marginBottom: 4,
-    paddingVertical: 10, paddingHorizontal: 16,
-    backgroundColor: `${BLUE}08`,
-    borderRadius: 12, borderWidth: 1, borderColor: `${BLUE}20`,
+  heroName: { fontSize: 22, fontWeight: '800', color: WHITE, letterSpacing: -0.3, marginBottom: 3 },
+  heroUsername: { fontSize: 12.5, color: 'rgba(255,255,255,0.6)', marginBottom: 3 },
+  heroHeadline: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginBottom: 14 },
+
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  badgePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
   },
-  infoText: { fontSize: 12, color: BLUE, fontWeight: '500', textAlign: 'center' },
+  badgePillText: { fontSize: 11, fontWeight: '700', color: WHITE },
 
-  // Login prompt
-  loginPrompt: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 16, paddingBottom: 8 },
-  loginPromptText: { fontSize: 14, color: TEXT_MUTED },
-  loginPromptLink: { fontSize: 14, color: BLUE, fontWeight: '700' },
+  heroGlass: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 16,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
+    padding: 14,
+    gap: 10,
+  },
+  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  contactText: { fontSize: 12.5, color: 'rgba(255,255,255,0.9)', flex: 1, minWidth: 0 },
+
+  // Profile strength
+  strengthCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    marginHorizontal: 16, marginTop: 18,
+    backgroundColor: CARD, borderRadius: 22,
+    borderWidth: 1, borderColor: BORDER,
+    padding: 18,
+    ...SHADOW_FLOAT,
+  },
+  strengthLeft: { alignItems: 'center', justifyContent: 'center' },
+  ringPercentLg: { fontSize: 18, fontWeight: '800', color: TEXT_MAIN },
+  ringPercentTiny: { fontSize: 9, color: TEXT_LIGHT, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  strengthRight: { flex: 1, minWidth: 0 },
+  strengthTitle: { fontSize: 15, fontWeight: '800', color: TEXT_MAIN, marginBottom: 3 },
+  strengthSub: { fontSize: 11.5, color: TEXT_MUTED, lineHeight: 16, marginBottom: 10 },
+  checklist: { gap: 6 },
+  checklistRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  checkDot: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  checkDotDone: { backgroundColor: GREEN },
+  checkDotPending: { backgroundColor: BG, borderWidth: 1, borderColor: BORDER },
+  checklistText: { fontSize: 11.5, color: TEXT_LIGHT, fontWeight: '500' },
+  checklistTextDone: { color: TEXT_MUTED, fontWeight: '600' },
+
+  // Availability banner
+  visibilityCardWrap: { marginHorizontal: 16, marginTop: 16, borderRadius: 18, ...SHADOW_GOLD },
+  visibilityCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderRadius: 18, padding: 16,
+  },
+  visibilityIconWrap: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  visibilityTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
+  visibilityTitle: { fontSize: 13.5, fontWeight: '700', color: WHITE },
+  visibilityStatusChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  visibilityDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ADE80' },
+  visibilityStatusText: { fontSize: 10, fontWeight: '700', color: WHITE },
+  visibilityDesc: { fontSize: 11.5, color: 'rgba(255,255,255,0.78)' },
+  visibilityManageBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  visibilityManageText: { fontSize: 11.5, fontWeight: '700', color: WHITE },
+
+  // Sections
+  section: {
+    backgroundColor: CARD, marginTop: 16, marginHorizontal: 16,
+    borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: BORDER,
+    ...SHADOW_CARD,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: BORDER,
+  },
+  sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  sectionIconWrap: {
+    width: 26, height: 26, borderRadius: 8,
+    backgroundColor: BLUE_SOFT,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sectionTitle: { fontSize: 13.5, fontWeight: '800', color: TEXT_MAIN, letterSpacing: 0.2 },
+  editRowBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 6,
+    backgroundColor: BLUE_SOFT, borderRadius: 10,
+    borderWidth: 1, borderColor: 'rgba(0,85,165,0.18)',
+  },
+  editRowBtnText: { fontSize: 12, fontWeight: '700', color: BLUE },
+
+  tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, padding: 14 },
+
+  // About
+  aboutCard: { padding: 16, paddingTop: 4 },
+  aboutQuote: { fontSize: 40, color: GOLD, fontWeight: '800', lineHeight: 40, marginBottom: -6 },
+  aboutText: { fontSize: 13.5, color: TEXT_MUTED, lineHeight: 21 },
+  aboutToggle: { fontSize: 12, fontWeight: '700', color: BLUE, marginTop: 8 },
+
+  // Chips
+  subLabel: {
+    fontSize: 11, fontWeight: '700', color: TEXT_LIGHT,
+    textTransform: 'uppercase', letterSpacing: 0.5,
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8,
+  },
+  chipListWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingBottom: 16, paddingTop: 4 },
+  chipReadOnly: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: BLUE_SOFT,
+    borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8,
+  },
+  chipReadOnlyText: { fontSize: 12.5, fontWeight: '600', color: BLUE },
+  emptyChipRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  emptyChipText: { fontSize: 13, color: TEXT_LIGHT },
+
+  // CV
+  cvItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 14, paddingHorizontal: 16,
+  },
+  cvLeft: { flexDirection: 'row', alignItems: 'center', gap: 13, flex: 1 },
+  cvIconWrap: {
+    width: 40, height: 40, borderRadius: 11,
+    backgroundColor: BLUE_SOFT,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cvContent: { flex: 1 },
+  cvName:    { fontSize: 14.5, fontWeight: '600', color: TEXT_MAIN, marginBottom: 2 },
+  cvDate:    { fontSize: 11.5, color: TEXT_LIGHT },
+  cvActionWrap: {
+    width: 32, height: 32, borderRadius: 9,
+    backgroundColor: BLUE_SOFT,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  // Empty
+  emptyRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 15, paddingHorizontal: 16,
+  },
+  emptyRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  emptyText: { fontSize: 13, color: TEXT_LIGHT, flexShrink: 1 },
+  linkRow:   { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  linkText:  { fontSize: 13, color: BLUE, fontWeight: '600' },
+
+  // Improve profile
+  improveSection: { paddingHorizontal: 16, paddingTop: 24, paddingBottom: 10 },
+  improveHeading: { fontSize: 16, fontWeight: '800', color: TEXT_MAIN, marginBottom: 3 },
+  improveSub:     { fontSize: 12, color: TEXT_MUTED, lineHeight: 18 },
+
+  recommendCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: CARD, borderRadius: 18,
+    borderWidth: 1, borderColor: BORDER,
+    padding: 14,
+    ...SHADOW_CARD,
+  },
+  recommendCardPressed: { transform: [{ scale: 0.98 }], opacity: 0.92 },
+  recommendIconWrap: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  recommendInfo: { flex: 1, minWidth: 0 },
+  recommendTitle: { fontSize: 13.5, fontWeight: '700', color: TEXT_MAIN, marginBottom: 2 },
+  recommendDesc: { fontSize: 11.5, color: TEXT_MUTED, lineHeight: 16, marginBottom: 6 },
+  recommendRewardChip: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', backgroundColor: GOLD_SOFT, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  recommendRewardText: { fontSize: 10, fontWeight: '700', color: GOLD_DK },
+
+  // Footer — bottom-most element of the page
+  footer:        { paddingTop: 20, paddingBottom: 8, paddingHorizontal: 16, alignItems: 'center', marginTop: 20 },
+  footerDivider: { width: 40, height: 3, borderRadius: 999, backgroundColor: BORDER, marginBottom: 14 },
+  footerText:    { fontSize: 11, color: TEXT_LIGHT },
+  footerLink:    { color: BLUE, textDecorationLine: 'underline' },
+
+  // Skeleton
+  skeletonWrap: { width: '100%' },
+  skeletonBlock: { backgroundColor: BORDER, borderRadius: 6, opacity: 0.7 },
+
+  // Overlay
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,15,38,0.6)', zIndex: 10 },
+
+  // Drawer — fully solid/opaque, no blur, no translucent panels
+  drawer: {
+    position: 'absolute', top: 0, right: 0, bottom: 0, width: '80%',
+    zIndex: 20, overflow: 'hidden',
+    backgroundColor: CARD,
+    borderLeftWidth: 1, borderLeftColor: BORDER,
+    ...SHADOW_FLOAT,
+  },
+  drawerInner: { flex: 1, backgroundColor: CARD },
+  drawerHeader: {
+    paddingHorizontal: 20, paddingTop: 18, paddingBottom: 20,
+    borderBottomLeftRadius: 26,
+  },
+  drawerCloseBtn: {
+    alignSelf: 'flex-end', width: 30, height: 30, borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+  },
+  drawerAvatarWrap: { marginBottom: 12 },
+  drawerAvatar: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: GOLD_LT },
+  drawerAvatarPlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: BLUE, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: GOLD_LT },
+  drawerAvatarInitials: { fontSize: 20, fontWeight: '800', color: WHITE },
+  drawerVerified: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: BLUE, borderWidth: 2, borderColor: NAVY,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  drawerName: { fontSize: 16, fontWeight: '800', color: WHITE },
+  drawerRole: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
+  drawerEmail: { fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 2 },
+  drawerFooterBadges: { flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' },
+  drawerMembershipBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  drawerMembershipText: { fontSize: 10.5, fontWeight: '700', color: WHITE },
+  drawerCompletionBadge: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  drawerCompletionText: { fontSize: 10.5, fontWeight: '700', color: GOLD_LT },
+
+  drawerBody: { flex: 1, paddingTop: 6, backgroundColor: CARD },
+  drawerItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 14 },
+  drawerItemPressed: { backgroundColor: 'rgba(0,85,165,0.06)' },
+  drawerItemIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: BLUE_SOFT, alignItems: 'center', justifyContent: 'center' },
+  drawerItemText: { flex: 1, minWidth: 0 },
+  drawerItemLabel: { fontSize: 14, fontWeight: '700', color: TEXT_MAIN },
+  drawerItemSub: { fontSize: 11, color: TEXT_LIGHT, marginTop: 1 },
+  drawerDivider: { height: 1, backgroundColor: BORDER, marginHorizontal: 20 },
+  drawerFooter: { paddingHorizontal: 20, paddingVertical: 16, backgroundColor: CARD, borderTopWidth: 1, borderTopColor: BORDER },
+  signOutWrap: { borderRadius: 16, ...SHADOW_CARD },
+  signOutWrapPressed: { transform: [{ scale: 0.97 }], opacity: 0.92 },
+  signOutBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    paddingVertical: 14, borderRadius: 16,
+    borderWidth: 1, borderColor: RED_BORDER,
+  },
+  signOutIconWrap: { width: 28, height: 28, borderRadius: 9, backgroundColor: WHITE, alignItems: 'center', justifyContent: 'center' },
+  signOutText: { fontSize: 14.5, fontWeight: '800', color: RED },
+
+  // Bottom Tab Bar
+  tabSafe: { backgroundColor: CARD, borderTopWidth: 1.5, borderTopColor: BORDER, ...SHADOW_FLOAT },
+  tabBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
+    paddingTop: 10, paddingBottom: 12, paddingHorizontal: 8,
+  },
+  tabItem: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 6, position: 'relative',
+  },
+  tabItemCenter: { flex: 0, marginHorizontal: 8, marginTop: -18 },
+  centerButton: {
+    width: 54, height: 54, borderRadius: 27,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: WHITE,
+    ...SHADOW_GOLD,
+  },
+  tabIconWrap: { position: 'relative', marginBottom: 4 },
+  tabLabel:       { fontSize: 10, color: TEXT_LIGHT, fontWeight: '500', marginTop: 2 },
+  tabLabelActive: { color: BLUE, fontWeight: '700' },
+  tabIndicator: {
+    position: 'absolute', bottom: -8,
+    width: 20, height: 3, borderRadius: 1.5, backgroundColor: BLUE,
+  },
+  tabBadgeDot: {
+    position: 'absolute', top: -3, right: -6,
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: GOLD, borderWidth: 1.5, borderColor: WHITE,
+  },
 });
