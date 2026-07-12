@@ -1,4 +1,5 @@
 // screens/Search.jsx - Full Screen Search with SafeAreaView
+// WITH BACK HANDLER SUPPORT
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -12,6 +13,7 @@ import {
   Alert,
   ActivityIndicator,
   Keyboard,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -106,6 +108,49 @@ export default function SearchScreen({ onNavigate, route }) {
     { id: '5', name: 'Admin', icon: 'folder-outline' },
     { id: '6', name: 'Engineering', icon: 'construct-outline' },
   ]);
+
+  // ── BACK HANDLER ──
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+    return () => backHandler.remove();
+  }, [searchQuery, showResults, searchResults]);
+
+  // Handle hardware back button press
+  const handleBackPress = useCallback(() => {
+    // If there are search results showing, go back to main search view
+    if (showResults && searchResults.length > 0) {
+      setShowResults(false);
+      setSearchResults([]);
+      return true; // Prevent default behavior
+    }
+
+    // If there's a search query, clear it first
+    if (searchQuery.trim()) {
+      setSearchQuery('');
+      setShowResults(false);
+      setSearchResults([]);
+      return true; // Prevent default behavior
+    }
+
+    // Otherwise, navigate back to the previous screen
+    if (onNavigate) {
+      // Determine which screen to go back to based on route params or default
+      const previousScreen = route?.params?.previousScreen || 'FreelancerDashboard';
+      const tab = route?.params?.tab || 'Home';
+      
+      onNavigate(previousScreen, { 
+        screen: tab,
+        searchQuery: searchQuery,
+        recentSearches: recentSearches
+      });
+      return true; // Prevent default behavior
+    }
+
+    // If no navigation handler, allow default back behavior
+    return false;
+  }, [onNavigate, route, searchQuery, showResults, searchResults, recentSearches]);
+
+  // ── END BACK HANDLER ──
 
   // Load recent searches from route params
   useEffect(() => {
@@ -246,9 +291,12 @@ export default function SearchScreen({ onNavigate, route }) {
   // Apply search and navigate back
   const applySearchAndGoBack = (query) => {
     if (onNavigate) {
-      onNavigate('FreelancerDashboard', { 
+      const previousScreen = route?.params?.previousScreen || 'FreelancerDashboard';
+      const tab = route?.params?.tab || 'Home';
+      
+      onNavigate(previousScreen, { 
         searchQuery: query,
-        screen: 'Home',
+        screen: tab,
         recentSearches: recentSearches
       });
     }
@@ -275,31 +323,44 @@ export default function SearchScreen({ onNavigate, route }) {
   const handleApplyFilter = (filter) => {
     addToRecentSearches(filter);
     if (onNavigate) {
-      onNavigate('FreelancerDashboard', { 
+      const previousScreen = route?.params?.previousScreen || 'FreelancerDashboard';
+      const tab = route?.params?.tab || 'Home';
+      
+      onNavigate(previousScreen, { 
         searchQuery: filter,
-        screen: 'Home',
+        screen: tab,
         recentSearches: recentSearches
       });
     }
   };
 
-  // Handle going back
+  // Handle going back (used by back button in header)
   const handleGoBack = () => {
-    if (searchQuery.trim() && showResults && searchResults.length > 0) {
-      if (onNavigate) {
-        onNavigate('FreelancerDashboard', { 
-          searchQuery: searchQuery,
-          screen: 'Home',
-          recentSearches: recentSearches
-        });
-      }
-    } else {
-      if (onNavigate) {
-        onNavigate('FreelancerDashboard', { 
-          screen: 'Home',
-          recentSearches: recentSearches
-        });
-      }
+    // If there are search results showing, go back to main search view
+    if (showResults && searchResults.length > 0) {
+      setShowResults(false);
+      setSearchResults([]);
+      return;
+    }
+
+    // If there's a search query, clear it first
+    if (searchQuery.trim()) {
+      setSearchQuery('');
+      setShowResults(false);
+      setSearchResults([]);
+      return;
+    }
+
+    // Otherwise, navigate back to the previous screen
+    if (onNavigate) {
+      const previousScreen = route?.params?.previousScreen || 'FreelancerDashboard';
+      const tab = route?.params?.tab || 'Home';
+      
+      onNavigate(previousScreen, { 
+        screen: tab,
+        searchQuery: searchQuery,
+        recentSearches: recentSearches
+      });
     }
   };
 
